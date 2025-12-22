@@ -24,13 +24,15 @@ const State = {
 };
 
 function initSocket() {
-
+    let tonePath="/tone/notices.mp3"
+    let tone= new Audio(tonePath)
     socket.on("connect", () => {
         console.log("Connected as", State.currentUser.id, socket.id);
     });
 
 
     socket.on("private_message", (msg) => {
+        tone.currentTime=0
         const message = {
             id: msg.id,
             type: msg.type,
@@ -71,6 +73,7 @@ function initSocket() {
             // Scroll to bottom
             const container = document.getElementById('messages-container');
             container.scrollTop = container.scrollHeight;
+            tone.play();
         }
         renderChatList();
     });
