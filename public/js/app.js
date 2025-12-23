@@ -24,15 +24,15 @@ const State = {
 };
 
 function initSocket() {
-    let tonePath="/tone/notices.mp3"
-    let tone= new Audio(tonePath)
+    let tonePath = "/tone/notices.mp3"
+    let tone = new Audio(tonePath)
     socket.on("connect", () => {
         console.log("Connected as", State.currentUser.id, socket.id);
     });
 
 
     socket.on("private_message", (msg) => {
-        tone.currentTime=0
+        tone.currentTime = 0
         const message = {
             id: msg.id,
             type: msg.type,
@@ -312,6 +312,45 @@ async function initAuth() {
             if (allusersresponse.code == 200) {
                 State.allusers = allusersresponse.Data.user.filter(u => u.username != State.currentUser.username)
             }
+            initChatList();
+            let messResponse = await fetch("/allmessages", {
+                method: "POST",
+                headers: {
+                    "Content-type": "application/json"
+                },
+                body: JSON.stringify({ userId: State.currentUser.id })
+            })
+
+            let { ChatMesaage } = await messResponse.json()
+            for (const element of ChatMesaage) {
+                const chatUserId = element._id;
+
+                // 1️⃣ Store messages safely
+                State.messages[chatUserId] = element.messages || [];
+
+                // 2️⃣ Update conversation preview
+                const conv = State.conversations.find(c => c.id == chatUserId);
+                if (!conv || !element.messages || element.messages.length === 0) continue;
+
+                const lastMsg = element.messages[0];
+
+                conv.lastMessage =
+                    lastMsg.type === "text"
+                        ? lastMsg.content
+                        : `📷 ${lastMsg.type}`;
+
+                // 3️⃣ Use REAL timestamp (not Date.now)
+                conv.timestamp = lastMsg.timestamp || lastMsg.createdAt || Date.now();
+
+
+            }
+            socket = io({
+                auth: {
+                    userId: State.currentUser.id
+                }
+            });
+            initSocket()
+            renderChatList();
             hideLoader();
             showToast('Logged in successfully!', 'success');
             showChatScreen();
@@ -377,10 +416,46 @@ async function initAuth() {
             if (allusersresponse.code == 200) {
                 State.allusers = allusersresponse.Data.user.filter(u => u.username != State.currentUser.username)
             }
+            initChatList();
+            let messResponse = await fetch("/allmessages", {
+                method: "POST",
+                headers: {
+                    "Content-type": "application/json"
+                },
+                body: JSON.stringify({ userId: State.currentUser.id })
+            })
 
+            let { ChatMesaage } = await messResponse.json()
+            for (const element of ChatMesaage) {
+                const chatUserId = element._id;
+
+                // 1️⃣ Store messages safely
+                State.messages[chatUserId] = element.messages || [];
+
+                // 2️⃣ Update conversation preview
+                const conv = State.conversations.find(c => c.id == chatUserId);
+                if (!conv || !element.messages || element.messages.length === 0) continue;
+
+                const lastMsg = element.messages[0];
+
+                conv.lastMessage =
+                    lastMsg.type === "text"
+                        ? lastMsg.content
+                        : `📷 ${lastMsg.type}`;
+
+                // 3️⃣ Use REAL timestamp (not Date.now)
+                conv.timestamp = lastMsg.timestamp || lastMsg.createdAt || Date.now();
+            }
+            socket = io({
+                auth: {
+                    userId: State.currentUser.id
+                }
+            });
+            initSocket()
+            renderChatList();
+            hideLoader();
             showToast('Account created successfully!', 'success');
             showChatScreen();
-            hideLoader();
         } else {
             // console.log(response.Data)
             hideLoader();
