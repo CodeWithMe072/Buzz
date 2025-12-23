@@ -22,44 +22,44 @@
     --text-primary: #fafafa;
     --text-secondary: #a8a8a8;
     --text-light: #737373;
-    
+
     /* Messaging Colors */
     --message-self: #0095f6;
     --message-other: #262626;
     --message-text-self: #ffffff;
     --message-text-other: #fafafa;
-    
+
     /* Status Colors */
     --status-online: #44d362;
     --status-sent: #a8a8a8;
     --status-delivered: #0095f6;
     --status-seen: #0095f6;
-    
+
     /* Shadows & Effects */
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
-    --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
-    
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
     /* Spacing */
     --spacing-xs: 4px;
     --spacing-sm: 8px;
     --spacing-md: 16px;
     --spacing-lg: 24px;
     --spacing-xl: 32px;
-    
+
     /* Typography - Using distinctive system fonts */
     --font-primary: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-bold: 600;
-    
+
     /* Border Radius */
     --radius-sm: 4px;
     --radius-md: 8px;
     --radius-lg: 12px;
     --radius-xl: 24px;
     --radius-full: 50%;
-    
+
     /* Transitions */
     --transition-fast: 150ms ease;
     --transition-normal: 250ms ease;
@@ -77,6 +77,53 @@ body {
     height: 100vh;
     height: 100dvh;
 }
+
+.chatOption {
+    border-radius: 7px;
+    top: 49px;
+    position: absolute;
+    width: 167px;
+    height: 100%;
+    padding: 10px 0px;
+    /* background: red; */
+    right: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #000000;
+    border: 1px solid #181818;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s ease;
+}
+
+.chatOption.active{
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.chatOption .chatOption-button {
+       height: 35px;
+    width: 95%;
+    border: none;
+    outline: none;
+    border-radius: 5px;
+    color: white;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 0px 12px;
+    background-color: transparent;
+    transition: all .3s ease;
+}
+.chatOption .chatOption-button:hover{
+    background: var(--accent-gradient);
+   
+}
+
+
 
 /* =============================================================================
    Authentication Screens
@@ -117,6 +164,7 @@ body {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -186,7 +234,7 @@ body {
     transition: width var(--transition-normal);
 }
 
-.input-group input:focus + .input-focus-border {
+.input-group input:focus+.input-focus-border {
     width: 100%;
 }
 
@@ -517,8 +565,15 @@ body {
 }
 
 @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
 }
 
 .chat-empty-state h2 {
@@ -546,6 +601,7 @@ body {
     border-bottom: 1px solid var(--border-color);
     background: var(--primary-bg);
     z-index: 10;
+    position: relative;
 }
 
 .back-btn {
@@ -611,6 +667,7 @@ body {
         opacity: 0;
         transform: translateY(10px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -828,10 +885,14 @@ body {
 }
 
 @keyframes typing {
-    0%, 60%, 100% {
+
+    0%,
+    60%,
+    100% {
         opacity: 0.3;
         transform: scale(0.8);
     }
+
     30% {
         opacity: 1;
         transform: scale(1);
@@ -902,8 +963,13 @@ body {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 .emoji-picker {
@@ -923,6 +989,7 @@ body {
         opacity: 0;
         transform: scale(0.9) translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: scale(1) translateY(0);
@@ -1002,6 +1069,7 @@ body {
         opacity: 0;
         transform: translateX(100%);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -1021,27 +1089,29 @@ body {
    ============================================================================= */
 
 @media (min-width: 768px) {
+
     /* Desktop: Show both sidebar and window */
     .chat-list-sidebar {
         width: 380px;
         flex-shrink: 0;
     }
-    
+
     .chat-window {
         display: flex;
     }
-    
+
     .back-btn {
         display: none !important;
     }
 }
 
 @media (max-width: 767px) {
+
     /* Mobile: Stack layout */
     .chat-layout {
         position: relative;
     }
-    
+
     .chat-list-sidebar {
         position: absolute;
         top: 0;
@@ -1049,11 +1119,11 @@ body {
         width: 100%;
         z-index: 10;
     }
-    
+
     .chat-list-sidebar.hidden {
         transform: translateX(-100%);
     }
-    
+
     .chat-window {
         position: absolute;
         top: 0;
@@ -1062,28 +1132,28 @@ body {
         transform: translateX(100%);
         transition: transform var(--transition-normal);
     }
-    
+
     .chat-window.active {
         transform: translateX(0);
     }
-    
+
     .back-btn {
         display: flex !important;
     }
-    
+
     .message {
         max-width: 85%;
     }
-    
+
     .auth-container {
         padding: var(--spacing-lg);
     }
-    
+
     .toast-container {
         left: var(--spacing-md);
         right: var(--spacing-md);
     }
-    
+
     .toast {
         width: 100%;
     }
@@ -1094,6 +1164,7 @@ body {
    ============================================================================= */
 
 @media (hover: none) and (pointer: coarse) {
+
     /* Enhance touch targets for mobile */
     .icon-btn,
     .avatar,
@@ -1102,7 +1173,7 @@ body {
         min-width: 44px;
         min-height: 44px;
     }
-    
+
     /* Remove hover effects on touch devices */
     .chat-item:hover,
     .icon-btn:hover,
@@ -1110,7 +1181,7 @@ body {
     .btn-secondary:hover {
         background: inherit;
     }
-    
+
     /* Active states for touch feedback */
     .chat-item:active {
         background: var(--elevated-bg);
@@ -1123,9 +1194,12 @@ body {
 }
 
 @keyframes longPressScale {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
     }
+
     50% {
         transform: scale(1.05);
     }
@@ -1187,6 +1261,7 @@ body {
         opacity: 0;
         transform: translateX(20px);
     }
+
     to {
         opacity: 1;
         transform: translateX(0);
@@ -1270,6 +1345,7 @@ body {
     0% {
         transform: rotate(0deg);
     }
+
     100% {
         transform: rotate(360deg);
     }
@@ -1282,10 +1358,13 @@ body {
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
         opacity: 1;
     }
+
     50% {
         transform: scale(1.1);
         opacity: 0.8;
@@ -1304,9 +1383,12 @@ body {
 }
 
 @keyframes fadeInOut {
-    0%, 100% {
+
+    0%,
+    100% {
         opacity: 0.5;
     }
+
     50% {
         opacity: 1;
     }

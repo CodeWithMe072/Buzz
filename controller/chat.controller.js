@@ -9,9 +9,16 @@ export const getallMessage = async (req, res) => {
             /* 1️⃣ Only messages where user involved */
             {
                 $match: {
-                    $or: [
-                        { from: activeUserId },
-                        { to: activeUserId }
+                    $and: [
+                        {
+                            $or: [
+                                { from: activeUserId },
+                                { to: activeUserId }
+                            ]
+                        },
+                        {
+                            deletedFor: { $ne: activeUserId }
+                        }
                     ]
                 }
             },
@@ -69,3 +76,41 @@ export const getallMessage = async (req, res) => {
 
     res.json({ ChatMesaage: allMessage })
 }
+
+export const deleteChat = async (req, res) => {
+    try {
+        const { activeUser, to } = req.body;
+
+        // basic validation
+        if (!activeUser || !to) {
+            return res.status(400).json({
+                status: false,
+                message: "activeUser and to are required"
+            });
+        }
+
+        const result = await Message.updateMany(
+            {
+                $or: [
+                    { from: activeUser, to },
+                    { from: to, to: activeUser }
+                ]
+            },
+            {
+                $addToSet: { deletedFor: activeUser }
+            }
+        );
+
+        return res.json({
+            status: true,
+            message: "Chat deleted for this user only",
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            status: false,
+            message: "Failed to delete chat"
+        });
+    }
+};

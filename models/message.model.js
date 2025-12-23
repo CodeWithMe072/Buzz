@@ -4,18 +4,18 @@ const messageSchema = new mongoose.Schema(
   {
     /* ---------- Identity ---------- */
     tempId: {
-      type: String,          // client-generated id
+      type: String,                 // client-generated id
       index: true,
     },
 
     from: {
-      type: String,          // userId / username
+      type: String,                 // userId
       required: true,
       index: true,
     },
 
     to: {
-      type: String,          // userId / username
+      type: String,                 // userId
       required: true,
       index: true,
     },
@@ -23,12 +23,12 @@ const messageSchema = new mongoose.Schema(
     /* ---------- Content ---------- */
     type: {
       type: String,
-      enum: ["text", "image", "file"],
+      enum: ["text", "image", "video"],
       required: true,
     },
 
     content: {
-      type: String,          // text OR file URL
+      type: String,                 // text OR media URL
       required: true,
     },
 
@@ -38,8 +38,8 @@ const messageSchema = new mongoose.Schema(
     },
 
     replyTo: {
-      type: String,   // ✅ tempId
-      default: null
+      type: String,                 // tempId
+      default: null,
     },
 
     /* ---------- Status (SERVER CONTROLLED) ---------- */
@@ -61,25 +61,32 @@ const messageSchema = new mongoose.Schema(
     /* ---------- Reactions ---------- */
     reactions: {
       type: Map,
-      of: String,            // { userId: "👍" }
+      of: String,                   // { userId: "👍" }
       default: {},
+    },
+
+    /* ---------- Delete For Me (KEY FEATURE) ---------- */
+    deletedFor: {
+      type: [String],               // userIds who hid this message
+      default: [],
     },
 
     /* ---------- Timing ---------- */
     clientTime: {
-      type: Number,          // Date.now() from client
+      type: Number,                 // Date.now() from client
     },
 
     deliveredAt: Date,
     seenAt: Date,
   },
   {
-    timestamps: true,        // createdAt, updatedAt
+    timestamps: true,               // createdAt, updatedAt
   }
 );
 
-/* ---------- Indexes (important for performance) ---------- */
+/* ---------- Indexes (performance-critical) ---------- */
 messageSchema.index({ from: 1, to: 1, createdAt: -1 });
 messageSchema.index({ to: 1, createdAt: -1 });
+messageSchema.index({ deletedFor: 1 });
 
 export const Message = mongoose.model("Message", messageSchema);

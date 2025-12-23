@@ -547,7 +547,7 @@ function renderChatList() {
                     
                 </div>
                  <div class="chat-item-preview ${conv.unread > 0 ? 'unread' : ''}">
-                    <span>${conv.lastMessage}</span>
+                    <span>${conv.lastMessage ? conv.lastMessage : ""}</span>
                 </div>
                
             </div>
@@ -589,6 +589,28 @@ function openChat(chatId) {
         document.getElementById('chat-list-sidebar').classList.add('hidden');
         document.getElementById('chat-window').classList.add('active');
     }
+
+    document.getElementById("chat-info-btn").addEventListener("click", () => {
+        document.getElementById("chatOption").classList.add("active")
+    })
+
+    document.getElementById("chatOption-button").addEventListener("click", async () => {
+        State.messages[State.activeChat] = []
+        renderMessages(State.activeChat)
+
+        let conv = State.conversations.find(c => c.id == State.activeChat)
+        conv.lastMessage = ""
+        renderChatList()
+        document.getElementById("chatOption").classList.remove("active")
+        await fetch("/api/deletechat", {
+            method: "POST",
+            headers: {
+                "Content-type": "application/json"
+            },
+            body: JSON.stringify({ activeUser: State.currentUser.id, to: State.activeChat })
+        })
+
+    })
 
 
 }
@@ -1118,9 +1140,6 @@ function replyToMessage(message) {
     // Focus input
     document.getElementById('message-input').focus();
 }
-
-
-
 
 // =============================================================================
 // Mobile Navigation

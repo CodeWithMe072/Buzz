@@ -48,6 +48,7 @@ export default function initSocket(io) {
         caption,
         replyTo,
         clientTime,
+        deletedFor: [],
         status: {
           sent: true,
           delivered: Boolean(receiverSocketId),
