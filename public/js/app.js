@@ -105,7 +105,7 @@ function initSocket() {
         conv.online = true;
         const statusEl = document.getElementById('online-status');
         statusEl.textContent = conv.id == State.activeChat ? 'Active now' : 'Offline';
-        statusEl.className = `online-status ${conv.id == State.activeChat ? 'Online' : ''}`;
+        statusEl.className = `online-status ${conv.id == State.activeChat ? 'online' : ''}`;
         renderChatList();
     });
 
@@ -117,7 +117,7 @@ function initSocket() {
 
         const statusEl = document.getElementById('online-status');
         statusEl.textContent = conv.id == State.activeChat ? 'Offline' : 'Active now';
-        statusEl.className = `online-status ${conv.id == State.activeChat ? '' : 'Online'}`;
+        statusEl.className = `online-status ${conv.id == State.activeChat ? '' : 'online'}`;
         renderChatList();
     });
 
