@@ -359,10 +359,6 @@ async function initAuth() {
             showToast(response.Data.message, 'error');
             return
         }
-
-
-
-
     });
 
     // Signup form
