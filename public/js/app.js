@@ -290,7 +290,7 @@ async function initAuth() {
         const username = document.getElementById('login-username').value.trim();
         const password = document.getElementById('login-password').value;
 
-        if (!username || !password) {
+        if (username == "" || password == "") {
             showToast('Please fill in all fields', 'error');
             return;
         }
