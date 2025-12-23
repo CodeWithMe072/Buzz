@@ -15,6 +15,7 @@ export default function initSocket(io) {
     });
 
     socket.on("private_message", (payload) => {
+      console.log(payload)
       const {
         tempId, to, type, content, caption, replyTo, clientTime
       } = payload.message;

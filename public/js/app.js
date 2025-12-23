@@ -102,8 +102,10 @@ function initSocket() {
     socket.on("user:online", ({ userId }) => {
         const conv = State.conversations.find(c => c.id === userId);
         if (!conv) return;
-
         conv.online = true;
+        const statusEl = document.getElementById('online-status');
+        statusEl.textContent = conv.id == State.activeChat ? 'Active now' : 'Offline';
+        statusEl.className = `online-status ${conv.id == State.activeChat ? 'Online' : ''}`;
         renderChatList();
     });
 
@@ -112,6 +114,10 @@ function initSocket() {
         if (!conv) return;
 
         conv.online = false;
+
+        const statusEl = document.getElementById('online-status');
+        statusEl.textContent = conv.id == State.activeChat ? 'Offline' : 'Active now';
+        statusEl.className = `online-status ${conv.id == State.activeChat ? '' : 'Online'}`;
         renderChatList();
     });
 
@@ -629,7 +635,7 @@ function createMessageElement(msg) {
             const replyPreview = document.createElement('div');
             replyPreview.className = 'message-reply-preview';
             replyPreview.innerHTML = `
-                <div class="reply-username">${replyMsg.sender === 'self' ? 'You' : State.conversations.find(c => c.id === State.activeChat)?.username}</div>
+                <div class="reply-username">${replyMsg.user === State.currentUser.id || replyMsg.user === State.currentUser.username ? 'You' : State.conversations.find(c => c.id === State.activeChat)?.username}</div>
                 <div class="reply-text">${replyMsg.content}</div>
             `;
             replyPreview.addEventListener('click', (e) => {
@@ -649,13 +655,24 @@ function createMessageElement(msg) {
             const img = document.createElement('img');
             img.src = msg.content;
             img.alt = 'Image message';
+
+            // performance attributes
+            img.loading = 'lazy';        // defer loading
+            img.decoding = 'async';      // non-blocking decode
+
             mediaDiv.appendChild(img);
         } else {
             const video = document.createElement('video');
             video.src = msg.content;
+
+            // performance attributes
             video.controls = true;
+            video.preload = 'none';      // don’t download until play
+            video.loading = 'lazy';      // supported in modern Chromium
+
             mediaDiv.appendChild(video);
         }
+
 
         bubbleDiv.appendChild(mediaDiv);
     }
@@ -801,7 +818,7 @@ function addMessageGestures(messageEl, msg) {
 function findMessageById(messageId) {
     if (!State.activeChat) return null;
     const messages = State.messages[State.activeChat];
-    return messages.find(m => m.id === messageId);
+    return messages.find(m => m.id === messageId || m.tempId == messageId);
 }
 
 function scrollToMessage(messageId) {
@@ -866,7 +883,6 @@ function initChatWindow() {
             mediaInput.value = "";
             return;
         }
-
         // Validate type
         if (
             !file.type.startsWith("image/") &&
