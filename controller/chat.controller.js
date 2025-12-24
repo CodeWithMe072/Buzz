@@ -1,8 +1,6 @@
 
 import { Message } from "../models/message.model.js"
 export const getallMessage = async (req, res) => {
-
-
     const { userId: activeUserId } = req.body
     let allMessage = await
         Message.aggregate([

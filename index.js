@@ -8,6 +8,7 @@ import "dotenv/config";
 import { connectMongo } from "./config/mongo.js";
 import uploadRoutes from "./routes/upload.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
+import authRoutes from "./routes/auth.routes.js";
 import initSocket from "./sockets/chat.sockets.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,6 +29,7 @@ app.use(express.static(path.join(__dirname, "public")));
 /* ---------- Routes ---------- */
 app.get("/", (req, res) => res.render("index"));
 app.use(chatRoutes);
+app.use(authRoutes);
 app.use(uploadRoutes);
 
 /* ---------- Server ---------- */

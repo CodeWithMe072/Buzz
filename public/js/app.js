@@ -20,7 +20,8 @@ const State = {
     touchStartX: 0,
     touchStartY: 0,
     isSwiping: false,
-    allusers: []
+    allusers: [],
+    isMute:null
 };
 
 function initSocket() {
@@ -43,7 +44,7 @@ function initSocket() {
             user: msg.from,
             replyTo: msg.replyTo,
             reactions: {},
-            showTime:msg.showTime,
+            // showTime: msg.showTime,
             status: {
                 sent: true,
                 delivered: true,
@@ -73,8 +74,13 @@ function initSocket() {
         const conv = State.conversations.find(c => c.id === message.user);
         if (conv) {
             conv.lastMessage = message.type === 'text' ? message.content : `📷 ${message.type}`;
-            conv.timestamp = message.showTime;
-            conv.unread = conv.unread ? conv.unread + 1 : 1
+            conv.timestamp = message.timestamp;
+            if (State.activeChat != message.user) {
+
+                conv.unread = conv.unread ? conv.unread + 1 : 1
+            } else {
+                conv.unread = 0
+            }
         }
         renderChatList();
     });
@@ -105,21 +111,30 @@ function initSocket() {
         if (!conv) return;
         conv.online = true;
         const statusEl = document.getElementById('online-status');
-        statusEl.textContent = conv.id == State.activeChat ? 'Active now' : 'Offline';
+        let lastseen = formatTime(new Date(conv.lastSeen).getTime())
+        statusEl.textContent = conv.online ? 'Active now' : `${lastseen == "Just now" ? "Just now" : "Last seen " + lastseen + " Ago"}`;
         statusEl.className = `online-status ${conv.id == State.activeChat ? 'online' : ''}`;
         renderChatList();
     });
 
-    socket.on("user:offline", ({ userId }) => {
+    socket.on("user:offline", async ({ userId }) => {
         const conv = State.conversations.find(c => c.id === userId);
         if (!conv) return;
 
         conv.online = false;
-
+        conv.lastSeen = Date.now()
+        let lastseen = formatTime(new Date(conv.lastSeen).getTime())
         const statusEl = document.getElementById('online-status');
-        statusEl.textContent = conv.id == State.activeChat ? 'Offline' : 'Active now';
+        statusEl.textContent = conv.id == State.activeChat ? `${lastseen == "Just now" ? "Just now" : "Last seen " + lastseen + " Ago"}` : 'Active now';
         statusEl.className = `online-status ${conv.id == State.activeChat ? '' : 'online'}`;
         renderChatList();
+        fetch("/auth/user/lastseen", {
+            method: "POST",
+            headers: {
+                "Content-type": "application/json"
+            },
+            body: JSON.stringify({ extra: conv.id })
+        })
     });
 
 
@@ -180,7 +195,7 @@ function formatTime(timestamp) {
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now - date;
-
+    console.log(diff)
     // Less than a minute
     if (diff < 60000) return 'Just now';
 
@@ -203,6 +218,7 @@ function formatTime(timestamp) {
     }
 
     // Format as date
+    console.log(date.toLocaleDateString())
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
@@ -231,12 +247,22 @@ function sanitizeInput(input) {
 // =============================================================================
 
 async function initAuth() {
-    const loginForm = document.getElementById('login-form');
-    const signupForm = document.getElementById('signup-form');
+
     const toSignup = document.getElementById('to-signup');
     const toLogin = document.getElementById('to-login');
 
     // Check if user is already logged in
+    handelAuthForm()
+    // Toggle between login and signup
+    toSignup.addEventListener('click', () => {
+        document.getElementById('login-screen').classList.remove('active');
+        document.getElementById('signup-screen').classList.add('active');
+    });
+
+    toLogin.addEventListener('click', () => {
+        document.getElementById('signup-screen').classList.remove('active');
+        document.getElementById('login-screen').classList.add('active');
+    });
     const savedUser = localStorage.getItem('instachat-user');
     if (savedUser) {
         State.currentUser = JSON.parse(savedUser);
@@ -244,6 +270,7 @@ async function initAuth() {
 
         let allusersresponse = await alluser()
         if (allusersresponse.code == 200) {
+            console.log(allusersresponse.Data)
             State.allusers = allusersresponse.Data.user.filter(u => u.username != State.currentUser.username)
         }
         initChatList();
@@ -291,7 +318,17 @@ async function initAuth() {
     // No saved user, hide loader and show login
     hideLoader();
 
+
+
+
+}
+
+
+function handelAuthForm() {
     // Login form
+
+    const loginForm = document.getElementById('login-form');
+    const signupForm = document.getElementById('signup-form');
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const username = document.getElementById('login-username').value.trim();
@@ -306,11 +343,10 @@ async function initAuth() {
         showLoader();
         let response = await loginuser({ username, password })
         if (response.code == 200) {
-
             const user = {
                 id: response.Data.user.extra,
                 username: username,
-                avatar: username.charAt(0).toUpperCase()
+                avatar: response.Data.user.avatar
             };
             State.currentUser = user;
             localStorage.setItem('instachat-user', JSON.stringify(user));
@@ -417,6 +453,7 @@ async function initAuth() {
 
             let allusersresponse = await alluser()
             if (allusersresponse.code == 200) {
+                console.log(allusersresponse.Data.user)
                 State.allusers = allusersresponse.Data.user.filter(u => u.username != State.currentUser.username)
             }
             initChatList();
@@ -466,17 +503,6 @@ async function initAuth() {
             return
         }
     });
-
-    // Toggle between login and signup
-    toSignup.addEventListener('click', () => {
-        document.getElementById('login-screen').classList.remove('active');
-        document.getElementById('signup-screen').classList.add('active');
-    });
-
-    toLogin.addEventListener('click', () => {
-        document.getElementById('signup-screen').classList.remove('active');
-        document.getElementById('login-screen').classList.add('active');
-    });
 }
 
 function logout() {
@@ -485,10 +511,13 @@ function logout() {
     State.activeChat = null;
     State.conversations = [];
     State.messages = {};
+    if (socket && socket.connected) {
+        socket.disconnect(); // 🔑 force disconnect
+    }
 
     document.getElementById('chat-screen').classList.remove('active');
     document.getElementById('login-screen').classList.add('active');
-
+    // handelAuthForm()
     showToast('Logged out successfully', 'success');
 }
 
@@ -521,6 +550,7 @@ function initChatList() {
         id: user.extra,
         username: user.username,
         avatar: user.username.charAt(0).toUpperCase(),
+        lastSeen: user.lastSeen
     }));
 
 
@@ -534,7 +564,7 @@ function renderChatList() {
     const chatList = document.getElementById('chat-list');
     chatList.innerHTML = '';
 
-    State.conversations.sort((a,b)=>b.timestamp-a.timestamp)
+    State.conversations.sort((a, b) => b.timestamp - a.timestamp)
     State.conversations.forEach(conv => {
         const item = document.createElement('div');
         item.className = `chat-item ${State.activeChat === conv.id ? 'active' : ''}`;
@@ -546,7 +576,7 @@ function renderChatList() {
             <div class="chat-item-content">
                 <div class="chat-item-header">
                     <span class="chat-item-username">${conv.username}</span>
-                     <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) :""}</span>
+                     <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) : ""}</span>
                 </div>
                  <div class="chat-item-preview ${conv.unread > 0 ? 'unread' : ''}">
                     <span>${conv.lastMessage ? conv.lastMessage : ""}</span>
@@ -580,7 +610,8 @@ function openChat(chatId) {
     document.getElementById('chat-avatar').innerHTML = `<span>${conv.avatar}</span>`;
     document.getElementById('chat-username').textContent = conv.username;
     const statusEl = document.getElementById('online-status');
-    statusEl.textContent = conv.online ? 'Active now' : 'Offline';
+    let lastseen = formatTime(new Date(conv.lastSeen).getTime())
+    statusEl.textContent = conv.online ? 'Active now' : `${lastseen == "Just now" ? "Just now" : "Last seen " + lastseen + " Ago"}`;
     statusEl.className = `online-status ${conv.online ? 'online' : ''}`;
 
     // Render messages
@@ -602,6 +633,8 @@ function openChat(chatId) {
 
         let conv = State.conversations.find(c => c.id == State.activeChat)
         conv.lastMessage = ""
+        conv.unread = 0
+        conv.timestamp = undefined;
         renderChatList()
         document.getElementById("chatOption").classList.remove("active")
         await fetch("/api/deletechat", {
@@ -613,6 +646,47 @@ function openChat(chatId) {
         })
 
     })
+
+
+    const muteBtn = document.getElementById("chatOption-Mute");
+
+    muteBtn.addEventListener("click", (e) => {
+        document.getElementById("chatOption").classList.remove("active");
+
+        const btn = e.currentTarget;
+        const isMuted = btn.dataset.mute === "true";
+        
+        if (isMuted) {
+            // MUTE
+            btn.dataset.mute = "false";
+            localStorage.setItem("mute", "true");
+
+            showToast("Chat Muted", "success");
+
+            btn.innerHTML = `
+       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                </svg> Unmute
+    `;
+        } else {
+            // UNMUTE
+            btn.dataset.mute = "true";
+            localStorage.setItem("mute", "false");
+
+            showToast("Chat Unmuted", "success");
+
+            btn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+      </svg> Mute
+    `;
+        }
+    });
+
 
 
 }
@@ -1177,10 +1251,12 @@ function initMobileNavigation() {
 document.addEventListener('DOMContentLoaded', async () => {
     // Show loader initially
     const loader = document.getElementById('loader-overlay');
+    State.isMute=localStorage.getItem("mute")
 
     // Simulate initial load time
     await initAuth();
     hideLoader();
+
 
 });
 

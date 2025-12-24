@@ -33,7 +33,7 @@ export default function initSocket(io) {
           caption,
           replyTo,
           timestamp: Date.now(),
-          showTime:Date.now() - Math.random() * 86400000,
+          // showTime:Date.now() - Math.random() * 86400000,
           status: { delivered: true }
         });
       }

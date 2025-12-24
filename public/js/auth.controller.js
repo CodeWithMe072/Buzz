@@ -1,14 +1,12 @@
-let AUTH_API_URL = "https://www.backcrafter.shop/api/v1/user"
-let API_KEY = "sk_oau_li7b337d6473d1349b0c6c6b88405659af593a59cf711a0226"
+let AUTH_API_URL = "/auth"
 
 
 
 async function createUser(data) {
-  let response = await fetch(`${AUTH_API_URL}/create`, {
+  let response = await fetch(`${AUTH_API_URL}/register`, {
     method: "POST",
     headers: {
-      "Content-type": "application/json",
-      "api-key": API_KEY
+      "Content-type": "application/json"
     },
     body: JSON.stringify({ ...data })
   })
@@ -22,8 +20,7 @@ async function loginuser(data) {
   let response = await fetch(`${AUTH_API_URL}/login`, {
     method: "POST",
     headers: {
-      "Content-type": "application/json",
-      "api-key": API_KEY
+      "Content-type": "application/json"
     },
     body: JSON.stringify({ ...data })
   })
@@ -33,11 +30,11 @@ async function loginuser(data) {
 }
 
 async function alluser() {
-   let response = await fetch(`${AUTH_API_URL}/allusers`, {
-    method: "POST",
+   let response = await fetch(`${AUTH_API_URL}/users`, {
+    method: "GET",
     headers: {
-      "Content-type": "application/json",
-      "api-key": API_KEY
+      "Content-type": "application/json"
+     
     }
   })
   let Responsedata = await response.json()
