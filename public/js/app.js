@@ -43,6 +43,7 @@ function initSocket() {
             user: msg.from,
             replyTo: msg.replyTo,
             reactions: {},
+            showTime:msg.showTime,
             status: {
                 sent: true,
                 delivered: true,
@@ -56,13 +57,7 @@ function initSocket() {
         }
         State.messages[message.user].unshift(message);
 
-        const conv = State.conversations.find(c => c.id === message.user);
-        if (conv) {
-            conv.lastMessage = message.type === 'text' ? message.content : `📷 ${message.type}`;
-            conv.timestamp = Date.now();
-        }
 
-        console.log(message.user, State.currentUser)
         if (message.user == State.activeChat) {
             const messagesContainer = document.getElementById('messages');
 
@@ -74,6 +69,12 @@ function initSocket() {
             const container = document.getElementById('messages-container');
             container.scrollTop = container.scrollHeight;
             tone.play();
+        }
+        const conv = State.conversations.find(c => c.id === message.user);
+        if (conv) {
+            conv.lastMessage = message.type === 'text' ? message.content : `📷 ${message.type}`;
+            conv.timestamp = message.showTime;
+            conv.unread = conv.unread ? conv.unread + 1 : 1
         }
         renderChatList();
     });
@@ -533,6 +534,7 @@ function renderChatList() {
     const chatList = document.getElementById('chat-list');
     chatList.innerHTML = '';
 
+    State.conversations.sort((a,b)=>b.timestamp-a.timestamp)
     State.conversations.forEach(conv => {
         const item = document.createElement('div');
         item.className = `chat-item ${State.activeChat === conv.id ? 'active' : ''}`;
@@ -544,14 +546,14 @@ function renderChatList() {
             <div class="chat-item-content">
                 <div class="chat-item-header">
                     <span class="chat-item-username">${conv.username}</span>
-                    
+                     <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) :""}</span>
                 </div>
                  <div class="chat-item-preview ${conv.unread > 0 ? 'unread' : ''}">
                     <span>${conv.lastMessage ? conv.lastMessage : ""}</span>
                 </div>
                
             </div>
-            
+            ${conv.unread > 0 ? `<span class="unread-badge">${conv.unread}</span>` : ''}
         `;
 
         item.addEventListener('click', () => openChat(conv.id));

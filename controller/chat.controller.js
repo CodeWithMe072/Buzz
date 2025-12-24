@@ -6,7 +6,7 @@ export const getallMessage = async (req, res) => {
     const { userId: activeUserId } = req.body
     let allMessage = await
         Message.aggregate([
-            /* 1️⃣ Only messages where user involved */
+            /* 1 Only messages where user involved */
             {
                 $match: {
                     $and: [
@@ -23,10 +23,10 @@ export const getallMessage = async (req, res) => {
                 }
             },
 
-            /* 2️⃣ Sort latest first */
+            /* 2 Sort latest first */
             { $sort: { createdAt: -1 } },
 
-            /* 3️⃣ Group by OTHER USER ONLY */
+            /* 3 Group by OTHER USER ONLY */
             {
                 $group: {
                     _id: {
@@ -40,7 +40,7 @@ export const getallMessage = async (req, res) => {
                 }
             },
 
-            /* 4️⃣ Take last 10 messages */
+            /* 4 Take last 10 messages */
             {
                 $project: {
                     _id: 1,
@@ -48,7 +48,7 @@ export const getallMessage = async (req, res) => {
                 }
             },
 
-            /* 5️⃣ RENAME KEYS ONLY (unchanged logic) */
+            /* 5 RENAME KEYS ONLY (unchanged logic) */
             {
                 $project: {
                     _id: 1,              // 👈 this is now SECOND USER ID
