@@ -17,10 +17,11 @@ export default function initSocket(io) {
     socket.on("private_message", (payload) => {
       console.log(payload)
       const {
-        tempId, to, type, content, caption, replyTo, clientTime
+        tempId, to, type, caption, replyTo, clientTime
       } = payload.message;
+      let { content } = payload.message
 
-      if (!tempId || !to || !type || !content) return;
+      if (!tempId || !to || !type) return;
 
       const receiverSocketId = onlineUsers.get(to);
 
@@ -39,7 +40,7 @@ export default function initSocket(io) {
       }
 
       socket.emit("message_ack", { tempId, status: "sent" });
-
+      content = content ? content : " "
       Message.create({
         tempId,
         from: userId,
@@ -72,6 +73,38 @@ export default function initSocket(io) {
       const target = onlineUsers.get(to);
       if (target) io.to(target).emit("typing:stop", { user: userId });
     });
+
+    socket.on("media:uploaded", ({ tempId, to, url, mediaType }) => {
+      const receiverSocketId = onlineUsers.get(to);
+
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("media:uploaded", {
+          tempId,
+          url,
+          mediaType
+        });
+      }
+
+      socket.emit("media:uploaded", {
+        tempId,
+        url,
+        mediaType
+      });
+
+      // 🔥 async, non-blocking DB update
+      Message.updateOne(
+        { tempId },
+        {
+          $set: {
+            content: url,
+            type: mediaType,
+          }
+        }
+      ).catch(err => {
+        console.error("Mongo update failed:", err);
+      });
+    });
+
 
     socket.on("disconnect", () => {
       onlineUsers.delete(userId);

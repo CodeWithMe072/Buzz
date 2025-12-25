@@ -21,7 +21,7 @@ const State = {
     touchStartY: 0,
     isSwiping: false,
     allusers: [],
-    isMute:null
+    isMute: null
 };
 
 function initSocket() {
@@ -30,8 +30,6 @@ function initSocket() {
     socket.on("connect", () => {
         console.log("Connected as", State.currentUser.id, socket.id);
     });
-
-
     socket.on("private_message", (msg) => {
         tone.currentTime = 0
         const message = {
@@ -51,7 +49,7 @@ function initSocket() {
                 seen: false
             }
         }
-
+        console.log(msg)
         // Add to messages
         if (!State.messages[message.user]) {
             State.messages[message.user] = [];
@@ -60,6 +58,9 @@ function initSocket() {
 
 
         if (message.user == State.activeChat) {
+            if (State.isMute == "true") {
+                tone.play();
+            }
             const messagesContainer = document.getElementById('messages');
 
 
@@ -69,7 +70,7 @@ function initSocket() {
             // Scroll to bottom
             const container = document.getElementById('messages-container');
             container.scrollTop = container.scrollHeight;
-            tone.play();
+
         }
         const conv = State.conversations.find(c => c.id === message.user);
         if (conv) {
@@ -84,7 +85,6 @@ function initSocket() {
         }
         renderChatList();
     });
-
 
     socket.on("typing:start", ({ user }) => {
         if (user !== State.activeChat) return;
@@ -137,11 +137,73 @@ function initSocket() {
         })
     });
 
+    socket.on("media:uploaded", ({ tempId, url, mediaType }) => {
+        // update message in State
+        for (const chatId in State.messages) {
+            const msg = State.messages[chatId]?.find(m => m.id === tempId);
+            if (!msg) continue;
 
+            msg.content = url;
+            msg.type = mediaType;
+        }
 
+        // update UI
+        updateMessageByTempId(tempId, {
+            content: url,
+            type:mediaType
+        });
+    });
 }
+
+
+
+function updateMessageByTempId(tempId, updates) {
+    /* ---------- 1 Update STATE ---------- */
+    for (const chatId in State.messages) {
+        const msgs = State.messages[chatId];
+        if (!msgs) continue;
+
+        const msg = msgs.find(m => m.id === tempId);
+        if (!msg) continue;
+
+        Object.assign(msg, updates);
+        break;
+    }
+    console.log(updates)
+    /* ---------- 2 Update DOM ---------- */
+    const msgEl = document.querySelector(
+        `.message[data-message-id="${tempId}"] .message-bubble`
+    );
+
+    if (!msgEl) return;
+    msgEl.innerHTML = ""
+
+    // replace media content
+    if (updates.content) {
+        const mediaDiv = document.createElement('div');
+        mediaDiv.className = 'message-media';
+        if (updates.type === 'image') {
+            const img = document.createElement('img');
+            img.src = updates.content;
+            img.alt = 'Image message';
+
+            mediaDiv.appendChild(img);
+        } else {
+            const video = document.createElement('video');
+            video.src = updates.content;
+
+            video.muted = true
+            video.autoplay = true     // supported in modern Chromium
+
+            mediaDiv.appendChild(video);
+        }
+        msgEl.appendChild(mediaDiv)
+    }
+}
+
 // send message to another user
 function sendsocketMessage(message) {
+    console.log("-----------------")
     socket.emit("private_message", {
         message
     });
@@ -655,7 +717,7 @@ function openChat(chatId) {
 
         const btn = e.currentTarget;
         const isMuted = btn.dataset.mute === "true";
-        
+
         if (isMuted) {
             // MUTE
             btn.dataset.mute = "false";
@@ -721,7 +783,7 @@ function renderMessages(chatId) {
 function createMessageElement(msg) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${msg.user == State.currentUser.username || msg.user == State.currentUser.id ? "self" : "other"}`;
-    messageDiv.dataset.messageId = msg.id;
+    messageDiv.dataset.messageId = msg.id ? msg.id : msg.tempId;
 
     const bubbleDiv = document.createElement('div');
     bubbleDiv.className = 'message-bubble';
@@ -745,7 +807,7 @@ function createMessageElement(msg) {
     }
 
     // Media content
-    if (msg.type === 'image' || msg.type === 'video') {
+    if ((msg.type === 'image' || msg.type === 'video') && msg.content != null) {
         const mediaDiv = document.createElement('div');
         mediaDiv.className = 'message-media';
 
@@ -754,24 +816,24 @@ function createMessageElement(msg) {
             img.src = msg.content;
             img.alt = 'Image message';
 
-            // performance attributes
-            img.loading = 'lazy';        // defer loading
-            img.decoding = 'async';      // non-blocking decode
-
             mediaDiv.appendChild(img);
         } else {
             const video = document.createElement('video');
             video.src = msg.content;
 
-            // performance attributes
-            video.controls = true;
-            video.preload = 'none';      // don’t download until play
-            video.loading = 'lazy';      // supported in modern Chromium
+            video.muted = true
+            video.autoplay = true
 
             mediaDiv.appendChild(video);
         }
 
 
+        bubbleDiv.appendChild(mediaDiv);
+    }
+    if ((msg.type === 'image' || msg.type === 'video') && msg.content == null) {
+        const mediaDiv = document.createElement('div');
+        mediaDiv.className = 'message-media';
+        mediaDiv.textContent = msg.type + "  loading.."
         bubbleDiv.appendChild(mediaDiv);
     }
 
@@ -975,7 +1037,7 @@ function initChatWindow() {
         const file = e.target.files[0];
         if (!file) return;
 
-        // ✅ Allow only one file
+        //  Allow only one file
         if (e.target.files.length > 1) {
             showToast("Only one file allowed", "error");
             mediaInput.value = "";
@@ -1018,25 +1080,14 @@ function initChatWindow() {
         const container = document.getElementById('messages-container');
         container.scrollTop = container.scrollHeight;
         renderChatList()
+        // ✅ Send Cloudinary URL to chat
+        sendMessage(message.type, null, message.tempId);
 
         try {
             showToast("Uploading...", "info");
 
-            const formData = new FormData();
-            formData.append("file", file);
+            uploadMedia(message.tempId, State.activeChat, file)
 
-            const res = await fetch("/api/upload", {
-                method: "POST",
-                body: formData
-            });
-
-            if (!res.ok) throw new Error("Upload failed");
-
-            const data = await res.json();
-            console.log(data)
-
-            // ✅ Send Cloudinary URL to chat
-            sendMessage(data.type, data.url, message.tempId);
 
         } catch (err) {
             showToast("Upload failed", "error");
@@ -1060,7 +1111,28 @@ function initChatWindow() {
     });
 }
 
-function sendMessage(type = 'text', content = null, OldtempId = null) {
+
+async function uploadMedia(msgId, receiver, file) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData
+    });
+
+    if (!res.ok) throw new Error("Upload failed");
+
+    const data = await res.json();
+    socket.emit("media:uploaded", {
+        tempId: msgId,
+        to: receiver,
+        url: data.url,
+        mediaType: data.type
+    });
+}
+
+function sendMessage(type = 'text', content = null, OldtempId = undefined) {
     if (!State.activeChat) return;
     console.log(type, content)
     const to = State.activeChat;
@@ -1074,8 +1146,7 @@ function sendMessage(type = 'text', content = null, OldtempId = null) {
     const messageInput = document.getElementById('message-input');
     const textContent = messageInput.value.trim();
     if (type === 'text' && !textContent) return;
-    if (type !== 'text' && !content) return;
-
+    // if (type !== 'text' && !content) return;
     const message = {
         tempId: OldtempId ? OldtempId : generateId(),
         type: type,
@@ -1094,6 +1165,7 @@ function sendMessage(type = 'text', content = null, OldtempId = null) {
     }
     State.messages[State.activeChat].unshift(message);
     message.to = State.activeChat
+    console.log(message)
     sendsocketMessage(message)
     // Update conversation
 
@@ -1251,7 +1323,7 @@ function initMobileNavigation() {
 document.addEventListener('DOMContentLoaded', async () => {
     // Show loader initially
     const loader = document.getElementById('loader-overlay');
-    State.isMute=localStorage.getItem("mute")
+    State.isMute = localStorage.getItem("mute")
 
     // Simulate initial load time
     await initAuth();
