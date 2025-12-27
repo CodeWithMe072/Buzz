@@ -8,14 +8,46 @@ export default function initSocket(io) {
     if (!userId) return socket.disconnect(true);
 
     onlineUsers.set(userId, socket.id);
+    // 🔥 BULK DELIVERY ON CONNECT
+    Message.find({
+      to: userId,
+      "status.delivered": false
+    })
+      .select("tempId from")
+      .then((messages) => {
+        if (!messages.length) return;
 
+        // 1️⃣ Mark all as delivered in Mongo (non-blocking)
+        Message.updateMany(
+          {
+            to: userId,
+            "status.delivered": false
+          },
+          {
+            $set: {
+              "status.delivered": true,
+              deliveredAt: new Date()
+            }
+          }
+        ).catch(console.error);
+
+        // 2️⃣ Notify each sender if online
+        for (const msg of messages) {
+          const senderSocketId = onlineUsers.get(msg.from);
+          if (!senderSocketId) continue;
+
+          io.to(senderSocketId).emit("message:delivered", {
+            tempId: msg.tempId
+          });
+        }
+      })
+      .catch(console.error);
     socket.broadcast.emit("user:online", { userId });
     socket.emit("online:list", {
       users: Array.from(onlineUsers.keys())
     });
 
     socket.on("private_message", (payload) => {
-      console.log(payload)
       const {
         tempId, to, type, caption, replyTo, clientTime
       } = payload.message;
@@ -104,7 +136,6 @@ export default function initSocket(io) {
         console.error("Mongo update failed:", err);
       });
     });
-
 
     socket.on("disconnect", () => {
       onlineUsers.delete(userId);

@@ -24,7 +24,7 @@
     --text-light: #737373;
 
     /* Messaging Colors */
-    --message-self: #0095f6;
+    --message-self: #1e3b4f;
     --message-other: #262626;
     --message-text-self: #ffffff;
     --message-text-other: #fafafa;
@@ -102,7 +102,7 @@ body {
 }
 
 
-.chatOption.active{
+.chatOption.active {
     visibility: visible;
     opacity: 1;
     pointer-events: auto;
@@ -122,11 +122,13 @@ body {
     background-color: transparent;
     transition: all .3s ease;
 }
-.chatOption .chatOption-button:hover{
-    background: var(--elevated-bg);  
+
+.chatOption .chatOption-button:hover {
+    background: var(--elevated-bg);
 }
-.chatOption .chatOption-button.delete:hover{
-    background: #231212;  
+
+.chatOption .chatOption-button.delete:hover {
+    background: #231212;
 }
 
 
@@ -662,7 +664,7 @@ body {
 /* Message Bubbles */
 .message {
     display: flex;
-    gap: var(--spacing-sm);
+    /* gap: var(--spacing-sm); */
     max-width: 80%;
     animation: messageSlide 0.3s ease;
     position: relative;
@@ -682,16 +684,19 @@ body {
 
 .message.self {
     align-self: flex-end;
-    flex-direction: row-reverse;
+    /* flex-direction: row-reverse; */
+    flex-direction: column;
 }
 
 .message.other {
     align-self: flex-start;
+    flex-direction: column;
+
 }
 
 .message-bubble {
     position: relative;
-    padding: 10px 14px;
+    padding: 10px 0px 10px 14px;
     border-radius: var(--radius-lg);
     font-size: 14px;
     line-height: 1.4;
@@ -700,6 +705,9 @@ body {
     user-select: none;
     -webkit-user-select: none;
     touch-action: pan-y;
+    display: flex;
+    /* justify-content: space-between; */
+    gap: 5px;
 }
 
 .message.self .message-bubble {
@@ -712,6 +720,7 @@ body {
     background: var(--message-other);
     color: var(--message-text-other);
     border-bottom-left-radius: var(--radius-sm);
+    padding: 10px 14px;
 }
 
 /* Reply Preview in Message */
@@ -792,7 +801,7 @@ body {
 /* Message Status */
 .message-status {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 4px;
     margin-top: 4px;
     font-size: 11px;
@@ -822,6 +831,7 @@ body {
 
 .message.other .message-time {
     text-align: left;
+
 }
 
 /* =============================================================================
@@ -1387,6 +1397,33 @@ body {
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
+
+
+.status-icon {
+    width: 20px;
+    height: 14px;
+    fill: none;
+    stroke-width: 2;
+}
+
+/* single tick (sent) */
+.status-icon.sent {
+    stroke: white;
+    /* gray */
+}
+
+/* double tick delivered */
+.status-icon.delivered {
+    stroke: white;
+    /* gray */
+}
+
+/* double tick seen */
+.status-icon.seen {
+    stroke: #1da1f2;
+    /* WhatsApp blue */
+}
+
 
 @keyframes fadeInOut {
 

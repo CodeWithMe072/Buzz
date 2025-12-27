@@ -21,15 +21,13 @@ const State = {
     touchStartY: 0,
     isSwiping: false,
     allusers: [],
-    isMute: null
+    playTune: true,
+    messageIndex: {}
 };
 
 function initSocket() {
     let tonePath = "/tone/notices.mp3"
     let tone = new Audio(tonePath)
-    socket.on("connect", () => {
-        console.log("Connected as", State.currentUser.id, socket.id);
-    });
     socket.on("private_message", (msg) => {
         tone.currentTime = 0
         const message = {
@@ -49,16 +47,16 @@ function initSocket() {
                 seen: false
             }
         }
-        console.log(msg)
         // Add to messages
         if (!State.messages[message.user]) {
             State.messages[message.user] = [];
         }
         State.messages[message.user].unshift(message);
+        State.messageIndex[message.id] = message.user
 
 
         if (message.user == State.activeChat) {
-            if (State.isMute == "true") {
+            if (State.playTune == true) {
                 tone.play();
             }
             const messagesContainer = document.getElementById('messages');
@@ -150,36 +148,45 @@ function initSocket() {
         // update UI
         updateMessageByTempId(tempId, {
             content: url,
-            type:mediaType
+            type: mediaType
         });
     });
+
+    socket.on("message:delivered", ({ tempId }) => {
+
+        updateMessageByTempId(tempId, {
+            status: { delivered: true }
+        });
+    })
 }
 
 
 
 function updateMessageByTempId(tempId, updates) {
     /* ---------- 1 Update STATE ---------- */
-    for (const chatId in State.messages) {
-        const msgs = State.messages[chatId];
-        if (!msgs) continue;
+    const chatId = State.messageIndex[tempId];
 
-        const msg = msgs.find(m => m.id === tempId);
-        if (!msg) continue;
+    if (!chatId) return;
 
-        Object.assign(msg, updates);
-        break;
-    }
-    console.log(updates)
+    const msgs = State.messages[chatId];
+    if (!msgs) return;
+
+    const msg = msgs.find(m => m.tempId === tempId);
+    if (!msg) return;
+
+    Object.assign(msg, updates);
     /* ---------- 2 Update DOM ---------- */
+
     const msgEl = document.querySelector(
         `.message[data-message-id="${tempId}"] .message-bubble`
     );
-
     if (!msgEl) return;
-    msgEl.innerHTML = ""
+
+
 
     // replace media content
     if (updates.content) {
+        msgEl.innerHTML = ""
         const mediaDiv = document.createElement('div');
         mediaDiv.className = 'message-media';
         if (updates.type === 'image') {
@@ -199,11 +206,34 @@ function updateMessageByTempId(tempId, updates) {
         }
         msgEl.appendChild(mediaDiv)
     }
+
+    if (updates.status) {
+
+        let messageStatus = msgEl.querySelector(".message-status")
+        let statusIcon = "";
+
+        if (msg.status.seen) {
+            statusIcon = `
+    <svg class="status-icon double seen" viewBox="0 0 16 16">
+        <polyline points="2 8 6 12 14 4"/>
+        <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
+    </svg>`;
+        }
+        else if (msg.status.delivered) {
+            statusIcon = `
+    <svg class="status-icon double delivered" viewBox="0 0 16 16">
+        <polyline points="2 8 6 12 14 4"/>
+        <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
+    </svg>`;
+        }
+
+
+        messageStatus.innerHTML = statusIcon
+    }
 }
 
 // send message to another user
 function sendsocketMessage(message) {
-    console.log("-----------------")
     socket.emit("private_message", {
         message
     });
@@ -257,7 +287,6 @@ function formatTime(timestamp) {
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now - date;
-    console.log(diff)
     // Less than a minute
     if (diff < 60000) return 'Just now';
 
@@ -280,7 +309,6 @@ function formatTime(timestamp) {
     }
 
     // Format as date
-    console.log(date.toLocaleDateString())
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
@@ -332,7 +360,6 @@ async function initAuth() {
 
         let allusersresponse = await alluser()
         if (allusersresponse.code == 200) {
-            console.log(allusersresponse.Data)
             State.allusers = allusersresponse.Data.user.filter(u => u.username != State.currentUser.username)
         }
         initChatList();
@@ -349,7 +376,14 @@ async function initAuth() {
             const chatUserId = element._id;
 
             // 1️⃣ Store messages safely
-            State.messages[chatUserId] = element.messages || [];
+            const msgs = element.messages || [];
+            State.messages[chatUserId] = msgs;
+
+            for (const msg of msgs) {
+                if (msg.id) {
+                    State.messageIndex[msg.id] = msg.user;
+                }
+            }
 
             // 2️⃣ Update conversation preview
             const conv = State.conversations.find(c => c.id == chatUserId);
@@ -430,10 +464,17 @@ function handelAuthForm() {
             for (const element of ChatMesaage) {
                 const chatUserId = element._id;
 
-                // 1️⃣ Store messages safely
-                State.messages[chatUserId] = element.messages || [];
+                // 1 Store messages safely
+                const msgs = element.messages || [];
+                State.messages[chatUserId] = msgs;
 
-                // 2️⃣ Update conversation preview
+                for (const msg of msgs) {
+                    if (msg.id) {
+                        State.messageIndex[msg.id] = msg.user;
+                    }
+                }
+
+                // 2 Update conversation preview
                 const conv = State.conversations.find(c => c.id == chatUserId);
                 if (!conv || !element.messages || element.messages.length === 0) continue;
 
@@ -515,7 +556,6 @@ function handelAuthForm() {
 
             let allusersresponse = await alluser()
             if (allusersresponse.code == 200) {
-                console.log(allusersresponse.Data.user)
                 State.allusers = allusersresponse.Data.user.filter(u => u.username != State.currentUser.username)
             }
             initChatList();
@@ -532,7 +572,14 @@ function handelAuthForm() {
                 const chatUserId = element._id;
 
                 // 1️⃣ Store messages safely
-                State.messages[chatUserId] = element.messages || [];
+                const msgs = element.messages || [];
+                State.messages[chatUserId] = msgs;
+
+                for (const msg of msgs) {
+                    if (msg.id) {
+                        State.messageIndex[msg.id] = msg.user;
+                    }
+                }
 
                 // 2️⃣ Update conversation preview
                 const conv = State.conversations.find(c => c.id == chatUserId);
@@ -559,7 +606,6 @@ function handelAuthForm() {
             showToast('Account created successfully!', 'success');
             showChatScreen();
         } else {
-            // console.log(response.Data)
             hideLoader();
             showToast(response.Data.message, 'error');
             return
@@ -612,7 +658,8 @@ function initChatList() {
         id: user.extra,
         username: user.username,
         avatar: user.username.charAt(0).toUpperCase(),
-        lastSeen: user.lastSeen
+        lastSeen: user.lastSeen,
+        timestamp: user.timestamp ? user.timestamp : 0
     }));
 
 
@@ -656,9 +703,9 @@ function renderChatList() {
 function openChat(chatId) {
     State.activeChat = chatId;
     const conv = State.conversations.find(c => c.id === chatId);
+    const messageInput = document.getElementById('message-input');
 
     if (!conv) return;
-
     // Mark as read
     conv.unread = 0;
     renderChatList();
@@ -667,6 +714,8 @@ function openChat(chatId) {
     // Update UI
     document.getElementById('chat-empty-state').style.display = 'none';
     document.getElementById('active-chat').style.display = 'flex';
+    messageInput.value = ""
+    messageInput.focus()
 
     // Update header
     document.getElementById('chat-avatar').innerHTML = `<span>${conv.avatar}</span>`;
@@ -685,6 +734,7 @@ function openChat(chatId) {
         document.getElementById('chat-window').classList.add('active');
     }
 
+    document.getElementById("chatOption").classList.remove("active");
     document.getElementById("chat-info-btn").addEventListener("click", () => {
         document.getElementById("chatOption").classList.add("active")
     })
@@ -696,7 +746,7 @@ function openChat(chatId) {
         let conv = State.conversations.find(c => c.id == State.activeChat)
         conv.lastMessage = ""
         conv.unread = 0
-        conv.timestamp = undefined;
+        conv.timestamp = 0;
         renderChatList()
         document.getElementById("chatOption").classList.remove("active")
         await fetch("/api/deletechat", {
@@ -716,13 +766,15 @@ function openChat(chatId) {
         document.getElementById("chatOption").classList.remove("active");
 
         const btn = e.currentTarget;
-        const isMuted = btn.dataset.mute === "true";
+        // const isplayTune = btn.dataset.playTune == "true";/
+        let tuneatt = btn.getAttribute("data-playTune")
 
-        if (isMuted) {
+        const isplayTune = tuneatt == "true" ? true : false
+        if (isplayTune) {
             // MUTE
-            btn.dataset.mute = "false";
-            localStorage.setItem("mute", "true");
-
+            btn.setAttribute("data-playTune", "false")
+            localStorage.setItem("playTune", true);
+            State.playTune = false
             showToast("Chat Muted", "success");
 
             btn.innerHTML = `
@@ -734,9 +786,9 @@ function openChat(chatId) {
     `;
         } else {
             // UNMUTE
-            btn.dataset.mute = "true";
-            localStorage.setItem("mute", "false");
-
+            btn.setAttribute("data-playTune", "true")
+            localStorage.setItem("playTune", false);
+            State.playTune = true
             showToast("Chat Unmuted", "success");
 
             btn.innerHTML = `
@@ -753,7 +805,6 @@ function openChat(chatId) {
 
 }
 
-
 // =============================================================================
 // Messages
 // =============================================================================
@@ -763,18 +814,11 @@ function renderMessages(chatId) {
     messagesContainer.innerHTML = '';
 
     const messages = State.messages[chatId] || [];
-    console.log(messages, chatId)
     for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
         const messageEl = createMessageElement(msg);
         messagesContainer.appendChild(messageEl);
     }
-    // for (let i = 0; i <messages.length; i++) {
-    //     const msg = messages[i];
-    //     const messageEl = createMessageElement(msg);
-    //     messagesContainer.appendChild(messageEl);
-    // }
-
     // Scroll to bottom
     const container = document.getElementById('messages-container');
     container.scrollTop = container.scrollHeight;
@@ -863,34 +907,42 @@ function createMessageElement(msg) {
         bubbleDiv.appendChild(reactionsDiv);
     }
 
-    messageDiv.appendChild(bubbleDiv);
+
 
     // Status and time for sent messages
-    if (msg.sender === 'self') {
+    if (msg.user === State.currentUser.username || msg.user === State.currentUser.id) {
         const statusDiv = document.createElement('div');
         statusDiv.className = 'message-status';
 
-        let statusIcon = '';
+        let statusIcon = "";
+
         if (msg.status.seen) {
-            statusIcon = `<svg class="status-icon seen" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="2 8 6 12 14 4"/>
-                <polyline points="5 8 9 12 17 4" transform="translate(-3, 0)"/>
-            </svg>`;
-        } else if (msg.status.delivered) {
-            statusIcon = `<svg class="status-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="2 8 6 12 14 4"/>
-                <polyline points="5 8 9 12 17 4" transform="translate(-3, 0)"/>
-            </svg>`;
-        } else {
-            statusIcon = `<svg class="status-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="2 8 6 12 14 4"/>
-            </svg>`;
+            statusIcon = `
+    <svg class="status-icon double seen" viewBox="0 0 16 16">
+        <polyline points="2 8 6 12 14 4"/>
+        <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
+    </svg>`;
+        }
+        else if (msg.status.delivered) {
+            statusIcon = `
+    <svg class="status-icon double delivered" viewBox="0 0 16 16">
+        <polyline points="2 8 6 12 14 4"/>
+        <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
+    </svg>`;
+        }
+        else {
+            statusIcon = `
+    <svg class="status-icon single sent" viewBox="0 0 16 16">
+        <polyline points="2 8 6 12 14 4"/>
+    </svg>`;
         }
 
+
         statusDiv.innerHTML = statusIcon;
-        messageDiv.appendChild(statusDiv);
+        bubbleDiv.appendChild(statusDiv);
     }
 
+    messageDiv.appendChild(bubbleDiv);
     const timeDiv = document.createElement('div');
     timeDiv.className = 'message-time';
     timeDiv.textContent = formatTime(msg.timestamp);
@@ -906,7 +958,6 @@ function addMessageGestures(messageEl, msg) {
     let touchStartTime;
     let touchStartX;
     let touchStartY;
-    let longPressTimer;
 
     messageEl.addEventListener('touchstart', (e) => {
         touchStartTime = Date.now();
@@ -959,20 +1010,18 @@ function addMessageGestures(messageEl, msg) {
     });
 
     // Desktop: long click for reactions
-    messageEl.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return; // Only left click
-        longPressTimer = setTimeout(() => {
-            showEmojiPicker(msg.id);
-        }, 500);
+    messageEl.addEventListener("dblclick", (e) => {
+        showEmojiPicker(msg.id);
     });
 
-    messageEl.addEventListener('mouseup', () => {
-        clearTimeout(longPressTimer);
-    });
 
-    messageEl.addEventListener('mouseleave', () => {
-        clearTimeout(longPressTimer);
-    });
+    // messageEl.addEventListener('mouseup', () => {
+    //     clearTimeout(longPressTimer);
+    // });
+
+    // messageEl.addEventListener('mouseleave', () => {
+    //     clearTimeout(longPressTimer);
+    // });
 }
 
 function findMessageById(messageId) {
@@ -1053,7 +1102,7 @@ function initChatWindow() {
             return;
         }
         const fileUrl = URL.createObjectURL(file);
-
+        let activeChatOnline = State.conversations.find(c => c.id == State.activeChat)
         const message = {
             tempId: generateId(),
             type: file.type.split("/")[0],
@@ -1062,6 +1111,7 @@ function initChatWindow() {
             clientTime: Date.now(),
             replyTo: State.replyingTo,
             user: State.currentUser.username,
+            status: { sent: true, delivered: activeChatOnline.online, seen: false },
             timestamp: Date.now()
         };
         const conv = State.conversations.find(c => c.id === State.activeChat);
@@ -1134,7 +1184,6 @@ async function uploadMedia(msgId, receiver, file) {
 
 function sendMessage(type = 'text', content = null, OldtempId = undefined) {
     if (!State.activeChat) return;
-    console.log(type, content)
     const to = State.activeChat;
     const typingState = State.typingTimeouts[to];
     if (typingState?.isTyping) {
@@ -1147,6 +1196,7 @@ function sendMessage(type = 'text', content = null, OldtempId = undefined) {
     const textContent = messageInput.value.trim();
     if (type === 'text' && !textContent) return;
     // if (type !== 'text' && !content) return;
+    let activeChatOnline = State.conversations.find(c => c.id == State.activeChat)
     const message = {
         tempId: OldtempId ? OldtempId : generateId(),
         type: type,
@@ -1155,6 +1205,7 @@ function sendMessage(type = 'text', content = null, OldtempId = undefined) {
         clientTime: Date.now(),
         replyTo: State.replyingTo,
         user: State.currentUser.username,
+        status: { sent: true, delivered: activeChatOnline.online, seen: false },
         timestamp: Date.now()
     };
 
@@ -1164,8 +1215,8 @@ function sendMessage(type = 'text', content = null, OldtempId = undefined) {
         State.messages[State.activeChat] = [];
     }
     State.messages[State.activeChat].unshift(message);
+    State.messageIndex[message.tempId] = State.activeChat
     message.to = State.activeChat
-    console.log(message)
     sendsocketMessage(message)
     // Update conversation
 
@@ -1323,7 +1374,34 @@ function initMobileNavigation() {
 document.addEventListener('DOMContentLoaded', async () => {
     // Show loader initially
     const loader = document.getElementById('loader-overlay');
-    State.isMute = localStorage.getItem("mute")
+    let isplayTune = localStorage.getItem("playTune")
+    const muteBtn = document.getElementById("chatOption-Mute");
+    if (isplayTune) {
+        State.playTune = isplayTune == "true" ? true : false
+        console.log(isplayTune)
+        muteBtn.setAttribute("playTune", isplayTune);
+
+        if (State.playTune) {
+
+            muteBtn.innerHTML = `
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg> Mute
+            `;
+        } else {
+
+            muteBtn.innerHTML = `
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+               <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+               <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+               <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+           </svg> Unmute
+`;
+        }
+    }
+
 
     // Simulate initial load time
     await initAuth();
