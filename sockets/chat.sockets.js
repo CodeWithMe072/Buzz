@@ -137,6 +137,33 @@ export default function initSocket(io) {
       });
     });
 
+    socket.on("chat:seen", ({ from }) => {
+      const to = userId
+
+      Message.updateMany(
+        {
+          from,
+          to,
+          "status.delivered": true,
+          "status.seen": false
+        },
+        {
+          $set: {
+            "status.seen": true,
+            seenAt: new Date()
+          }
+        }
+      ).then(() => {
+        const senderSocketId = onlineUsers.get(from);
+        if (senderSocketId) {
+          io.to(senderSocketId).emit("message:seen", {
+            by: to
+          });
+        }
+      }).catch(console.error);
+    });
+
+
     socket.on("disconnect", () => {
       onlineUsers.delete(userId);
       socket.broadcast.emit("user:offline", { userId });

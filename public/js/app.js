@@ -68,6 +68,10 @@ function initSocket() {
             // Scroll to bottom
             const container = document.getElementById('messages-container');
             container.scrollTop = container.scrollHeight;
+            socket.emit("chat:seen", {
+                from: State.activeChat
+            });
+
 
         }
         const conv = State.conversations.find(c => c.id === message.user);
@@ -153,18 +157,48 @@ function initSocket() {
     });
 
     socket.on("message:delivered", ({ tempId }) => {
-
         updateMessageByTempId(tempId, {
             status: { delivered: true }
         });
     })
+
+    socket.on("message:seen", ({ by }) => {
+        updateMessageSeenByTempId(by)
+    });
+
+}
+
+function updateMessageSeenByTempId(chatId) {
+    const msgs = State.messages[chatId] || [];
+    msgs.forEach(m => {
+        if (m.status.delivered && !m.status.seen) {
+            m.status.seen = true;
+            const msgEl = document.querySelector(
+                `.message[data-message-id="${m.id || m.tempId}"] .message-bubble`
+            );
+            if (!msgEl) return;
+
+
+            let messageStatus = msgEl.querySelector(".message-status")
+
+            let statusIcon = `
+    <svg class="status-icon double seen" viewBox="0 0 16 16">
+        <polyline points="2 8 6 12 14 4"/>
+        <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
+    </svg>`;
+
+            messageStatus.innerHTML = statusIcon
+
+
+        }
+    });
 }
 
 
-
-function updateMessageByTempId(tempId, updates) {
+function updateMessageByTempId(tempId = null, updates, chatId = null) {
     /* ---------- 1 Update STATE ---------- */
-    const chatId = State.messageIndex[tempId];
+    if (chatId == null) { }
+    chatId = State.messageIndex[tempId];
 
     if (!chatId) return;
 
@@ -269,8 +303,6 @@ function handleTyping() {
         typingState.isTyping = false;
     }, 1000);
 }
-
-
 
 
 const EMOJI_LIST = ['❤️', '👍', '😂', '😮', '😢', '🙏', '🔥', '🎉', '👏', '💯', '✨', '💪', '🤔', '😍', '🥳', '😎'];
@@ -710,6 +742,9 @@ function openChat(chatId) {
     conv.unread = 0;
     renderChatList();
 
+    socket.emit("chat:seen", {
+        from: chatId
+    });
 
     // Update UI
     document.getElementById('chat-empty-state').style.display = 'none';
