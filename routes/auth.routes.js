@@ -9,4 +9,5 @@ router.get("/auth/users", auth.get);
 router.post("/auth/del/user", auth.del);
 router.post("/auth/user/lastseen", auth.updateLastSeen);
 
+
 export default router;
