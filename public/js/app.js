@@ -197,15 +197,16 @@ function updateMessageSeenByTempId(chatId) {
 
 function updateMessageByTempId(tempId = null, updates, chatId = null) {
     /* ---------- 1 Update STATE ---------- */
-    if (chatId == null) { }
-    chatId = State.messageIndex[tempId];
+    if (chatId == null) {
+        chatId = State.messageIndex[tempId];
+    }
 
     if (!chatId) return;
 
     const msgs = State.messages[chatId];
     if (!msgs) return;
 
-    const msg = msgs.find(m => m.tempId === tempId);
+    const msg = msgs.find(m => m.tempId || m.id === tempId);
     if (!msg) return;
 
     Object.assign(msg, updates);
@@ -220,7 +221,8 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 
     // replace media content
     if (updates.content) {
-        msgEl.innerHTML = ""
+        // msgEl.innerHTML = ""
+        msgEl.querySelector(".message-media").remove()
         const mediaDiv = document.createElement('div');
         mediaDiv.className = 'message-media';
         if (updates.type === 'image') {
@@ -238,11 +240,10 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 
             mediaDiv.appendChild(video);
         }
-        msgEl.appendChild(mediaDiv)
+        msgEl.prepend(mediaDiv)
     }
 
     if (updates.status) {
-
         let messageStatus = msgEl.querySelector(".message-status")
         let statusIcon = "";
 
