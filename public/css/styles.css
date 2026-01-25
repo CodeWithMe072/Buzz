@@ -706,8 +706,8 @@ body {
     -webkit-user-select: none;
     touch-action: pan-y;
     display: flex;
-    /* justify-content: space-between; */
-    gap: 5px;
+    flex-direction: column;
+        gap: 5px;
 }
 
 .message.self .message-bubble {
