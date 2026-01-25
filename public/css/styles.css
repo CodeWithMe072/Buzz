@@ -696,7 +696,7 @@ body {
 
 .message-bubble {
     position: relative;
-    padding: 10px 0px 10px 14px;
+    padding: 10px 0px 15px 14px;
     border-radius: var(--radius-lg);
     font-size: 14px;
     line-height: 1.4;
@@ -714,6 +714,11 @@ body {
     background: var(--message-self);
     color: var(--message-text-self);
     border-bottom-right-radius: var(--radius-sm);
+    flex-direction: column;
+}
+
+.message.self .message-bubble div {
+    padding-right: 10px;
 }
 
 .message.other .message-bubble {
@@ -725,7 +730,7 @@ body {
 
 /* Reply Preview in Message */
 .message-reply-preview {
-    padding: 8px;
+    padding: 4px !important;
     background: rgba(255, 255, 255, 0.1);
     border-radius: var(--radius-sm);
     margin-bottom: 6px;
@@ -735,6 +740,7 @@ body {
 
 .message.self .message-reply-preview {
     background: rgba(255, 255, 255, 0.15);
+    margin-right: 10px;
 }
 
 .message-reply-preview .reply-username {
@@ -742,11 +748,21 @@ body {
     margin-bottom: 2px;
 }
 
-.message-reply-preview .reply-text {
+.message-reply-preview .reply-text,
+.message-reply-preview .reply-image {
     opacity: 0.8;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+.message-reply-preview .reply-image {
+    width: 50px;
+    height: 40px;
+}
+.message-reply-preview .reply-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 /* Media Messages */
@@ -810,6 +826,10 @@ body {
 
 .message.self .message-status {
     justify-content: flex-end;
+    position: absolute;
+    bottom: 2px;
+    right: -1px;
+    padding: 0 !important;
 }
 
 .status-icon {

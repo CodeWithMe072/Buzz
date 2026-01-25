@@ -872,17 +872,33 @@ function createMessageElement(msg) {
     if (msg.replyTo) {
         const replyMsg = findMessageById(msg.replyTo);
         if (replyMsg) {
-            const replyPreview = document.createElement('div');
-            replyPreview.className = 'message-reply-preview';
-            replyPreview.innerHTML = `
-                <div class="reply-username">${replyMsg.user === State.currentUser.id || replyMsg.user === State.currentUser.username ? 'You' : State.conversations.find(c => c.id === State.activeChat)?.username}</div>
-                <div class="reply-text">${replyMsg.content}</div>
-            `;
-            replyPreview.addEventListener('click', (e) => {
-                e.stopPropagation();
-                scrollToMessage(msg.replyTo);
-            });
-            bubbleDiv.appendChild(replyPreview);
+            if (replyMsg.type == "text") {
+                const replyPreview = document.createElement('div');
+                replyPreview.className = 'message-reply-preview';
+                replyPreview.innerHTML = `
+                    <div class="reply-username">${replyMsg.user === State.currentUser.id || replyMsg.user === State.currentUser.username ? 'You' : State.conversations.find(c => c.id === State.activeChat)?.username}</div>
+                    <div class="reply-text">${replyMsg.content}</div>
+                `;
+                replyPreview.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    scrollToMessage(msg.replyTo);
+                });
+                bubbleDiv.appendChild(replyPreview);
+            } else {
+                const replyPreview = document.createElement('div');
+                replyPreview.className = 'message-reply-preview';
+                replyPreview.innerHTML = `
+                    <div class="reply-username">${replyMsg.user === State.currentUser.id || replyMsg.user === State.currentUser.username ? 'You' : State.conversations.find(c => c.id === State.activeChat)?.username}</div>
+                    <div class="reply-image">
+                    <img src="${replyMsg.content}">
+                    </div>
+                `;
+                replyPreview.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    scrollToMessage(msg.replyTo);
+                });
+                bubbleDiv.appendChild(replyPreview);
+            }
         }
     }
 
