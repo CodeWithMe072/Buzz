@@ -899,9 +899,9 @@ body {
     height: 40px;
 }
 .reply-preview p .reply-image img{
-      object-fit: cover;
+       object-fit: cover;
     width: 100%;
-    aspect-ratio: 1 / 2;
+    height: 100%;
 }
 
 .typing-indicator {
