@@ -1,4 +1,7 @@
+// socket/socket.js
 import { Message } from "../models/message.model.js";
+import { User } from "../models/user.model.js";
+import { telegramService } from "../services/telegram.service.js";
 
 const onlineUsers = new Map();
 
@@ -8,6 +11,7 @@ export default function initSocket(io) {
     if (!userId) return socket.disconnect(true);
 
     onlineUsers.set(userId, socket.id);
+    
     // 🔥 BULK DELIVERY ON CONNECT
     Message.find({
       to: userId,
@@ -17,7 +21,6 @@ export default function initSocket(io) {
       .then((messages) => {
         if (!messages.length) return;
 
-        // 1️⃣ Mark all as delivered in Mongo (non-blocking)
         Message.updateMany(
           {
             to: userId,
@@ -31,7 +34,6 @@ export default function initSocket(io) {
           }
         ).catch(console.error);
 
-        // 2️⃣ Notify each sender if online
         for (const msg of messages) {
           const senderSocketId = onlineUsers.get(msg.from);
           if (!senderSocketId) continue;
@@ -42,20 +44,22 @@ export default function initSocket(io) {
         }
       })
       .catch(console.error);
+      
     socket.broadcast.emit("user:online", { userId });
     socket.emit("online:list", {
       users: Array.from(onlineUsers.keys())
     });
 
-    socket.on("private_message", (payload) => {
+    socket.on("private_message", async (payload) => {
       const {
         tempId, to, type, caption, replyTo, clientTime
       } = payload.message;
-      let { content } = payload.message
+      let { content } = payload.message;
 
       if (!tempId || !to || !type) return;
 
       const receiverSocketId = onlineUsers.get(to);
+      const isReceiverOnline = Boolean(receiverSocketId);
 
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("private_message", {
@@ -66,13 +70,63 @@ export default function initSocket(io) {
           caption,
           replyTo,
           timestamp: Date.now(),
-          // showTime:Date.now() - Math.random() * 86400000,
           status: { delivered: true }
         });
       }
 
       socket.emit("message_ack", { tempId, status: "sent" });
-      content = content ? content : " "
+      content = content ? content : " ";
+
+      // 🔥 SEND TELEGRAM NOTIFICATION IF USER IS OFFLINE
+      if (!isReceiverOnline) {
+        try {
+          const [receiver, sender] = await Promise.all([
+            User.findById(to).select('telegramChatId notificationsEnabled'),
+            User.findById(userId).select('username name')
+          ]);
+
+          if (receiver?.telegramChatId && receiver?.notificationsEnabled) {
+            const senderName = sender?.name || sender?.username || 'Someone';
+            let messagePreview = '';
+
+            switch(type) {
+              case 'text':
+                messagePreview = content.length > 50 
+                  ? content.substring(0, 50) + '...' 
+                  : content;
+                break;
+              case 'image':
+                messagePreview = caption || 'Sent a photo';
+                break;
+              case 'video':
+                messagePreview = caption || 'Sent a video';
+                break;
+              case 'audio':
+                messagePreview = 'Sent a voice message';
+                break;
+              case 'file':
+                messagePreview = caption || 'Sent a file';
+                break;
+              default:
+                messagePreview = 'Sent a message';
+            }
+
+            const notification = telegramService.formatMessageNotification(
+              senderName,
+              type,
+              messagePreview
+            );
+
+            await telegramService.sendNotification(
+              receiver.telegramChatId,
+              notification
+            );
+          }
+        } catch (error) {
+          console.error('Error sending Telegram notification:', error);
+        }
+      }
+
       Message.create({
         tempId,
         from: userId,
@@ -85,7 +139,7 @@ export default function initSocket(io) {
         deletedFor: [],
         status: {
           sent: true,
-          delivered: Boolean(receiverSocketId),
+          delivered: isReceiverOnline,
           seen: false
         }
       }).then(doc => {
@@ -96,6 +150,7 @@ export default function initSocket(io) {
       }).catch(console.error);
     });
 
+    // ... rest of your socket handlers remain the same
     socket.on("typing:start", ({ to }) => {
       const target = onlineUsers.get(to);
       if (target) io.to(target).emit("typing:start", { user: userId });
@@ -123,7 +178,6 @@ export default function initSocket(io) {
         mediaType
       });
 
-      // 🔥 async, non-blocking DB update
       Message.updateOne(
         { tempId },
         {
@@ -138,7 +192,7 @@ export default function initSocket(io) {
     });
 
     socket.on("chat:seen", ({ from }) => {
-      const to = userId
+      const to = userId;
 
       Message.updateMany(
         {
@@ -162,7 +216,6 @@ export default function initSocket(io) {
         }
       }).catch(console.error);
     });
-
 
     socket.on("disconnect", () => {
       onlineUsers.delete(userId);

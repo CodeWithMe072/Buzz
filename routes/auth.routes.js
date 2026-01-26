@@ -9,5 +9,10 @@ router.get("/auth/users", auth.get);
 router.post("/auth/del/user", auth.del);
 router.post("/auth/user/lastseen", auth.updateLastSeen);
 
+// routes/auth.routes.js
+router.post('/link-telegram', auth.telegramLink);
+
+router.post('/toggle-notifications', auth.toggleNoti);
+
 
 export default router;

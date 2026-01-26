@@ -2,7 +2,6 @@ import bcrypt from "bcryptjs";
 import { User } from "../models/user.model.js";
 import mongoose from "mongoose";
 
-
 export const add = async (req, res) => {
     try {
         const {
@@ -51,7 +50,7 @@ export const add = async (req, res) => {
             avatar,
             phoneNumber,
             extra,
-            lastSeen: new Date()        // 👈 current timestamp
+            lastSeen: new Date()
         });
 
         /* ---------- Response (never send password) ---------- */
@@ -85,7 +84,6 @@ export const get = async (req, res) => {
 
         const filter = {};
 
-        // find by _id
         if (id) {
             if (!mongoose.Types.ObjectId.isValid(id)) {
                 return res.status(400).json({
@@ -96,7 +94,6 @@ export const get = async (req, res) => {
             filter._id = id;
         }
 
-        // find by extra
         if (extra) {
             filter.extra = extra;
         }
@@ -119,6 +116,7 @@ export const get = async (req, res) => {
         });
     }
 };
+
 export const del = async (req, res) => {
     try {
         const { id, extra } = req.query;
@@ -132,7 +130,6 @@ export const del = async (req, res) => {
 
         const filter = {};
 
-        // delete by _id
         if (id) {
             if (!mongoose.Types.ObjectId.isValid(id)) {
                 return res.status(400).json({
@@ -143,7 +140,6 @@ export const del = async (req, res) => {
             filter._id = id;
         }
 
-        // delete by extra
         if (extra) {
             filter.extra = extra;
         }
@@ -176,12 +172,11 @@ export const del = async (req, res) => {
         });
     }
 };
-export const login = async (req, res) => {
 
+export const login = async (req, res) => {
     try {
         const { username, email, password } = req.body;
 
-        // validation
         if ((!username && !email) || !password) {
             return res.status(400).json({
                 status: false,
@@ -189,13 +184,12 @@ export const login = async (req, res) => {
             });
         }
 
-        // find user by username OR email
         const user = await User.findOne({
             $or: [
                 username ? { username } : null,
                 email ? { email } : null
             ].filter(Boolean)
-        }).select("+password"); // explicitly include password
+        }).select("+password");
 
         if (!user) {
             return res.status(401).json({
@@ -204,7 +198,6 @@ export const login = async (req, res) => {
             });
         }
 
-        // compare password
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
@@ -214,15 +207,16 @@ export const login = async (req, res) => {
             });
         }
 
-        // update lastSeen on successful login
         user.lastSeen = new Date();
         await user.save();
 
-        // response (no password)
+        // 🔥 FIXED: Now includes user ID for Telegram linking
         res.status(200).json({
             status: true,
             message: "Login successful",
             user: {
+                id: user._id,           // ✅ Added this
+                username: user.username, // ✅ Added this
                 avatar: user.avatar,
                 extra: user.extra,
             }
@@ -236,10 +230,9 @@ export const login = async (req, res) => {
     }
 };
 
-
 export const updateLastSeen = async (req, res) => {
     try {
-        const {  extra } = req.body;
+        const { extra } = req.body;
 
         if (!extra) {
             return res.status(400).json({
@@ -248,14 +241,7 @@ export const updateLastSeen = async (req, res) => {
             });
         }
 
-        const filter = {};
-
-        
-
-        // update by extra
-        if (extra) {
-            filter.extra = extra;
-        }
+        const filter = { extra };
 
         const result = await User.updateOne(
             filter,
@@ -268,6 +254,7 @@ export const updateLastSeen = async (req, res) => {
                 message: "User not found"
             });
         }
+
         res.json({
             status: true,
             message: "lastSeen updated"
@@ -281,3 +268,81 @@ export const updateLastSeen = async (req, res) => {
         });
     }
 };
+
+// 🔥 FIXED: Now works with 'extra' field instead of requiring authentication
+export const telegramLink = async (req, res) => {
+    try {
+        const { telegramChatId, extra } = req.body;
+
+        if (!telegramChatId || !extra) {
+            return res.status(400).json({
+                status: false,
+                message: "telegramChatId and extra are required"
+            });
+        }
+
+        const user = await User.findOneAndUpdate(
+            { extra },
+            {
+                telegramChatId,
+                notificationsEnabled: true
+            },
+            { new: true }
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                status: false,
+                message: "User not found"
+            });
+        }
+
+        res.json({
+            status: true,
+            message: 'Telegram linked successfully'
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            status: false,
+            message: error.message
+        });
+    }
+}
+
+// 🔥 FIXED: Now works with 'extra' field
+export const toggleNoti = async (req, res) => {
+    try {
+        const { extra } = req.body;
+
+        if (!extra) {
+            return res.status(400).json({
+                status: false,
+                message: "extra is required"
+            });
+        }
+
+        const user = await User.findOne({ extra });
+
+        if (!user) {
+            return res.status(404).json({
+                status: false,
+                message: "User not found"
+            });
+        }
+
+        user.notificationsEnabled = !user.notificationsEnabled;
+        await user.save();
+
+        res.json({
+            status: true,
+            notificationsEnabled: user.notificationsEnabled
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            status: false,
+            message: error.message
+        });
+    }
+}

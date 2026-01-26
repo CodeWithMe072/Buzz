@@ -31,13 +31,20 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null
     },
-
+    telegramChatId: {
+      type: String,
+      default: null
+    },
+    notificationsEnabled: {
+      type: Boolean,
+      default: true
+    },
     // ONE client id per user, globally unique
     extra: {
       type: String,
       default: null,
       unique: true,
-      sparse: true,   
+      sparse: true,
       index: true
     },
 
