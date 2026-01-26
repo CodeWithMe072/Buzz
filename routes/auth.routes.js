@@ -10,9 +10,9 @@ router.post("/auth/del/user", auth.del);
 router.post("/auth/user/lastseen", auth.updateLastSeen);
 
 // routes/auth.routes.js
-router.post('/link-telegram', auth.telegramLink);
+router.post('/auth/link-telegram', auth.telegramLink);
 
-router.post('/toggle-notifications', auth.toggleNoti);
+router.post('/auth/toggle-notifications', auth.toggleNoti);
 
 
 
