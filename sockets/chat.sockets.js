@@ -80,13 +80,14 @@ export default function initSocket(io) {
       // 🔥 SEND TELEGRAM NOTIFICATION IF USER IS OFFLINE
       if (!isReceiverOnline) {
         try {
+          // Find users by 'extra' field (Telegram ID), not by MongoDB _id
           const [receiver, sender] = await Promise.all([
-            User.findById(to).select('telegramChatId notificationsEnabled'),
-            User.findById(userId).select('username name')
+            User.findOne({ extra: to }).select('telegramChatId notificationsEnabled username'),
+            User.findOne({ extra: userId }).select('username')
           ]);
 
           if (receiver?.telegramChatId && receiver?.notificationsEnabled) {
-            const senderName = sender?.name || sender?.username || 'Someone';
+            const senderName = sender?.username || 'Someone';
             let messagePreview = '';
 
             switch(type) {
@@ -121,9 +122,13 @@ export default function initSocket(io) {
               receiver.telegramChatId,
               notification
             );
+            
+            console.log(`✅ Telegram notification sent to ${receiver.username}`);
+          } else {
+            console.log(`⏭️ No Telegram notification: chatId=${receiver?.telegramChatId}, enabled=${receiver?.notificationsEnabled}`);
           }
         } catch (error) {
-          console.error('Error sending Telegram notification:', error);
+          console.error('❌ Error sending Telegram notification:', error);
         }
       }
 
@@ -150,7 +155,6 @@ export default function initSocket(io) {
       }).catch(console.error);
     });
 
-    // ... rest of your socket handlers remain the same
     socket.on("typing:start", ({ to }) => {
       const target = onlineUsers.get(to);
       if (target) io.to(target).emit("typing:start", { user: userId });
