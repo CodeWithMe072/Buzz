@@ -894,6 +894,15 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.reply-preview p .reply-image{
+        width: 50px;
+    height: 40px;
+}
+.reply-preview p .reply-image img{
+      object-fit: cover;
+    width: 100%;
+    aspect-ratio: 1 / 2;
+}
 
 .typing-indicator {
     display: flex;

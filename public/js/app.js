@@ -1384,8 +1384,13 @@ function replyToMessage(message) {
 
     const replyPreview = document.getElementById('reply-preview');
     const replyText = document.getElementById('reply-text');
-
-    replyText.textContent = message.content || '📷 Media';
+    if (message.type == "text") {
+        replyText.textContent = message.content;
+    } else {
+        replyText.innerHTML = `<div class="reply-image">
+            <img src="${message.content}">
+        </div>`
+    }
     replyPreview.style.display = 'flex';
 
     // Focus input
