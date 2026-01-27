@@ -24,6 +24,8 @@ const State = {
     playTune: true,
     messageIndex: {}
 };
+const UploadControllers = {};
+
 
 function initSocket() {
     let tonePath = "/tone/notices.mp3"
@@ -140,21 +142,13 @@ function initSocket() {
     });
 
     socket.on("media:uploaded", ({ tempId, url, mediaType }) => {
-        // update message in State
-        for (const chatId in State.messages) {
-            const msg = State.messages[chatId]?.find(m => m.id === tempId);
-            if (!msg) continue;
-
-            msg.content = url;
-            msg.type = mediaType;
-        }
-
-        // update UI
         updateMessageByTempId(tempId, {
             content: url,
-            type: mediaType
+            type: mediaType,
+            uploadStatus: "uploaded"
         });
     });
+
 
     socket.on("message:delivered", ({ tempId }) => {
         updateMessageByTempId(tempId, {
@@ -219,31 +213,69 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 
 
 
-    // replace media content
+    // replace media content (sender + receiver safe)
     if (updates.content) {
-        // msgEl.innerHTML = ""
-        msgEl.querySelector(".message-media").remove()
-        const mediaDiv = document.createElement('div');
-        mediaDiv.className = 'message-media';
-        if (updates.type === 'image') {
-            const img = document.createElement('img');
-            img.src = updates.content;
-            img.alt = 'Image message';
+        const mediaContainer = msgEl.querySelector(".message-media");
+        let mediaOverlay = mediaContainer.querySelector(".media-overlay")
+        if (!mediaContainer) return;
 
-            mediaDiv.appendChild(img);
-        } else {
-            const video = document.createElement('video');
-            video.src = updates.content;
+        if (updates.type === "image") {
+            let img = mediaContainer.querySelector("img");
 
-            video.muted = true
-            video.autoplay = true     // supported in modern Chromium
+            // preload CDN image
+            const preloadImg = new Image();
+            preloadImg.src = updates.content;
+            preloadImg.alt = "Image message";
 
-            mediaDiv.appendChild(video);
+            preloadImg.onload = () => {
+                if (img) {
+                    // sender case: swap blob → CDN
+                    img.src = updates.content;
+                } else {
+                    // receiver case: create image
+                    mediaContainer.innerHTML = "";
+                    img = document.createElement("img");
+                    img.src = updates.content;
+                    img.alt = "Image message";
+                    mediaContainer.appendChild(img);
+                }
+            };
+
+        } else if (updates.type === "video") {
+            let video = mediaContainer.querySelector("video");
+
+            const preloadVideo = document.createElement("video");
+            preloadVideo.src = updates.content;
+            preloadVideo.muted = true;
+            preloadVideo.autoplay = true;
+            preloadVideo.playsInline = true;
+
+            preloadVideo.oncanplay = () => {
+                if (video) {
+                    // sender case
+                    video.src = updates.content;
+                } else {
+                    // receiver case
+                    mediaContainer.innerHTML = "";
+                    video = document.createElement("video");
+                    video.src = updates.content;
+                    video.muted = true;
+                    video.autoplay = true;
+                    video.playsInline = true;
+                    mediaContainer.appendChild(video);
+                }
+            };
         }
-        msgEl.prepend(mediaDiv)
+
+        if (mediaOverlay) {
+            mediaOverlay.remove()
+        }
     }
 
-    if (updates.status) {
+
+
+
+    if (updates.status || updates.content) {
         let messageStatus = msgEl.querySelector(".message-status")
         let statusIcon = "";
 
@@ -265,6 +297,9 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 
         messageStatus.innerHTML = statusIcon
     }
+
+    const container = document.getElementById('messages-container');
+    container.scrollTop = container.scrollHeight;
 }
 
 // send message to another user
@@ -907,24 +942,40 @@ function createMessageElement(msg) {
         const mediaDiv = document.createElement('div');
         mediaDiv.className = 'message-media';
 
+        const overlay = document.createElement('div');
+        overlay.className = 'media-overlay';
+
+        if (msg.uploadStatus === "uploading") {
+            overlay.innerHTML = `
+    <div class="loader"></div>
+    <button class="media-cancel">✕</button>
+  `;
+            mediaDiv.appendChild(overlay);
+        }
+
+        if (msg.uploadStatus === "failed") {
+            overlay.innerHTML = `
+    <button class="media-retry">Retry</button>
+  `;
+            mediaDiv.appendChild(overlay);
+        }
+
         if (msg.type === 'image') {
             const img = document.createElement('img');
             img.src = msg.content;
-            img.alt = 'Image message';
-
             mediaDiv.appendChild(img);
         } else {
             const video = document.createElement('video');
             video.src = msg.content;
-
-            video.muted = true
-            video.autoplay = true
-
+            video.muted = true;
+            video.autoplay = true;
             mediaDiv.appendChild(video);
         }
 
 
+
         bubbleDiv.appendChild(mediaDiv);
+
     }
     if ((msg.type === 'image' || msg.type === 'video') && msg.content == null) {
         const mediaDiv = document.createElement('div');
@@ -936,6 +987,7 @@ function createMessageElement(msg) {
     // Text content
     if (msg.type === 'text' || msg.caption) {
         const textDiv = document.createElement('div');
+        textDiv.classList.add("messag-text")
         textDiv.textContent = msg.caption || msg.content;
         bubbleDiv.appendChild(textDiv);
     }
@@ -989,8 +1041,16 @@ function createMessageElement(msg) {
     </svg>`;
         }
 
+        if (msg.uploadStatus === "uploading" || msg.uploadStatus === "failed") {
+            console.log("-----------------------")
+            statusIcon = `<svg class="status-icon clock" viewBox="0 0 16 16">
+                    <circle cx="8" cy="8" r="6.5"/>
+                    <polyline points="8 4 8 8 11 10"/>
+                </svg>`
+        }
 
         statusDiv.innerHTML = statusIcon;
+        console.log(statusIcon)
         bubbleDiv.appendChild(statusDiv);
     }
 
@@ -1159,6 +1219,8 @@ function initChatWindow() {
             tempId: generateId(),
             type: file.type.split("/")[0],
             content: fileUrl,
+            uploadStatus: "uploading", // uploading | failed | uploaded
+            uploadProgress: 0,
             caption: null,
             clientTime: Date.now(),
             replyTo: State.replyingTo,
@@ -1215,24 +1277,41 @@ function initChatWindow() {
 
 
 async function uploadMedia(msgId, receiver, file) {
-    const formData = new FormData();
-    formData.append("file", file);
+    const controller = new AbortController();
+    UploadControllers[msgId] = controller;
 
-    const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData
-    });
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
 
-    if (!res.ok) throw new Error("Upload failed");
+        const res = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+            signal: controller.signal
+        });
 
-    const data = await res.json();
-    socket.emit("media:uploaded", {
-        tempId: msgId,
-        to: receiver,
-        url: data.url,
-        mediaType: data.type
-    });
+        if (!res.ok) throw new Error("Upload failed");
+
+        const data = await res.json();
+
+        socket.emit("media:uploaded", {
+            tempId: msgId,
+            to: receiver,
+            url: data.url,
+            mediaType: data.type
+        });
+
+    } catch (err) {
+        if (err.name === "AbortError") return;
+
+        updateMessageByTempId(msgId, {
+            uploadStatus: "failed"
+        });
+    } finally {
+        delete UploadControllers[msgId];
+    }
 }
+
 
 function sendMessage(type = 'text', content = null, OldtempId = undefined) {
     if (!State.activeChat) return;
@@ -1480,3 +1559,34 @@ function hideLoader() {
     const loader = document.getElementById('loader-overlay');
     loader.classList.add('hidden');
 }
+
+async function retryUpload(msgId) {
+    const chatId = State.messageIndex[msgId];
+    const msg = State.messages[chatId].find(m => m.tempId === msgId);
+    if (!msg) return;
+
+    msg.uploadStatus = "uploading";
+    updateMessageByTempId(msgId, { uploadStatus: "uploading" });
+
+    // ❗ For now you must reselect file
+    showToast("Please reselect file to retry", "info");
+}
+
+
+document.addEventListener("click", (e) => {
+    const msgEl = e.target.closest(".message");
+    if (!msgEl) return;
+
+    const msgId = msgEl.dataset.messageId;
+
+    if (e.target.classList.contains("media-cancel")) {
+        // UploadControllers[msgId]?.abort();
+        // removeMessage(msgId);
+        let mediaOverlay = msgEl.querySelector(".message-media .media-overlay")
+        mediaOverlay.remove()
+    }
+
+    if (e.target.classList.contains("media-retry")) {
+        retryUpload(msgId);
+    }
+});
