@@ -725,7 +725,6 @@ body {
     background: var(--message-other);
     color: var(--message-text-other);
     border-bottom-left-radius: var(--radius-sm);
-    padding: 10px 14px;
 }
 
 /* Reply Preview in Message */
@@ -772,16 +771,39 @@ body {
     max-width: 100%;
     border-radius: var(--radius-md);
     overflow: hidden;
-    margin-bottom: 4px;
+    max-height: 350px;
+    padding: 0 !important;
 }
 
 .message-media img,
 .message-media video {
     width: 100%;
-    max-width: 300px;
-    height: auto;
+    max-width: 270px;
     display: block;
     border-radius: var(--radius-md);
+    object-fit: cover;
+    height: 100%;
+}
+
+.message.other .message-bubble .message-media img,
+.message.other .message-bubble .message-media video {
+
+    border-bottom-left-radius: var(--radius-sm);
+}
+.message.self .message-bubble .message-media img,
+.message.self .message-bubble .message-media video {
+
+    border-bottom-right-radius: var(--radius-sm);
+}
+.message.other .message-bubble .message-media ,
+.message.other .message-bubble .message-media  {
+
+    border-bottom-left-radius: var(--radius-sm);
+}
+.message.self .message-bubble .message-media ,
+.message.self .message-bubble .message-media  {
+
+    border-bottom-right-radius: var(--radius-sm);
 }
 
 /* Reactions */
