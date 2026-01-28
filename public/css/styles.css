@@ -696,7 +696,7 @@ body {
 
 .message-bubble {
     position: relative;
-    padding: 10px 0px 15px 14px;
+    /* padding: 10px 0px 15px 14px; */
     border-radius: var(--radius-lg);
     font-size: 14px;
     line-height: 1.4;
