@@ -58,9 +58,9 @@ function initSocket() {
 
 
         if (message.user == State.activeChat) {
-            if (State.playTune == true) {
-                tone.play();
-            }
+            // if (State.playTune == true) {
+            //     tone.play();
+            // }
             const messagesContainer = document.getElementById('messages');
 
 
