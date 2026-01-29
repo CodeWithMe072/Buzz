@@ -790,18 +790,21 @@ body {
 
     border-bottom-left-radius: var(--radius-sm);
 }
+
 .message.self .message-bubble .message-media img,
 .message.self .message-bubble .message-media video {
 
     border-bottom-right-radius: var(--radius-sm);
 }
-.message.other .message-bubble .message-media ,
-.message.other .message-bubble .message-media  {
+
+.message.other .message-bubble .message-media,
+.message.other .message-bubble .message-media {
 
     border-bottom-left-radius: var(--radius-sm);
 }
-.message.self .message-bubble .message-media ,
-.message.self .message-bubble .message-media  {
+
+.message.self .message-bubble .message-media,
+.message.self .message-bubble .message-media {
 
     border-bottom-right-radius: var(--radius-sm);
 }
@@ -851,9 +854,13 @@ body {
 .message.self .message-status {
     justify-content: flex-end;
     position: absolute;
-    bottom: 2px;
-    right: -1px;
-    padding: 0 !important;
+    bottom: 1px;
+    right: 1px;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 10px;
+    padding: 5px 5px;
+    backdrop-filter: blur(4px);
+    padding: 0px 4px 0px 4px !important;
 }
 
 .status-icon {

@@ -141,13 +141,16 @@ function initSocket() {
         })
     });
 
-    socket.on("media:uploaded", ({ tempId, url, mediaType }) => {
+    socket.on("media:uploaded", ({ tempId, url, cover, thumb, mediaType }) => {
         updateMessageByTempId(tempId, {
             content: url,
             type: mediaType,
+            cover: cover ?? null,
+            thumb: thumb ?? null,
             uploadStatus: "uploaded"
         });
     });
+
 
 
     socket.on("message:delivered", ({ tempId }) => {
@@ -200,107 +203,83 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
     const msgs = State.messages[chatId];
     if (!msgs) return;
 
-    const msg = msgs.find(m => m.tempId || m.id === tempId);
+    const msg = msgs.find(m => (m.tempId || m.id) === tempId);
     if (!msg) return;
 
     Object.assign(msg, updates);
-    /* ---------- 2 Update DOM ---------- */
 
+    /* ---------- 2 Update DOM ---------- */
     const msgEl = document.querySelector(
         `.message[data-message-id="${tempId}"] .message-bubble`
     );
     if (!msgEl) return;
 
-
-
-    // replace media content (sender + receiver safe)
-    if (updates.content) {
+    /* ---------- Media update ---------- */
+    if (updates.content || updates.cover) {
         const mediaContainer = msgEl.querySelector(".message-media");
-        let mediaOverlay = mediaContainer.querySelector(".media-overlay")
         if (!mediaContainer) return;
 
-        if (updates.type === "image") {
+        const mediaOverlay = mediaContainer.querySelector(".media-overlay");
+
+        // choose best preview source
+        const previewSrc = updates.cover || updates.content;
+
+        if (updates.type === "image" || updates.type === "video") {
             let img = mediaContainer.querySelector("img");
 
-            // preload CDN image
             const preloadImg = new Image();
-            preloadImg.src = updates.content;
+            preloadImg.src = previewSrc;
             preloadImg.alt = "Image message";
 
             preloadImg.onload = () => {
-                if (img) {
-                    // sender case: swap blob → CDN
-                    img.src = updates.content;
-                } else {
-                    // receiver case: create image
+                if (!img) {
                     mediaContainer.innerHTML = "";
                     img = document.createElement("img");
-                    img.src = updates.content;
-                    img.alt = "Image message";
                     mediaContainer.appendChild(img);
                 }
+                img.src = previewSrc;
+                img.alt = "Image message";
             };
 
-        } else if (updates.type === "video") {
-            let video = mediaContainer.querySelector("video");
-
-            const preloadVideo = document.createElement("video");
-            preloadVideo.src = updates.content;
-            preloadVideo.muted = true;
-            preloadVideo.autoplay = true;
-            preloadVideo.playsInline = true;
-
-            preloadVideo.oncanplay = () => {
-                if (video) {
-                    // sender case
-                    video.src = updates.content;
-                } else {
-                    // receiver case
-                    mediaContainer.innerHTML = "";
-                    video = document.createElement("video");
-                    video.src = updates.content;
-                    video.muted = true;
-                    video.autoplay = true;
-                    video.playsInline = true;
-                    mediaContainer.appendChild(video);
-                }
-            };
         }
 
-        if (mediaOverlay) {
-            mediaOverlay.remove()
-        }
+        if (mediaOverlay) mediaOverlay.remove();
     }
 
+    /* ---------- Status update ---------- */
+    if (updates.status || updates.content || updates.cover) {
+        const messageStatus = msgEl.querySelector(".message-status");
+        if (!messageStatus) return;
 
-
-
-    if (updates.status || updates.content) {
-        let messageStatus = msgEl.querySelector(".message-status")
         let statusIcon = "";
 
         if (msg.status.seen) {
             statusIcon = `
-    <svg class="status-icon double seen" viewBox="0 0 16 16">
-        <polyline points="2 8 6 12 14 4"/>
-        <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
-    </svg>`;
-        }
-        else if (msg.status.delivered) {
+<svg class="status-icon double seen" viewBox="0 0 16 16" style="
+    transform: translateX(3px);
+">
+  <polyline points="2 8 6 12 14 4"/>
+  <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
+</svg>`;
+        } else if (msg.status.delivered) {
             statusIcon = `
-    <svg class="status-icon double delivered" viewBox="0 0 16 16">
+<svg class="status-icon double delivered" viewBox="0 0 16 16">
+  <polyline points="2 8 6 12 14 4"/>
+  <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
+</svg>`;
+        } else {
+            statusIcon = ` <svg class="status-icon single sent" viewBox="0 0 16 16">
         <polyline points="2 8 6 12 14 4"/>
-        <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
-    </svg>`;
+    </svg>`
         }
 
-
-        messageStatus.innerHTML = statusIcon
+        messageStatus.innerHTML = statusIcon;
     }
 
-    const container = document.getElementById('messages-container');
+    const container = document.getElementById("messages-container");
     container.scrollTop = container.scrollHeight;
 }
+
 
 // send message to another user
 function sendsocketMessage(message) {
@@ -960,20 +939,11 @@ function createMessageElement(msg) {
             mediaDiv.appendChild(overlay);
         }
 
-        if (msg.type === 'image') {
+        if (msg.type === 'image' || msg.type === 'video') {
             const img = document.createElement('img');
-            img.src = msg.content;
+            img.src = msg.cover ?? msg.content;
             mediaDiv.appendChild(img);
-        } else {
-            const video = document.createElement('video');
-            video.src = msg.content;
-            video.muted = true;
-            video.autoplay = true;
-            mediaDiv.appendChild(video);
         }
-
-
-
         bubbleDiv.appendChild(mediaDiv);
 
     }
@@ -1022,10 +992,12 @@ function createMessageElement(msg) {
 
         if (msg.status.seen) {
             statusIcon = `
-    <svg class="status-icon double seen" viewBox="0 0 16 16">
-        <polyline points="2 8 6 12 14 4"/>
-        <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
-    </svg>`;
+   <svg class="status-icon double seen" viewBox="0 0 16 16" style="
+    transform: translateX(3px);
+">
+  <polyline points="2 8 6 12 14 4"/>
+  <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
+</svg>`;
         }
         else if (msg.status.delivered) {
             statusIcon = `
@@ -1297,7 +1269,9 @@ async function uploadMedia(msgId, receiver, file) {
         socket.emit("media:uploaded", {
             tempId: msgId,
             to: receiver,
-            url: data.url,
+            url: data.original,          // original
+            cover: data.cover_270,      // NEW
+            thumb: data.thumb_50,      // NEW
             mediaType: data.type
         });
 
@@ -1311,6 +1285,7 @@ async function uploadMedia(msgId, receiver, file) {
         delete UploadControllers[msgId];
     }
 }
+
 
 
 function sendMessage(type = 'text', content = null, OldtempId = undefined) {
