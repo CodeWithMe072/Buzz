@@ -60,6 +60,8 @@ export const getallMessage = async (req, res) => {
                                 to: "$$m.to",
                                 type: "$$m.type",
                                 content: "$$m.content",
+                                cover: "$$m.cover",
+                                thumb: "$$m.thumb",
                                 caption: "$$m.caption",
                                 replyTo: "$$m.replyTo",
                                 timestamp: "$$m.clientTime",

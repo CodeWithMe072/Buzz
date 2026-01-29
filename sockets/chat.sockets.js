@@ -11,7 +11,7 @@ export default function initSocket(io) {
     if (!userId) return socket.disconnect(true);
 
     onlineUsers.set(userId, socket.id);
-    
+
     // 🔥 BULK DELIVERY ON CONNECT
     Message.find({
       to: userId,
@@ -32,7 +32,7 @@ export default function initSocket(io) {
               deliveredAt: new Date()
             }
           }
-        ).catch(console.error);
+        ).catch(err => console.log(err));
 
         for (const msg of messages) {
           const senderSocketId = onlineUsers.get(msg.from);
@@ -43,8 +43,8 @@ export default function initSocket(io) {
           });
         }
       })
-      .catch(console.error);
-      
+      .catch(err => console.log(err));
+
     socket.broadcast.emit("user:online", { userId });
     socket.emit("online:list", {
       users: Array.from(onlineUsers.keys())
@@ -90,10 +90,10 @@ export default function initSocket(io) {
             const senderName = sender?.username || 'Someone';
             let messagePreview = '';
 
-            switch(type) {
+            switch (type) {
               case 'text':
-                messagePreview = content.length > 50 
-                  ? content.substring(0, 50) + '...' 
+                messagePreview = content.length > 50
+                  ? content.substring(0, 50) + '...'
                   : content;
                 break;
               case 'image':
@@ -122,7 +122,7 @@ export default function initSocket(io) {
               receiver.telegramChatId,
               notification
             );
-            
+
             console.log(`✅ Telegram notification sent to ${receiver.username}`);
           } else {
             console.log(`⏭️ No Telegram notification: chatId=${receiver?.telegramChatId}, enabled=${receiver?.notificationsEnabled}`);
@@ -152,7 +152,7 @@ export default function initSocket(io) {
           tempId,
           mongoId: doc._id
         });
-      }).catch(console.error);
+      }).catch(err => console.log(err));
     });
 
     socket.on("typing:start", ({ to }) => {
@@ -165,35 +165,40 @@ export default function initSocket(io) {
       if (target) io.to(target).emit("typing:stop", { user: userId });
     });
 
-    socket.on("media:uploaded", ({ tempId, to, url, mediaType }) => {
+    socket.on("media:uploaded", async ({ tempId, to, url, cover, thumb, mediaType }) => {
       const receiverSocketId = onlineUsers.get(to);
 
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("media:uploaded", {
-          tempId,
-          url,
-          mediaType
-        });
-      }
-
-      socket.emit("media:uploaded", {
+      const payload = {
         tempId,
         url,
+        cover,
+        thumb,
         mediaType
-      });
+      };
+      console.log(payload)
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("media:uploaded", payload);
+      }
 
-      Message.updateOne(
-        { tempId },
-        {
-          $set: {
-            content: url,
-            type: mediaType,
+      socket.emit("media:uploaded", payload);
+
+      try {
+        await Message.updateOne(
+          { tempId },
+          {
+            $set: {
+              content: url,
+              type: mediaType,
+              cover: cover ?? null,
+              thumb: thumb ?? null
+            }
           }
-        }
-      ).catch(err => {
+        );
+      } catch (err) {
         console.error("Mongo update failed:", err);
-      });
+      }
     });
+
 
     socket.on("chat:seen", ({ from }) => {
       const to = userId;
@@ -218,7 +223,7 @@ export default function initSocket(io) {
             by: to
           });
         }
-      }).catch(console.error);
+      }).catch(err => console.log(err));
     });
 
     socket.on("disconnect", () => {

@@ -32,6 +32,16 @@ const messageSchema = new mongoose.Schema(
       required: true,
     },
 
+    /* ---------- Media Derivatives (NEW) ---------- */
+    cover: {
+      type: String,                 // 270x270 image / video frame
+      default: null,
+    },
+
+    thumb: {
+      type: String,                 // 50x50 image
+      default: null,
+    },
     caption: {
       type: String,
       default: null,
