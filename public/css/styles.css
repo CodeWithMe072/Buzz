@@ -1553,3 +1553,291 @@ body {
     stroke-linecap: round;
     opacity: 0.8;
 }
+
+.message-media {
+    position: relative;
+}
+
+.video-thumb {
+    width: 100%;
+    border-radius: 12px;
+    display: block;
+}
+
+.video-play-icon {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 42px;
+    color: white;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 12px;
+
+    pointer-events: none;
+}
+
+
+
+
+.media-thumbnail {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.media-thumbnail:hover {
+    transform: scale(1.05);
+}
+
+.video-thumbnail {
+    position: relative;
+}
+
+.video-thumbnail::after {
+    content: '▶';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.6);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    pointer-events: none;
+}
+
+/* Media Viewer Overlay */
+.media-viewer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 1000;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.media-viewer-overlay.active {
+    display: flex;
+    flex-direction: column;
+    opacity: 1;
+}
+
+/* Header */
+.viewer-header {
+    padding: 15px 20px;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.viewer-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sender-name {
+    font-weight: 600;
+}
+
+.media-counter {
+    color: #aaa;
+    font-size: 14px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 5px 10px;
+}
+
+/* Main Viewer Area */
+.viewer-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    touch-action: pan-y pinch-zoom;
+}
+
+.media-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.media-slide {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+}
+
+.media-slide.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.media-slide img,
+.media-slide video {
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+}
+
+/* Navigation Arrows */
+.nav-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #fff;
+    font-size: 30px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 10;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-arrow:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.nav-arrow.left {
+    left: 20px;
+}
+
+.nav-arrow.right {
+    right: 20px;
+}
+
+.nav-arrow:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* Thumbnail Strip */
+.thumbnail-strip {
+    padding: 15px 20px;
+    background: rgba(0, 0, 0, 0.5);
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.thumbnail-container {
+    display: flex;
+    gap: 10px;
+    min-width: min-content;
+}
+
+.thumbnail-item {
+    flex-shrink: 0;
+    width: 60px;
+    height: 60px;
+    border-radius: 5px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.2s;
+    position: relative;
+}
+
+.thumbnail-item.active {
+    border-color: #25d366;
+}
+
+.thumbnail-item img,
+.thumbnail-item video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.thumbnail-item.video::after {
+    content: '▶';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.6);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    pointer-events: none;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+    .nav-arrow {
+        width: 40px;
+        height: 40px;
+        font-size: 24px;
+        display: none;
+        /* Hide on mobile, use swipe instead */
+    }
+
+    .viewer-header {
+        padding: 10px 15px;
+    }
+
+    .thumbnail-strip {
+        padding: 10px 15px;
+    }
+
+    .thumbnail-item {
+        width: 50px;
+        height: 50px;
+    }
+}
+
+/* Scrollbar styling */
+.thumbnail-strip::-webkit-scrollbar {
+    height: 6px;
+}
+
+.thumbnail-strip::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.thumbnail-strip::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+}

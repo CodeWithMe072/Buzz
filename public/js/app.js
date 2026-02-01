@@ -8,6 +8,7 @@
 // State Management
 // =============================================================================
 let socket = null;
+let viewer = null
 
 const State = {
     currentUser: null,
@@ -221,10 +222,16 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 
         const mediaOverlay = mediaContainer.querySelector(".media-overlay");
 
-        // choose best preview source
-        const previewSrc = updates.cover || updates.content;
+        // choose preview source
+        const previewSrc =
+            updates.type === "video"
+                ? updates.cover
+                : updates.content;
 
-        if (updates.type === "image" || updates.type === "video") {
+        if (!previewSrc) return;
+
+        /* ---------- IMAGE MESSAGE ---------- */
+        if (updates.type === "image") {
             let img = mediaContainer.querySelector("img");
 
             const preloadImg = new Image();
@@ -237,14 +244,50 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
                     img = document.createElement("img");
                     mediaContainer.appendChild(img);
                 }
+
                 img.src = previewSrc;
                 img.alt = "Image message";
             };
-
         }
 
+        /* ---------- VIDEO MESSAGE (THUMB ONLY) ---------- */
+        if (updates.type === "video") {
+            let img = mediaContainer.querySelector("img");
+            let playIcon = mediaContainer.querySelector(".video-play-icon");
+
+            const preloadImg = new Image();
+            preloadImg.src = previewSrc;
+            preloadImg.alt = "Video thumbnail";
+
+            preloadImg.onload = () => {
+                if (!img) {
+                    mediaContainer.innerHTML = "";
+
+                    img = document.createElement("img");
+                    img.className = "video-thumb";
+                    mediaContainer.appendChild(img);
+
+                    playIcon = document.createElement("div");
+                    playIcon.className = "video-play-icon";
+                    playIcon.innerHTML = "▶";
+                    mediaContainer.appendChild(playIcon);
+
+                    // click → play video
+                    mediaContainer.onclick = () => {
+                        playVideoInline(mediaContainer, updates.content);
+                    };
+                }
+
+                img.src = previewSrc;
+                img.alt = "Video thumbnail";
+
+            };
+        }
+
+        attactEventOnMedia()
         if (mediaOverlay) mediaOverlay.remove();
     }
+
 
     /* ---------- Status update ---------- */
     if (updates.status || updates.content || updates.cover) {
@@ -254,13 +297,10 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
         let statusIcon = "";
 
         if (msg.status.seen) {
-            statusIcon = `
-<svg class="status-icon double seen" viewBox="0 0 16 16" style="
-    transform: translateX(3px);
-">
-  <polyline points="2 8 6 12 14 4"/>
-  <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
-</svg>`;
+            statusIcon = `<svg class="status-icon double seen" viewBox="0 0 16 16" style="transform: translateX(3px);">
+            <polyline points="2 8 6 12 14 4"/>
+            <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
+            </svg>`;
         } else if (msg.status.delivered) {
             statusIcon = `
 <svg class="status-icon double delivered" viewBox="0 0 16 16">
@@ -272,7 +312,6 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
         <polyline points="2 8 6 12 14 4"/>
     </svg>`
         }
-
         messageStatus.innerHTML = statusIcon;
     }
 
@@ -872,8 +911,24 @@ function renderMessages(chatId) {
     // Scroll to bottom
     const container = document.getElementById('messages-container');
     container.scrollTop = container.scrollHeight;
+    // Initialize the media viewer
+    viewer = new MediaViewer(chatId);
 }
 
+function attactEventOnMedia() {
+    console.log("000")
+    let mediaMessages = document.querySelectorAll(".message-media")
+    const messageDivs = [...mediaMessages].map(el =>
+        el.closest('.message')
+    );
+    messageDivs.forEach(msg => {
+        msg.addEventListener("click", () => {
+            console.log("---------------")
+            let id = msg.dataset.messageId
+            viewer.open(id)
+        })
+    });
+}
 function createMessageElement(msg) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${msg.user == State.currentUser.username || msg.user == State.currentUser.id ? "self" : "other"}`;
@@ -926,26 +981,48 @@ function createMessageElement(msg) {
 
         if (msg.uploadStatus === "uploading") {
             overlay.innerHTML = `
-    <div class="loader"></div>
-    <button class="media-cancel">✕</button>
-  `;
+                <div class="loader"></div>
+                <button class="media-cancel">✕</button>
+            `;
             mediaDiv.appendChild(overlay);
         }
 
         if (msg.uploadStatus === "failed") {
             overlay.innerHTML = `
-    <button class="media-retry">Retry</button>
-  `;
+                    <button class="media-retry">Retry</button>
+                `;
             mediaDiv.appendChild(overlay);
         }
 
-        if (msg.type === 'image' || msg.type === 'video') {
+        if (msg.type === 'image') {
             const img = document.createElement('img');
-            img.src = msg.cover ?? msg.content;
+            img.src = msg.content;
+            img.alt = "Image message";
             mediaDiv.appendChild(img);
         }
-        bubbleDiv.appendChild(mediaDiv);
 
+        if (msg.type === "video") {
+            const thumb = document.createElement("img");
+            thumb.className = "video-thumb";
+
+            const playIcon = document.createElement("div");
+            playIcon.className = "video-play-icon";
+            playIcon.innerHTML = "▶";
+
+            mediaDiv.appendChild(thumb);
+            mediaDiv.appendChild(playIcon);
+
+            if (msg.cover) {
+                thumb.src = msg.cover;
+            } else {
+                // 2️⃣ generate thumbnail from video blob
+                generateVideoThumbnail(msg.content).then((dataUrl) => {
+                    thumb.src = dataUrl.url;
+                    msg.cover = dataUrl.url; // cache it for reuse
+                });
+            }
+        }
+        bubbleDiv.appendChild(mediaDiv);
     }
     if ((msg.type === 'image' || msg.type === 'video') && msg.content == null) {
         const mediaDiv = document.createElement('div');
@@ -992,12 +1069,12 @@ function createMessageElement(msg) {
 
         if (msg.status.seen) {
             statusIcon = `
-   <svg class="status-icon double seen" viewBox="0 0 16 16" style="
-    transform: translateX(3px);
-">
-  <polyline points="2 8 6 12 14 4"/>
-  <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
-</svg>`;
+            <svg class="status-icon double seen" viewBox="0 0 16 16" style="
+                transform: translateX(3px);
+            ">
+            <polyline points="2 8 6 12 14 4"/>
+            <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
+            </svg>`;
         }
         else if (msg.status.delivered) {
             statusIcon = `
@@ -1008,13 +1085,12 @@ function createMessageElement(msg) {
         }
         else {
             statusIcon = `
-    <svg class="status-icon single sent" viewBox="0 0 16 16">
-        <polyline points="2 8 6 12 14 4"/>
-    </svg>`;
+            <svg class="status-icon single sent" viewBox="0 0 16 16">
+                <polyline points="2 8 6 12 14 4"/>
+            </svg>`;
         }
 
         if (msg.uploadStatus === "uploading" || msg.uploadStatus === "failed") {
-            console.log("-----------------------")
             statusIcon = `<svg class="status-icon clock" viewBox="0 0 16 16">
                     <circle cx="8" cy="8" r="6.5"/>
                     <polyline points="8 4 8 8 11 10"/>
@@ -1022,7 +1098,6 @@ function createMessageElement(msg) {
         }
 
         statusDiv.innerHTML = statusIcon;
-        console.log(statusIcon)
         bubbleDiv.appendChild(statusDiv);
     }
 
@@ -1034,7 +1109,7 @@ function createMessageElement(msg) {
 
     // Add touch gestures
     addMessageGestures(messageDiv, msg);
-
+    attactEventOnMedia()
     return messageDiv;
 }
 
@@ -1265,7 +1340,7 @@ async function uploadMedia(msgId, receiver, file) {
         if (!res.ok) throw new Error("Upload failed");
 
         const data = await res.json();
-
+        console.log(data)
         socket.emit("media:uploaded", {
             tempId: msgId,
             to: receiver,
@@ -1333,8 +1408,6 @@ function sendMessage(type = 'text', content = null, OldtempId = undefined) {
     State.replyingTo = null;
     document.getElementById('reply-preview').style.display = 'none';
 
-    // Re-render
-    // renderMessages(State.activeChat);
     if (type !== "image" && type !== "video") {
         const conv = State.conversations.find(c => c.id === State.activeChat);
         if (conv) {
@@ -1422,7 +1495,6 @@ function addReaction(messageId, emoji) {
         message.reactions[emoji].push(userId);
     }
 
-    renderMessages(State.activeChat);
 }
 
 function toggleReaction(messageId, emoji) {
@@ -1565,3 +1637,307 @@ document.addEventListener("click", (e) => {
         retryUpload(msgId);
     }
 });
+
+
+function generateVideoThumbnail(videoSrc) {
+    return new Promise((resolve, reject) => {
+        const video = document.createElement("video");
+        video.src = videoSrc;
+        video.muted = true;
+        video.playsInline = true;
+        video.crossOrigin = "anonymous";
+
+        video.onloadeddata = () => {
+            // seek a little to avoid black frame
+            video.currentTime = Math.min(0.5, video.duration / 2);
+        };
+
+        video.onseeked = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            resolve({ url: canvas.toDataURL("image/jpeg", 0.75), duration: video.duration });
+        };
+
+        video.onerror = reject;
+    });
+}
+
+
+function getVideoDuration(videoUrl) {
+    return new Promise((resolve, reject) => {
+        const video = document.createElement("video");
+
+        video.preload = "metadata";     // 🔑 important
+        video.src = videoUrl;
+        video.crossOrigin = "anonymous";
+
+        video.onloadedmetadata = () => {
+            resolve(video.duration);    // duration in seconds
+        };
+
+        video.onerror = () => {
+            reject("Failed to load video metadata");
+        };
+    });
+}
+
+class MediaViewer {
+    constructor(chatId) {
+        this.chatId = chatId
+        this.mediaItems = [];
+        this.currentIndex = 0;
+        this.overlay = document.getElementById('mediaViewer');
+        this.container = document.getElementById('mediaContainer');
+        this.thumbnailContainer = document.getElementById('thumbnailContainer');
+        this.prevBtn = document.getElementById('prevBtn');
+        this.nextBtn = document.getElementById('nextBtn');
+        this.closeBtn = document.getElementById('closeViewer');
+        this.viewerMain = document.getElementById('viewerMain');
+
+        // Touch/swipe variables
+        this.touchStartX = 0;
+        this.touchEndX = 0;
+        this.isDragging = false;
+        this.conv = State.conversations.find(c => c.id === this.chatId);
+
+        this.init();
+    }
+
+    init() {
+        // Collect all media items
+        this.collectMediaItems();
+
+        // Event listeners
+        this.closeBtn.addEventListener('click', () => this.close());
+        this.prevBtn.addEventListener('click', () => this.navigate(-1));
+        this.nextBtn.addEventListener('click', () => this.navigate(1));
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (!this.overlay.classList.contains('active')) return;
+
+            if (e.key === 'ArrowLeft') this.navigate(-1);
+            if (e.key === 'ArrowRight') this.navigate(1);
+            if (e.key === 'Escape') this.close();
+        });
+
+        // Touch events for swipe
+        this.viewerMain.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: true });
+        this.viewerMain.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: true });
+        this.viewerMain.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: true });
+
+        // Mouse events for desktop drag (optional)
+        this.viewerMain.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+        this.viewerMain.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.viewerMain.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+        this.viewerMain.addEventListener('mouseleave', (e) => this.handleMouseUp(e));
+    }
+
+    collectMediaItems() {
+        const messages = State.messages[this.chatId] || [];
+        const allMedia = messages.filter((msg) => msg.type == "image" || msg.type == "video")
+        allMedia.forEach((thumb, index) => {
+            const mediaType = thumb.type;
+            const src = thumb.content
+
+            this.mediaItems.push({
+                type: mediaType,
+                src: src,
+                element: thumb,
+                id: thumb.id ?? thumb.tempId
+            });
+
+            // // Add click event to open viewer
+            // thumb.addEventListener('click', () => {
+            //     this.open(index);
+            // });
+        });
+    }
+
+    open(index) {
+        this.currentIndex = index;
+        this.overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        this.render();
+    }
+
+    close() {
+        this.overlay.classList.remove('active');
+        document.body.style.overflow = '';
+
+        // Pause all videos
+        this.container.querySelectorAll('video').forEach(video => {
+            video.pause();
+        });
+    }
+
+    navigate(direction) {
+        const newIndex = this.currentIndex + direction;
+
+        if (newIndex >= 0 && newIndex < this.mediaItems.length) {
+            this.currentIndex = newIndex;
+            this.updateMedia();
+        }
+    }
+
+    render() {
+        // Clear existing content
+        this.container.innerHTML = '';
+        this.thumbnailContainer.innerHTML = '';
+
+        // Create slides
+        this.mediaItems.forEach((item, index) => {
+            // Create slide
+            const slide = document.createElement('div');
+            slide.className = 'media-slide';
+            slide.getAttribute("data-message-id", item.id)
+            if (item.id === this.currentIndex) {
+                slide.classList.add('active');
+            }
+
+            if (item.type === 'video') {
+                const video = document.createElement('video');
+                video.src = item.src;
+                video.controls = true;
+                video.autoplay = item.id === this.currentIndex;
+                slide.appendChild(video);
+            } else {
+                const img = document.createElement('img');
+                img.src = item.src;
+                img.alt = `Media ${index + 1}`;
+                slide.appendChild(img);
+            }
+
+            this.container.appendChild(slide);
+
+            // Create thumbnail
+            const thumbItem = document.createElement('div');
+            thumbItem.className = 'thumbnail-item';
+            thumbItem.getAttribute("data-message-id", item.id)
+            if (item.type === 'video') {
+                thumbItem.classList.add('video');
+            }
+            if (item.id === this.currentIndex) {
+                thumbItem.classList.add('active');
+            }
+
+            if (item.type === 'video') {
+                const thumbVideo = document.createElement('video');
+                thumbVideo.src = item.src;
+                thumbVideo.muted = true;
+                thumbItem.appendChild(thumbVideo);
+            } else {
+                const thumbImg = document.createElement('img');
+                thumbImg.src = item.src;
+                thumbImg.alt = `Thumbnail ${index + 1}`;
+                thumbItem.appendChild(thumbImg);
+            }
+
+            thumbItem.addEventListener('click', () => {
+                this.currentIndex = item.id;
+                this.updateMedia();
+            });
+
+            this.thumbnailContainer.appendChild(thumbItem);
+        });
+
+        this.updateControls();
+    }
+
+    updateMedia() {
+        // Update slides
+        const slides = this.container.querySelectorAll('.media-slide');
+        slides.forEach((slide, index) => {
+            if (slide.dataset.messageId === this.currentIndex) {
+                slide.classList.add('active');
+                const video = slide.querySelector('video');
+                if (video) video.play();
+            } else {
+                slide.classList.remove('active');
+                const video = slide.querySelector('video');
+                if (video) video.pause();
+            }
+        });
+
+        // Update thumbnails
+        const thumbs = this.thumbnailContainer.querySelectorAll('.thumbnail-item');
+        thumbs.forEach((thumb, index) => {
+            if (thumb.dataset.messageId === this.currentIndex) {
+                thumb.classList.add('active');
+                thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            } else {
+                thumb.classList.remove('active');
+            }
+        });
+
+        this.updateControls();
+    }
+
+    updateControls() {
+        // Update counter
+        document.getElementById('currentIndex').textContent = this.currentIndex + 1;
+        document.getElementById('totalMedia').textContent = this.mediaItems.length;
+
+        // Update navigation buttons
+        this.prevBtn.disabled = this.currentIndex === 0;
+        this.nextBtn.disabled = this.currentIndex === this.mediaItems.length - 1;
+    }
+
+    // Touch handlers
+    handleTouchStart(e) {
+        this.touchStartX = e.changedTouches[0].screenX;
+    }
+
+    handleTouchMove(e) {
+        this.touchEndX = e.changedTouches[0].screenX;
+    }
+
+    handleTouchEnd(e) {
+        const swipeThreshold = 50;
+        const diff = this.touchStartX - this.touchEndX;
+
+        if (Math.abs(diff) > swipeThreshold) {
+            if (diff > 0) {
+                // Swipe left - next
+                this.navigate(1);
+            } else {
+                // Swipe right - previous
+                this.navigate(-1);
+            }
+        }
+    }
+
+    // Mouse drag handlers (optional for desktop)
+    handleMouseDown(e) {
+        this.isDragging = true;
+        this.touchStartX = e.clientX;
+    }
+
+    handleMouseMove(e) {
+        if (!this.isDragging) return;
+        this.touchEndX = e.clientX;
+    }
+
+    handleMouseUp(e) {
+        if (!this.isDragging) return;
+        this.isDragging = false;
+
+        const swipeThreshold = 50;
+        const diff = this.touchStartX - this.touchEndX;
+
+        if (Math.abs(diff) > swipeThreshold) {
+            if (diff > 0) {
+                this.navigate(1);
+            } else {
+                this.navigate(-1);
+            }
+        }
+    }
+}
+
+
