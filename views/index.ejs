@@ -10,6 +10,32 @@
 </head>
 
 <body>
+    <!-- Media Viewer Overlay -->
+    <div class="media-viewer-overlay" id="mediaViewer">
+        <div class="viewer-header">
+            <div class="viewer-info">
+                <span class="sender-name"></span>
+                <span class="media-counter">
+                    <span id="currentIndex"></span> of <span id="totalMedia"></span>
+                </span>
+            </div>
+            <button class="close-btn" id="closeViewer">×</button>
+        </div>
+
+        <div class="viewer-main" id="viewerMain">
+            <button class="nav-arrow left" id="prevBtn">‹</button>
+            <div class="media-container" id="mediaContainer">
+                <!-- Media slides will be dynamically inserted here -->
+            </div>
+            <button class="nav-arrow right" id="nextBtn">›</button>
+        </div>
+
+        <div class="thumbnail-strip">
+            <div class="thumbnail-container" id="thumbnailContainer">
+                <!-- Thumbnails will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
     <!-- Login Screen -->
     <div id="login-screen" class="auth-screen active">
         <div class="auth-container">
@@ -171,7 +197,7 @@
                                     <path d="M11 5L6 9H2v6h4l5 4V5z" />
                                     <line x1="23" y1="9" x2="17" y2="15" />
                                     <line x1="17" y1="9" x2="23" y2="15" />
-                                </svg>Mute 
+                                </svg>Mute
                             </div>
                         </div>
                         <button class="icon-btn back-btn" id="back-btn">
