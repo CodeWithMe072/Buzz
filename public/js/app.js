@@ -1921,6 +1921,9 @@ secretButton.addEventListener('click', () => {
         secretButton.classList.remove('clicked');
     }, 300);
 
+
+    
+
     // Clear previous timer
     if (clickTimer) {
         clearTimeout(clickTimer);
