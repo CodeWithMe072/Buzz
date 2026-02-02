@@ -284,8 +284,9 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
             };
         }
 
-        attactEventOnMedia()
         if (mediaOverlay) mediaOverlay.remove();
+        attactEventOnMedia()
+        viewer.addItem(msg)
     }
 
 
@@ -913,22 +914,26 @@ function renderMessages(chatId) {
     container.scrollTop = container.scrollHeight;
     // Initialize the media viewer
     viewer = new MediaViewer(chatId);
+    attactEventOnMedia();
 }
 
 function attactEventOnMedia() {
-    console.log("000")
-    let mediaMessages = document.querySelectorAll(".message-media")
-    const messageDivs = [...mediaMessages].map(el =>
-        el.closest('.message')
-    );
-    messageDivs.forEach(msg => {
-        msg.addEventListener("click", () => {
-            console.log("---------------")
-            let id = msg.dataset.messageId
-            viewer.open(id)
-        })
+    document.querySelectorAll(".message-media").forEach(media => {
+        const clean = media.cloneNode(true); // removes listeners
+        media.replaceWith(clean);
+
+        clean.addEventListener("click", () => {
+            const msgEl = clean.closest('.message');
+            const messageId = msgEl.dataset.messageId;
+            const index = viewer.getIndexByMessageId(messageId);
+            if (index !== -1) viewer.open(index);
+        });
     });
+
+
 }
+
+
 function createMessageElement(msg) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${msg.user == State.currentUser.username || msg.user == State.currentUser.id ? "self" : "other"}`;
@@ -1109,7 +1114,7 @@ function createMessageElement(msg) {
 
     // Add touch gestures
     addMessageGestures(messageDiv, msg);
-    attactEventOnMedia()
+
     return messageDiv;
 }
 
@@ -1340,7 +1345,6 @@ async function uploadMedia(msgId, receiver, file) {
         if (!res.ok) throw new Error("Upload failed");
 
         const data = await res.json();
-        console.log(data)
         socket.emit("media:uploaded", {
             tempId: msgId,
             to: receiver,
@@ -1561,7 +1565,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const muteBtn = document.getElementById("chatOption-Mute");
     if (isplayTune) {
         State.playTune = isplayTune == "true" ? true : false
-        console.log(isplayTune)
         muteBtn.setAttribute("playTune", isplayTune);
 
         if (State.playTune) {
@@ -1688,9 +1691,10 @@ function getVideoDuration(videoUrl) {
 
 class MediaViewer {
     constructor(chatId) {
-        this.chatId = chatId
+        this.chatId = chatId;
         this.mediaItems = [];
         this.currentIndex = 0;
+
         this.overlay = document.getElementById('mediaViewer');
         this.container = document.getElementById('mediaContainer');
         this.thumbnailContainer = document.getElementById('thumbnailContainer');
@@ -1699,67 +1703,42 @@ class MediaViewer {
         this.closeBtn = document.getElementById('closeViewer');
         this.viewerMain = document.getElementById('viewerMain');
 
-        // Touch/swipe variables
         this.touchStartX = 0;
         this.touchEndX = 0;
         this.isDragging = false;
-        this.conv = State.conversations.find(c => c.id === this.chatId);
 
-        this.init();
-    }
-
-    init() {
-        // Collect all media items
         this.collectMediaItems();
-
-        // Event listeners
-        this.closeBtn.addEventListener('click', () => this.close());
-        this.prevBtn.addEventListener('click', () => this.navigate(-1));
-        this.nextBtn.addEventListener('click', () => this.navigate(1));
-
-        // Keyboard navigation
-        document.addEventListener('keydown', (e) => {
-            if (!this.overlay.classList.contains('active')) return;
-
-            if (e.key === 'ArrowLeft') this.navigate(-1);
-            if (e.key === 'ArrowRight') this.navigate(1);
-            if (e.key === 'Escape') this.close();
-        });
-
-        // Touch events for swipe
-        this.viewerMain.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: true });
-        this.viewerMain.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: true });
-        this.viewerMain.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: true });
-
-        // Mouse events for desktop drag (optional)
-        this.viewerMain.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-        this.viewerMain.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-        this.viewerMain.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-        this.viewerMain.addEventListener('mouseleave', (e) => this.handleMouseUp(e));
+        this.bindEvents();
     }
+
+    /* ================= DATA ================= */
 
     collectMediaItems() {
         const messages = State.messages[this.chatId] || [];
-        const allMedia = messages.filter((msg) => msg.type == "image" || msg.type == "video")
-        allMedia.forEach((thumb, index) => {
-            const mediaType = thumb.type;
-            const src = thumb.content
 
-            this.mediaItems.push({
-                type: mediaType,
-                src: src,
-                element: thumb,
-                id: thumb.id ?? thumb.tempId
-            });
-
-            // // Add click event to open viewer
-            // thumb.addEventListener('click', () => {
-            //     this.open(index);
-            // });
-        });
+        this.mediaItems = messages
+            .filter(m => (m.type === 'image' || m.type === 'video') && m.content)
+            .map((m, index) => ({
+                index,
+                id: m.id ?? m.tempId,
+                type: m.type,
+                src: m.content,         // full media
+                thumb: m.thumb || null, // 🔑 image thumbnail
+                cover: m.cover || null  // video poster
+            }));
     }
 
+    getIndexByMessageId(messageId) {
+        return this.mediaItems.findIndex(
+            m => String(m.id) === String(messageId)
+        );
+    }
+
+    /* ================= LIFECYCLE ================= */
+
     open(index) {
+        if (index < 0 || index >= this.mediaItems.length) return;
+
         this.currentIndex = index;
         this.overlay.classList.add('active');
         document.body.style.overflow = 'hidden';
@@ -1770,108 +1749,89 @@ class MediaViewer {
         this.overlay.classList.remove('active');
         document.body.style.overflow = '';
 
-        // Pause all videos
-        this.container.querySelectorAll('video').forEach(video => {
-            video.pause();
-        });
+        this.container.querySelectorAll('video').forEach(v => v.pause());
     }
 
     navigate(direction) {
-        const newIndex = this.currentIndex + direction;
+        const next = this.currentIndex + direction;
+        if (next < 0 || next >= this.mediaItems.length) return;
 
-        if (newIndex >= 0 && newIndex < this.mediaItems.length) {
-            this.currentIndex = newIndex;
-            this.updateMedia();
-        }
+        this.currentIndex = next;
+        this.updateMedia();
     }
 
+    /* ================= RENDER ================= */
+
     render() {
-        // Clear existing content
         this.container.innerHTML = '';
         this.thumbnailContainer.innerHTML = '';
 
-        // Create slides
         this.mediaItems.forEach((item, index) => {
-            // Create slide
+
+            /* ----- MAIN SLIDE ----- */
             const slide = document.createElement('div');
             slide.className = 'media-slide';
-            slide.getAttribute("data-message-id", item.id)
-            if (item.id === this.currentIndex) {
-                slide.classList.add('active');
-            }
+            slide.dataset.index = index;
+            if (index === this.currentIndex) slide.classList.add('active');
 
             if (item.type === 'video') {
                 const video = document.createElement('video');
                 video.src = item.src;
                 video.controls = true;
-                video.autoplay = item.id === this.currentIndex;
+                if (index === this.currentIndex) video.autoplay = true;
                 slide.appendChild(video);
             } else {
                 const img = document.createElement('img');
-                img.src = item.src;
-                img.alt = `Media ${index + 1}`;
+                img.src = item.src; // 🔑 original image
                 slide.appendChild(img);
             }
 
             this.container.appendChild(slide);
 
-            // Create thumbnail
-            const thumbItem = document.createElement('div');
-            thumbItem.className = 'thumbnail-item';
-            thumbItem.getAttribute("data-message-id", item.id)
-            if (item.type === 'video') {
-                thumbItem.classList.add('video');
-            }
-            if (item.id === this.currentIndex) {
-                thumbItem.classList.add('active');
-            }
+            /* ----- THUMBNAIL ----- */
+            const thumb = document.createElement('div');
+            thumb.className = 'thumbnail-item';
+            thumb.dataset.index = index;
+            if (index === this.currentIndex) thumb.classList.add('active');
 
-            if (item.type === 'video') {
-                const thumbVideo = document.createElement('video');
-                thumbVideo.src = item.src;
-                thumbVideo.muted = true;
-                thumbItem.appendChild(thumbVideo);
+            const img = document.createElement('img');
+
+            if (item.type === 'image') {
+                // ✅ images use thumb ONLY
+                img.src = item.thumb || item.src;
             } else {
-                const thumbImg = document.createElement('img');
-                thumbImg.src = item.src;
-                thumbImg.alt = `Thumbnail ${index + 1}`;
-                thumbItem.appendChild(thumbImg);
+                // ✅ videos: cover → thumb → content
+                img.src = item.cover || item.thumb || item.src;
+                thumb.classList.add('video');
             }
 
-            thumbItem.addEventListener('click', () => {
-                this.currentIndex = item.id;
+            img.loading = "lazy";
+            thumb.appendChild(img);
+
+            thumb.addEventListener('click', () => {
+                this.currentIndex = index;
                 this.updateMedia();
             });
 
-            this.thumbnailContainer.appendChild(thumbItem);
+            this.thumbnailContainer.appendChild(thumb);
         });
 
         this.updateControls();
     }
 
     updateMedia() {
-        // Update slides
-        const slides = this.container.querySelectorAll('.media-slide');
-        slides.forEach((slide, index) => {
-            if (slide.dataset.messageId === this.currentIndex) {
-                slide.classList.add('active');
-                const video = slide.querySelector('video');
-                if (video) video.play();
-            } else {
-                slide.classList.remove('active');
-                const video = slide.querySelector('video');
-                if (video) video.pause();
-            }
+        this.container.querySelectorAll('.media-slide').forEach((slide, i) => {
+            const active = i === this.currentIndex;
+            slide.classList.toggle('active', active);
+
+            const video = slide.querySelector('video');
+            if (video) active ? video.play() : video.pause();
         });
 
-        // Update thumbnails
-        const thumbs = this.thumbnailContainer.querySelectorAll('.thumbnail-item');
-        thumbs.forEach((thumb, index) => {
-            if (thumb.dataset.messageId === this.currentIndex) {
-                thumb.classList.add('active');
-                thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-            } else {
-                thumb.classList.remove('active');
+        this.thumbnailContainer.querySelectorAll('.thumbnail-item').forEach((t, i) => {
+            t.classList.toggle('active', i === this.currentIndex);
+            if (i === this.currentIndex) {
+                t.scrollIntoView({ block: 'nearest', inline: 'center' });
             }
         });
 
@@ -1879,65 +1839,66 @@ class MediaViewer {
     }
 
     updateControls() {
-        // Update counter
         document.getElementById('currentIndex').textContent = this.currentIndex + 1;
         document.getElementById('totalMedia').textContent = this.mediaItems.length;
 
-        // Update navigation buttons
         this.prevBtn.disabled = this.currentIndex === 0;
         this.nextBtn.disabled = this.currentIndex === this.mediaItems.length - 1;
     }
 
-    // Touch handlers
-    handleTouchStart(e) {
-        this.touchStartX = e.changedTouches[0].screenX;
+    /* ================= EVENTS ================= */
+
+    bindEvents() {
+        this.closeBtn.onclick = () => this.close();
+        this.prevBtn.onclick = () => this.navigate(-1);
+        this.nextBtn.onclick = () => this.navigate(1);
+
+        document.addEventListener('keydown', e => {
+            if (!this.overlay.classList.contains('active')) return;
+            if (e.key === 'ArrowLeft') this.navigate(-1);
+            if (e.key === 'ArrowRight') this.navigate(1);
+            if (e.key === 'Escape') this.close();
+        });
+
+        this.viewerMain.addEventListener('touchstart', e => {
+            this.touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        this.viewerMain.addEventListener('touchend', e => {
+            this.touchEndX = e.changedTouches[0].screenX;
+            this.handleSwipe();
+        }, { passive: true });
+
+        this.viewerMain.addEventListener('mousedown', e => {
+            this.isDragging = true;
+            this.touchStartX = e.clientX;
+        });
+
+        this.viewerMain.addEventListener('mouseup', e => {
+            if (!this.isDragging) return;
+            this.isDragging = false;
+            this.touchEndX = e.clientX;
+            this.handleSwipe();
+        });
     }
 
-    handleTouchMove(e) {
-        this.touchEndX = e.changedTouches[0].screenX;
-    }
-
-    handleTouchEnd(e) {
-        const swipeThreshold = 50;
+    handleSwipe() {
         const diff = this.touchStartX - this.touchEndX;
-
-        if (Math.abs(diff) > swipeThreshold) {
-            if (diff > 0) {
-                // Swipe left - next
-                this.navigate(1);
-            } else {
-                // Swipe right - previous
-                this.navigate(-1);
-            }
-        }
+        if (Math.abs(diff) < 50) return;
+        diff > 0 ? this.navigate(1) : this.navigate(-1);
     }
-
-    // Mouse drag handlers (optional for desktop)
-    handleMouseDown(e) {
-        this.isDragging = true;
-        this.touchStartX = e.clientX;
-    }
-
-    handleMouseMove(e) {
-        if (!this.isDragging) return;
-        this.touchEndX = e.clientX;
-    }
-
-    handleMouseUp(e) {
-        if (!this.isDragging) return;
-        this.isDragging = false;
-
-        const swipeThreshold = 50;
-        const diff = this.touchStartX - this.touchEndX;
-
-        if (Math.abs(diff) > swipeThreshold) {
-            if (diff > 0) {
-                this.navigate(1);
-            } else {
-                this.navigate(-1);
-            }
-        }
+    addItem(msg) {
+        const index = this.mediaItems.length
+        this.mediaItems.push({
+            index,
+            id: msg.id ?? msg.tempId,
+            type: msg.type,
+            src: msg.content,         // full media
+            thumb: msg.thumb || null, // 🔑 image thumbnail
+            cover: msg.cover || null  // video poster
+        })
     }
 }
+
 
 

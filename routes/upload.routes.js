@@ -31,7 +31,6 @@ router.post("/api/upload", upload.single("file"), (req, res) => {
   const isVideo = req.file.mimetype.startsWith("video") ? true : false
   const publicId = req.file.filename; // Cloudinary public_id
   const baseUrl = req.file.path.split("/upload/")[0] + "/upload";
-  console.log(req.file)
   let response;
 
   if (isVideo) {
