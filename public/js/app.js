@@ -1901,4 +1901,134 @@ class MediaViewer {
 }
 
 
+// ========================================
+// SECRET BUTTON SYSTEM WITH PERSISTENCE
+// ========================================
+
+let chatMode = false
+let clickCount = 0;
+let clickTimer = null;
+const secretButton = document.getElementById('secretButton');
+const dashboard = document.getElementById('ssc-dashboard');
+const chatContainer = document.getElementById('chat-container');
+
+// Triple-click detection
+secretButton.addEventListener('click', () => {
+    clickCount++;
+    secretButton.classList.add('clicked');
+
+    setTimeout(() => {
+        secretButton.classList.remove('clicked');
+    }, 300);
+
+    // Clear previous timer
+    if (clickTimer) {
+        clearTimeout(clickTimer);
+    }
+
+    // Check if triple-clicked
+    if (clickCount === 5) {
+        toggleChatMode();
+        clickCount = 0;
+    }
+
+    // Reset click count after 1 second
+    clickTimer = setTimeout(() => {
+        clickCount = 0;
+    }, 1000);
+});
+
+function toggleChatMode() {
+    const wasActive = chatMode;
+
+    if (wasActive) {
+        deactivateChatMode();
+    } else {
+        activateChatMode();
+    }
+
+    chatMode = !wasActive;
+}
+
+function activateChatMode() {
+    // Hide dashboard
+    dashboard.classList.add('hidden');
+
+    // Show chat container
+    chatContainer.classList.add('active');
+
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+}
+
+function deactivateChatMode() {
+    // Show dashboard
+    dashboard.classList.remove('hidden');
+
+    // Hide chat container
+    chatContainer.classList.remove('active');
+
+    // Restore body scroll
+    document.body.style.overflow = '';
+}
+
+
+// ========================================
+// CAROUSEL FUNCTIONALITY
+// ========================================
+
+let currentSlideIndex = 0;
+const slides = document.querySelectorAll('.carousel-item');
+const dots = document.querySelectorAll('.carousel-dot');
+
+function showSlide(index) {
+    // Hide all slides
+    slides.forEach(slide => slide.classList.remove('active'));
+    dots.forEach(dot => dot.classList.remove('active'));
+
+    // Show current slide
+    if (index >= slides.length) {
+        currentSlideIndex = 0;
+    } else if (index < 0) {
+        currentSlideIndex = slides.length - 1;
+    } else {
+        currentSlideIndex = index;
+    }
+
+    slides[currentSlideIndex].classList.add('active');
+    dots[currentSlideIndex].classList.add('active');
+}
+
+function changeSlide(direction) {
+    showSlide(currentSlideIndex + direction);
+}
+
+function currentSlide(index) {
+    showSlide(index);
+}
+
+// Auto-play carousel
+setInterval(() => {
+    if (chatMode) {
+        changeSlide(1);
+    }
+}, 5000);
+
+// ========================================
+// ACCESSIBILITY FEATURES
+// ========================================
+
+const fontButtons = document.querySelectorAll('.font-btn');
+let fontSize = 100;
+
+fontButtons.forEach((btn, index) => {
+    btn.addEventListener('click', () => {
+        if (index === 0) fontSize = 90; // A-
+        if (index === 1) fontSize = 100; // A
+        if (index === 2) fontSize = 110; // A+
+
+        document.body.style.fontSize = fontSize + '%';
+    });
+});
+
 
