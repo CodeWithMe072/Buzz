@@ -210,13 +210,12 @@ export const login = async (req, res) => {
         user.lastSeen = new Date();
         await user.save();
 
-        // 🔥 FIXED: Now includes user ID for Telegram linking
         res.status(200).json({
             status: true,
             message: "Login successful",
             user: {
-                id: user._id,           // ✅ Added this
-                username: user.username, // ✅ Added this
+                id: user._id,           
+                username: user.username, 
                 avatar: user.avatar,
                 extra: user.extra,
             }
