@@ -462,7 +462,6 @@ async function initAuth() {
         let { ChatMesaage } = await messResponse.json()
         for (const element of ChatMesaage) {
             const chatUserId = element._id;
-
             // 1️⃣ Store messages safely
             const msgs = element.messages || [];
             State.messages[chatUserId] = msgs;
@@ -475,15 +474,17 @@ async function initAuth() {
 
             // 2️⃣ Update conversation preview
             const conv = State.conversations.find(c => c.id == chatUserId);
+            console.log(conv, element)
             if (!conv || !element.messages || element.messages.length === 0) continue;
-
             const lastMsg = element.messages[0];
+
 
             conv.lastMessage =
                 lastMsg.type === "text"
                     ? lastMsg.content
                     : `📷 ${lastMsg.type}`;
 
+            conv.unread = element.unreadCount
             // 3️⃣ Use REAL timestamp (not Date.now)
             conv.timestamp = lastMsg.timestamp || lastMsg.createdAt || Date.now();
 
@@ -570,14 +571,42 @@ function handelAuthForm() {
 
             let messResponse = await fetch("/allmessages", {
                 method: "POST",
-                headers: { "Content-type": "application/json" },
+                headers: {
+                    "Content-type": "application/json"
+                },
                 body: JSON.stringify({ userId: State.currentUser.id })
-            });
+            })
 
-            let { ChatMesaage } = await messResponse.json();
-
+            let { ChatMesaage } = await messResponse.json()
             for (const element of ChatMesaage) {
-                State.messages[element._id] = element.messages || [];
+                const chatUserId = element._id;
+                // 1️⃣ Store messages safely
+                const msgs = element.messages || [];
+                State.messages[chatUserId] = msgs;
+
+                for (const msg of msgs) {
+                    if (msg.id) {
+                        State.messageIndex[msg.id] = msg.user;
+                    }
+                }
+
+                // 2️⃣ Update conversation preview
+                const conv = State.conversations.find(c => c.id == chatUserId);
+                if (!conv || !element.messages || element.messages.length === 0) continue;
+
+                const lastMsg = element.messages[0];
+
+
+                conv.lastMessage =
+                    lastMsg.type === "text"
+                        ? lastMsg.content
+                        : `📷 ${lastMsg.type}`;
+
+                conv.unread = element.unreadCount
+                // 3️⃣ Use REAL timestamp (not Date.now)
+                conv.timestamp = lastMsg.timestamp || lastMsg.createdAt || Date.now();
+
+
             }
 
             socket = io({ auth: { userId: State.currentUser.id } });
@@ -2003,7 +2032,7 @@ async function unlockScreen() {
 
     try {
         const success = await fakePasswordApi(input.value);
-console.log(success)
+        console.log(success)
         if (success) {
             document.getElementById("passwordOverlay").classList.remove("active");
             return;

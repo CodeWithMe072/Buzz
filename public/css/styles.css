@@ -674,6 +674,7 @@ body {
 .unread-badge {
     min-width: 20px;
     height: 20px;
+    position: absolute;
     padding: 0 6px;
     background: var(--accent-blue);
     color: white;
@@ -684,6 +685,8 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    right: 14px;
+    bottom: 13px;
 }
 
 /* =============================================================================
