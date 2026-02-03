@@ -80,6 +80,12 @@ const messageSchema = new mongoose.Schema(
       type: [String],               // userIds who hid this message
       default: [],
     },
+    autoDeleted: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+
 
     /* ---------- Timing ---------- */
     clientTime: {

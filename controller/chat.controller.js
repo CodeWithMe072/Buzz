@@ -1,81 +1,100 @@
 
 import { Message } from "../models/message.model.js"
 export const getallMessage = async (req, res) => {
-    const { userId: activeUserId } = req.body
-    let allMessage = await
-        Message.aggregate([
-            /* 1 Only messages where user involved */
-            {
-                $match: {
-                    $and: [
-                        {
-                            $or: [
-                                { from: activeUserId },
-                                { to: activeUserId }
-                            ]
-                        },
-                        {
-                            deletedFor: { $ne: activeUserId }
-                        }
-                    ]
-                }
-            },
+    const { userId: activeUserId } = req.body;
 
-            /* 2 Sort latest first */
-            { $sort: { createdAt: -1 } },
-
-            /* 3 Group by OTHER USER ONLY */
-            {
-                $group: {
-                    _id: {
-                        $cond: [
-                            { $eq: ["$from", activeUserId] },
-                            "$to",      // if I sent → group by receiver
-                            "$from"     // if I received → group by sender
+    const allMessage = await Message.aggregate([
+        /* 1️⃣ Only messages where user involved & not deleted */
+        {
+            $match: {
+                $and: [
+                    {
+                        $or: [
+                            { from: activeUserId },
+                            { to: activeUserId }
                         ]
                     },
-                    messages: { $push: "$$ROOT" }
-                }
-            },
+                    {
+                        deletedFor: { $ne: activeUserId }
+                    }
+                ]
+            }
+        },
 
-            /* 4 Take last 10 messages */
-            {
-                $project: {
-                    _id: 1,
-                    messages: { $slice: ["$messages", 10] }
-                }
-            },
+        /* 2️⃣ Sort latest first */
+        { $sort: { createdAt: -1 } },
 
-            /* 5 RENAME KEYS ONLY (unchanged logic) */
-            {
-                $project: {
-                    _id: 1,              // 👈 this is now SECOND USER ID
-                    messages: {
-                        $map: {
-                            input: "$messages",
-                            as: "m",
-                            in: {
-                                id: "$$m._id",
-                                user: "$$m.from",
-                                to: "$$m.to",
-                                type: "$$m.type",
-                                content: "$$m.content",
-                                cover: "$$m.cover",
-                                thumb: "$$m.thumb",
-                                caption: "$$m.caption",
-                                replyTo: "$$m.replyTo",
-                                timestamp: "$$m.clientTime",
-                                status: "$$m.status",
-                                createdAt: "$$m.createdAt"
-                            }
+        /* 3️⃣ Group by OTHER USER */
+        {
+            $group: {
+                _id: {
+                    $cond: [
+                        { $eq: ["$from", activeUserId] },
+                        "$to",
+                        "$from"
+                    ]
+                },
+
+                messages: { $push: "$$ROOT" },
+
+                /* 🔥 COUNT UNREAD PER CHAT */
+                unreadCount: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $eq: ["$to", activeUserId] },
+                                    { $eq: ["$status.seen", false] }
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
+                }
+            }
+        },
+
+        /* 4️⃣ Limit messages to last 10 */
+        {
+            $project: {
+                _id: 1,
+                unreadCount: 1,
+                messages: { $slice: ["$messages", 10] }
+            }
+        },
+
+        /* 5️⃣ Shape response for frontend */
+        {
+            $project: {
+                _id: 1,
+                unreadCount: 1,
+                messages: {
+                    $map: {
+                        input: "$messages",
+                        as: "m",
+                        in: {
+                            id: "$$m._id",
+                            user: "$$m.from",
+                            to: "$$m.to",
+                            type: "$$m.type",
+                            content: "$$m.content",
+                            cover: "$$m.cover",
+                            thumb: "$$m.thumb",
+                            caption: "$$m.caption",
+                            replyTo: "$$m.replyTo",
+                            timestamp: "$$m.clientTime",
+                            status: "$$m.status",
+                            createdAt: "$$m.createdAt"
                         }
                     }
                 }
             }
-        ]);
+        }
+    ]);
 
-    res.json({ ChatMesaage: allMessage })
-}
+    res.json({ ChatMesaage: allMessage });
+};
 
 export const deleteChat = async (req, res) => {
     try {
