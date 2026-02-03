@@ -440,8 +440,9 @@ async function initAuth() {
         document.getElementById('signup-screen').classList.remove('active');
         document.getElementById('login-screen').classList.add('active');
     });
-    const savedUser = localStorage.getItem('instachat-user');
+    const savedUser = localStorage.getItem('SSC_USER');
     if (savedUser) {
+        document.getElementById("passwordOverlay").classList.add("active");
         State.currentUser = JSON.parse(savedUser);
         // Add small delay for smooth transition
 
@@ -504,7 +505,20 @@ async function initAuth() {
 
 
 
+
 }
+
+function setButtonLoading(btn, text) {
+    btn.dataset.originalText = btn.textContent;
+    btn.textContent = text;
+    btn.disabled = true;
+}
+
+function resetButtonLoading(btn) {
+    btn.textContent = btn.dataset.originalText;
+    btn.disabled = false;
+}
+
 
 
 function handelAuthForm() {
@@ -514,95 +528,81 @@ function handelAuthForm() {
     const signupForm = document.getElementById('signup-form');
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+
         const username = document.getElementById('login-username').value.trim();
         const password = document.getElementById('login-password').value;
+        const submitBtn = loginForm.querySelector('.btn-primary');
 
-        if (username == "" || password == "") {
+        if (!username || !password) {
             showToast('Please fill in all fields', 'error');
             return;
         }
 
-        // Show loader
-        showLoader();
-        let response = await loginuser({ username, password })
-        if (response.code == 200) {
+        setButtonLoading(submitBtn, "Verifying...");
+
+        try {
+            let response = await loginuser({ username, password });
+
+            if (response.code !== 200) {
+                showToast(response.Data.message, 'error');
+                resetButtonLoading(submitBtn);
+                return;
+            }
+
+            // ✅ success flow (unchanged)
             const user = {
                 id: response.Data.user.extra,
-                username: username,
+                username,
                 avatar: response.Data.user.avatar
             };
-            State.currentUser = user;
-            localStorage.setItem('instachat-user', JSON.stringify(user));
 
-            let allusersresponse = await alluser()
-            if (allusersresponse.code == 200) {
-                State.allusers = allusersresponse.Data.user.filter(u => u.username != State.currentUser.username)
+            State.currentUser = user;
+            localStorage.setItem('SSC_USER', JSON.stringify(user));
+
+            let allusersresponse = await alluser();
+            if (allusersresponse.code === 200) {
+                State.allusers = allusersresponse.Data.user.filter(
+                    u => u.username !== State.currentUser.username
+                );
             }
+
             initChatList();
+
             let messResponse = await fetch("/allmessages", {
                 method: "POST",
-                headers: {
-                    "Content-type": "application/json"
-                },
+                headers: { "Content-type": "application/json" },
                 body: JSON.stringify({ userId: State.currentUser.id })
-            })
-
-            let { ChatMesaage } = await messResponse.json()
-            for (const element of ChatMesaage) {
-                const chatUserId = element._id;
-
-                // 1 Store messages safely
-                const msgs = element.messages || [];
-                State.messages[chatUserId] = msgs;
-
-                for (const msg of msgs) {
-                    if (msg.id) {
-                        State.messageIndex[msg.id] = msg.user;
-                    }
-                }
-
-                // 2 Update conversation preview
-                const conv = State.conversations.find(c => c.id == chatUserId);
-                if (!conv || !element.messages || element.messages.length === 0) continue;
-
-                const lastMsg = element.messages[0];
-
-                conv.lastMessage =
-                    lastMsg.type === "text"
-                        ? lastMsg.content
-                        : `📷 ${lastMsg.type}`;
-
-                // 3️⃣ Use REAL timestamp (not Date.now)
-                conv.timestamp = lastMsg.timestamp || lastMsg.createdAt || Date.now();
-
-
-            }
-            socket = io({
-                auth: {
-                    userId: State.currentUser.id
-                }
             });
-            initSocket()
+
+            let { ChatMesaage } = await messResponse.json();
+
+            for (const element of ChatMesaage) {
+                State.messages[element._id] = element.messages || [];
+            }
+
+            socket = io({ auth: { userId: State.currentUser.id } });
+            initSocket();
             renderChatList();
-            hideLoader();
+
+            resetButtonLoading(submitBtn);
             showToast('Logged in successfully!', 'success');
             showChatScreen();
-        } else {
-            hideLoader();
-            showToast(response.Data.message, 'error');
-            return
+
+        } catch (err) {
+            resetButtonLoading(submitBtn);
+            showToast('Server error. Please try again.', 'error');
         }
     });
 
-    // Signup form
     signupForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+
         const username = document.getElementById('signup-username').value.trim();
         const email = document.getElementById('signup-email').value.trim();
         const password = document.getElementById('signup-password').value;
         const confirmPassword = document.getElementById('signup-confirm-password').value;
+        const submitBtn = signupForm.querySelector('.btn-primary');
 
-        // Validation
         if (!username || !email || !password || !confirmPassword) {
             showToast('Please fill in all fields', 'error');
             return;
@@ -618,90 +618,38 @@ function handelAuthForm() {
             return;
         }
 
-        // Show loader
-        showLoader();
-        // Mock signup
-        const user = {
-            id: generateId(),
-            username: username,
-            email: email,
-            avatar: username.charAt(0).toUpperCase()
-        };
-        let cUser = {
-            username: username,
-            email: email,
-            password,
-            extra: user.id,
-            phoneNumber: "9999999999",
-            role: "user"
-        }
+        setButtonLoading(submitBtn, "Submitting...");
 
-        let response = await createUser(cUser)
-        if (response.code == 201) {
-            State.currentUser = user;
-            localStorage.setItem('instachat-user', JSON.stringify(user));
-
-            let allusersresponse = await alluser()
-            if (allusersresponse.code == 200) {
-                State.allusers = allusersresponse.Data.user.filter(u => u.username != State.currentUser.username)
-            }
-            initChatList();
-            let messResponse = await fetch("/allmessages", {
-                method: "POST",
-                headers: {
-                    "Content-type": "application/json"
-                },
-                body: JSON.stringify({ userId: State.currentUser.id })
-            })
-
-            let { ChatMesaage } = await messResponse.json()
-            for (const element of ChatMesaage) {
-                const chatUserId = element._id;
-
-                // 1️⃣ Store messages safely
-                const msgs = element.messages || [];
-                State.messages[chatUserId] = msgs;
-
-                for (const msg of msgs) {
-                    if (msg.id) {
-                        State.messageIndex[msg.id] = msg.user;
-                    }
-                }
-
-                // 2️⃣ Update conversation preview
-                const conv = State.conversations.find(c => c.id == chatUserId);
-                if (!conv || !element.messages || element.messages.length === 0) continue;
-
-                const lastMsg = element.messages[0];
-
-                conv.lastMessage =
-                    lastMsg.type === "text"
-                        ? lastMsg.content
-                        : `📷 ${lastMsg.type}`;
-
-                // 3️⃣ Use REAL timestamp (not Date.now)
-                conv.timestamp = lastMsg.timestamp || lastMsg.createdAt || Date.now();
-            }
-            socket = io({
-                auth: {
-                    userId: State.currentUser.id
-                }
+        try {
+            let response = await createUser({
+                username,
+                email,
+                password,
+                extra: generateId(),
+                phoneNumber: "9999999999",
+                role: "user"
             });
-            initSocket()
-            renderChatList();
-            hideLoader();
+
+            if (response.code !== 201) {
+                showToast(response.Data.message, 'error');
+                resetButtonLoading(submitBtn);
+                return;
+            }
+
+            resetButtonLoading(submitBtn);
             showToast('Account created successfully!', 'success');
             showChatScreen();
-        } else {
-            hideLoader();
-            showToast(response.Data.message, 'error');
-            return
+
+        } catch (err) {
+            resetButtonLoading(submitBtn);
+            showToast('Server error. Please try again.', 'error');
         }
     });
+
 }
 
 function logout() {
-    localStorage.removeItem('instachat-user');
+    localStorage.removeItem('SSC_USER');
     State.currentUser = null;
     State.activeChat = null;
     State.conversations = [];
@@ -1922,7 +1870,7 @@ secretButton.addEventListener('click', () => {
     }, 300);
 
 
-    
+
 
     // Clear previous timer
     if (clickTimer) {
@@ -2035,3 +1983,87 @@ fontButtons.forEach((btn, index) => {
 });
 
 
+const MAX_ATTEMPTS = 5;
+let remainingAttempts = MAX_ATTEMPTS;
+
+async function unlockScreen() {
+
+    const btn = document.getElementById("submitBtn");
+    const input = document.getElementById("passwordInput");
+    const error = document.getElementById("errorMsg");
+
+    if (btn.disabled) return;
+
+    error.textContent = "";
+
+    // UI → loading
+    btn.disabled = true;
+    btn.classList.add("loading");
+    btn.textContent = "Verifying";
+
+    try {
+        const success = await fakePasswordApi(input.value);
+console.log(success)
+        if (success) {
+            document.getElementById("passwordOverlay").classList.remove("active");
+            return;
+        }
+
+        remainingAttempts--;
+
+        if (remainingAttempts <= 0) {
+            blockUser(btn, input, error);
+            return;
+        }
+
+        // Warning messages (gov-style)
+        error.textContent = getAttemptMessage(remainingAttempts);
+        resetButton(btn);
+
+    } catch (err) {
+        error.textContent = "Server error. Please try again later.";
+        resetButton(btn);
+    }
+}
+
+function getAttemptMessage(attemptsLeft) {
+    if (attemptsLeft === 4)
+        return "Invalid password. You have 4 attempts remaining.";
+    if (attemptsLeft === 3)
+        return "Warning: Only 3 attempts remaining.";
+    if (attemptsLeft === 2)
+        return "Alert: Only 2 attempts remaining.";
+    if (attemptsLeft === 1)
+        return "Final warning: Last attempt remaining.";
+    return `Invalid password. Attempts remaining: ${attemptsLeft}`;
+}
+
+function blockUser(btn, input, error) {
+    error.textContent =
+        "You have exceeded the maximum number of attempts. Access has been blocked.";
+
+    btn.textContent = "Blocked";
+    btn.classList.remove("loading");
+    btn.disabled = true;
+    input.disabled = true;
+}
+
+function resetButton(btn) {
+    btn.disabled = false;
+    btn.classList.remove("loading");
+    btn.textContent = "Submit";
+}
+
+async function fakePasswordApi(password) {
+    let response = await loginuser({ username: State.currentUser.username, password })
+    console.log(response)
+    if (response.Data.status) {
+        return true
+    } else {
+        return false
+    }
+}
+
+document.getElementById("passwordInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") unlockScreen();
+});
