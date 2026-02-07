@@ -1694,6 +1694,11 @@ body {
     padding: 10px 10px 15px 10px;
 }
 
+.messag-text a,
+.messag-text a:visited {
+    color: greenyellow;
+}
+
 .status-icon.clock {
     fill: none;
     stroke: currentColor;

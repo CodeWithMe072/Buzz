@@ -1017,7 +1017,8 @@ function createMessageElement(msg) {
     if (msg.type === 'text' || msg.caption) {
         const textDiv = document.createElement('div');
         textDiv.classList.add("messag-text")
-        textDiv.textContent = msg.caption || msg.content;
+        const text = msg.caption || msg.content;
+        textDiv.innerHTML = makeLinksClickable(text);
         bubbleDiv.appendChild(textDiv);
     }
 
@@ -1093,6 +1094,36 @@ function createMessageElement(msg) {
     addMessageGestures(messageDiv, msg);
 
     return messageDiv;
+}
+
+
+function makeLinksClickable(text) {
+    if (!text) return "";
+
+    // Escape HTML first (prevents XSS)
+    const escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    // Detect:
+    // 1) http:// or https://
+    // 2) www.domain.com
+    // 3) domain.com / domain.in / domain.co.in etc.
+    const urlRegex = /((https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(\/[^\s]*)?))/g;
+
+    return escaped.replace(urlRegex, (match) => {
+        let href = match;
+
+        // If no protocol, add https://
+        if (!href.startsWith("http")) {
+            href = "https://" + href;
+        }
+
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${match}</a>`;
+    });
 }
 
 function addMessageGestures(messageEl, msg) {
