@@ -123,10 +123,7 @@ export default function initSocket(io) {
               notification
             );
 
-            console.log(`✅ Telegram notification sent to ${receiver.username}`);
-          } else {
-            console.log(`⏭️ No Telegram notification: chatId=${receiver?.telegramChatId}, enabled=${receiver?.notificationsEnabled}`);
-          }
+          } 
         } catch (error) {
           console.error('❌ Error sending Telegram notification:', error);
         }
@@ -175,7 +172,6 @@ export default function initSocket(io) {
         thumb,
         mediaType
       };
-      console.log(payload)
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("media:uploaded", payload);
       }

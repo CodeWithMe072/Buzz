@@ -38,15 +38,8 @@ export function startAutoDeleteSeenMessagesJob() {
                     }
                 ],
 
-                // 🔑 THIS OPTION FIXES THE ERROR
                 { updatePipeline: true }
             );
-
-            if (result.modifiedCount > 0) {
-                console.log(
-                    `[AUTO DELETE] ${result.modifiedCount} messages hidden for both users`
-                );
-            }
 
         } catch (err) {
             console.error("[AUTO DELETE ERROR]", err);
