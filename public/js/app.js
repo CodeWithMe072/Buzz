@@ -223,10 +223,7 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
         const mediaOverlay = mediaContainer.querySelector(".media-overlay");
 
         // choose preview source
-        const previewSrc =
-            updates.type === "video"
-                ? updates.cover
-                : updates.content;
+        const previewSrc = updates.cover ?? updates.content;
 
         if (!previewSrc) return;
 
@@ -238,16 +235,16 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
             preloadImg.src = previewSrc;
             preloadImg.alt = "Image message";
 
-            preloadImg.onload = () => {
-                if (!img) {
-                    mediaContainer.innerHTML = "";
-                    img = document.createElement("img");
-                    mediaContainer.appendChild(img);
-                }
+            // preloadImg.onload = () => {
+            if (!img) {
+                mediaContainer.innerHTML = "";
+                img = document.createElement("img");
+                mediaContainer.appendChild(img);
+            }
 
-                img.src = previewSrc;
-                img.alt = "Image message";
-            };
+            img.src = previewSrc;
+            img.alt = "Image message";
+            // };
         }
 
         /* ---------- VIDEO MESSAGE (THUMB ONLY) ---------- */
@@ -978,7 +975,7 @@ function createMessageElement(msg) {
 
         if (msg.type === 'image') {
             const img = document.createElement('img');
-            img.src = msg.content;
+            img.src = msg.cover??msg.content;
             img.alt = "Image message";
             mediaDiv.appendChild(img);
         }
