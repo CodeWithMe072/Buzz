@@ -920,7 +920,7 @@ body {
     border-radius: var(--radius-md);
     overflow: hidden;
     max-height: 350px;
-    padding: 0 !important;
+    padding: 10px !important;
 }
 
 .message-media img,
