@@ -145,13 +145,6 @@ function initSocket() {
         statusEl.textContent = conv.id == State.activeChat ? `${lastseen == "Just now" ? "Just now" : "Last seen " + lastseen + " Ago"}` : 'Active now';
         statusEl.className = `online-status ${conv.id == State.activeChat ? '' : 'online'}`;
         renderChatList();
-        fetch("/auth/user/lastseen", {
-            method: "POST",
-            headers: {
-                "Content-type": "application/json"
-            },
-            body: JSON.stringify({ extra: conv.id })
-        })
     });
 
     socket.on("media:uploaded", ({ tempId, url, cover, thumb, mediaType }) => {

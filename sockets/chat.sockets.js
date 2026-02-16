@@ -123,7 +123,7 @@ export default function initSocket(io) {
               notification
             );
 
-          } 
+          }
         } catch (error) {
           console.error('❌ Error sending Telegram notification:', error);
         }
@@ -222,9 +222,14 @@ export default function initSocket(io) {
       }).catch(err => console.log(err));
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       onlineUsers.delete(userId);
       socket.broadcast.emit("user:offline", { userId });
+      const filter = { extra: userId }
+      User.updateOne(
+        filter,
+        { $set: { lastSeen: new Date() } }
+      ).catch(err => console.log(err))
     });
   });
 }
