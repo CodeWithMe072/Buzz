@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 export async function connectMongo() {
   try {
-    await mongoose.connect("mongodb+srv://0AgvcOGFc4gYxuFS:sanjay14581@cluster1.jbvslou.mongodb.net/?appName=chat_app?retryWrites=true&w=majority", {
+    await mongoose.connect(process.env.MONGO_URI, {
       autoIndex: true,
     });
 

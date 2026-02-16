@@ -23,7 +23,7 @@ const messageSchema = new mongoose.Schema(
     /* ---------- Content ---------- */
     type: {
       type: String,
-      enum: ["text", "image", "video"],
+      enum: ["text", "image", "video", "audio"],
       required: true,
     },
 
