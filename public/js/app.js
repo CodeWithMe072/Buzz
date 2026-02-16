@@ -229,71 +229,76 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 
     /* ---------- Media update ---------- */
     if (updates.content || updates.cover) {
-        const mediaContainer = msgEl.querySelector(".message-media");
-        if (!mediaContainer) return;
+        if (updates.type != "audio") {
+            const mediaContainer = msgEl.querySelector(".message-media");
+            if (!mediaContainer) return;
 
-        const mediaOverlay = mediaContainer.querySelector(".media-overlay");
+            const mediaOverlay = mediaContainer.querySelector(".media-overlay");
 
-        // choose preview source
-        const previewSrc = updates.cover ?? updates.content;
+            // choose preview source
+            const previewSrc = updates.cover ?? updates.content;
 
-        if (!previewSrc) return;
+            if (!previewSrc) return;
 
-        /* ---------- IMAGE MESSAGE ---------- */
-        if (updates.type === "image") {
-            let img = mediaContainer.querySelector("img");
+            /* ---------- IMAGE MESSAGE ---------- */
+            if (updates.type === "image") {
+                let img = mediaContainer.querySelector("img");
 
-            const preloadImg = new Image();
-            preloadImg.src = previewSrc;
-            preloadImg.alt = "Image message";
+                const preloadImg = new Image();
+                preloadImg.src = previewSrc;
+                preloadImg.alt = "Image message";
 
-            // preloadImg.onload = () => {
-            if (!img) {
-                mediaContainer.innerHTML = "";
-                img = document.createElement("img");
-                mediaContainer.appendChild(img);
-            }
-
-            img.src = previewSrc;
-            img.alt = "Image message";
-            // };
-        }
-
-        /* ---------- VIDEO MESSAGE (THUMB ONLY) ---------- */
-        if (updates.type === "video") {
-            let img = mediaContainer.querySelector("img");
-            let playIcon = mediaContainer.querySelector(".video-play-icon");
-
-            const preloadImg = new Image();
-            preloadImg.src = previewSrc;
-            preloadImg.alt = "Video thumbnail";
-
-            preloadImg.onload = () => {
+                // preloadImg.onload = () => {
                 if (!img) {
                     mediaContainer.innerHTML = "";
-
                     img = document.createElement("img");
-                    img.className = "video-thumb";
                     mediaContainer.appendChild(img);
-
-                    playIcon = document.createElement("div");
-                    playIcon.className = "video-play-icon";
-                    playIcon.innerHTML = "▶";
-                    mediaContainer.appendChild(playIcon);
-
-                    // click → play video
-                    mediaContainer.onclick = () => {
-                        playVideoInline(mediaContainer, updates.content);
-                    };
                 }
 
                 img.src = previewSrc;
-                img.alt = "Video thumbnail";
+                img.alt = "Image message";
+                // };
+            }
 
-            };
+            /* ---------- VIDEO MESSAGE (THUMB ONLY) ---------- */
+            if (updates.type === "video") {
+                let img = mediaContainer.querySelector("img");
+                let playIcon = mediaContainer.querySelector(".video-play-icon");
+
+                const preloadImg = new Image();
+                preloadImg.src = previewSrc;
+                preloadImg.alt = "Video thumbnail";
+
+                preloadImg.onload = () => {
+                    if (!img) {
+                        mediaContainer.innerHTML = "";
+
+                        img = document.createElement("img");
+                        img.className = "video-thumb";
+                        mediaContainer.appendChild(img);
+
+                        playIcon = document.createElement("div");
+                        playIcon.className = "video-play-icon";
+                        playIcon.innerHTML = "▶";
+                        mediaContainer.appendChild(playIcon);
+
+                        // click → play video
+                        mediaContainer.onclick = () => {
+                            playVideoInline(mediaContainer, updates.content);
+                        };
+                    }
+
+                    img.src = previewSrc;
+                    img.alt = "Video thumbnail";
+
+                };
+            }
+
+            if (mediaOverlay) mediaOverlay.remove();
+            attactEventOnMedia()
+            viewer.addItem(msg)
         }
         // After the video section in updateMessageByTempId()
-
         if (updates.type === "audio") {
             const audioContainer = msgEl.querySelector(".message-audio");
             if (!audioContainer) return;
@@ -302,9 +307,7 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
             const newPlayer = createAudioPlayer(updates.content, msg.id || msg.tempId);
             audioContainer.replaceWith(newPlayer);
         }
-        if (mediaOverlay) mediaOverlay.remove();
-        attactEventOnMedia()
-        viewer.addItem(msg)
+
     }
 
 
@@ -492,7 +495,6 @@ async function initAuth() {
 
             // 2️⃣ Update conversation preview
             const conv = State.conversations.find(c => c.id == chatUserId);
-            console.log(conv, element)
             if (!conv || !element.messages || element.messages.length === 0) continue;
             const lastMsg = element.messages[0];
 
@@ -1040,7 +1042,7 @@ function createMessageElement(msg) {
 
     if (msg.type === "audio" && msg.content == null) {
         const audioDiv = document.createElement("div");
-        audioDiv.className = "message-audio loading";
+        audioDiv.className = "message-audio";
         audioDiv.textContent = "Loading voice message...";
         bubbleDiv.appendChild(audioDiv);
     }
@@ -1423,7 +1425,6 @@ function initVoiceRecording() {
 
         mediaRecorder.ondataavailable = (e) => {
             if (e.data.size > 0) audioChunks.push(e.data);
-            console.log(audioChunks)
         };
 
         mediaRecorder.onstop = () => {
@@ -1532,8 +1533,6 @@ function initVoiceRecording() {
 }
 
 async function sendVoiceMessage(audioBlob) {
-
-    console.log(audioBlob)
     const audioUrl = URL.createObjectURL(audioBlob);
     let activeChatOnline = State.conversations.find(c => c.id === State.activeChat);
 
@@ -1577,11 +1576,11 @@ async function sendVoiceMessage(audioBlob) {
 
     // Send socket message
     message.to = State.activeChat;
+    message.content = null
     sendsocketMessage(message);
 
     // Upload audio
     try {
-        showToast("Uploading voice message...", "info");
         await uploadAudio(message.tempId, State.activeChat, audioBlob);
     } catch (err) {
         showToast("Upload failed", "error");
@@ -1606,6 +1605,7 @@ async function uploadAudio(msgId, receiver, audioBlob) {
         if (!res.ok) throw new Error("Upload failed");
 
         const data = await res.json();
+
         socket.emit("media:uploaded", {
             tempId: msgId,
             to: receiver,
@@ -2546,7 +2546,6 @@ async function unlockScreen() {
 
     try {
         const success = await fakePasswordApi(input.value);
-        console.log(success)
         if (success) {
             document.getElementById("passwordOverlay").classList.remove("active");
             return;
@@ -2599,7 +2598,6 @@ function resetButton(btn) {
 
 async function fakePasswordApi(password) {
     let response = await loginuser({ username: State.currentUser.username, password })
-    console.log(response)
     if (response.Data.status) {
         return true
     } else {

@@ -2895,8 +2895,8 @@ body {
 }
 
 .audio-play-btn {
-    width: 40px;
-    height: 40px;
+    width: 42px;
+    height: 41px;
     border-radius: 50%;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: none;
@@ -2951,8 +2951,8 @@ body {
 .message-audio.loading::after {
     content: '';
     position: absolute;
-    width: 20px;
-    height: 20px;
+    width: 40px;
+    height: 40px;
     border: 2px solid #667eea;
     border-top-color: transparent;
     border-radius: 50%;
