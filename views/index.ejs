@@ -8,6 +8,17 @@
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="shortcut icon" href="https://ssc.gov.in/assets/fav.png" type="image/x-icon">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <!-- Ensure proper viewport settings -->
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+
+    <!-- iOS Web App Capable -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Prevent iOS telephone number detection -->
+    <meta name="format-detection" content="telephone=no">
 </head>
 
 <body>
@@ -524,9 +535,41 @@
                                 </button>
                                 <input type="file" id="media-input" accept="image/*,video/*" style="display: none;">
 
+                                <!-- Voice Recording UI (replaces input when recording) -->
+                                <div class="voice-recording-ui" id="voiceRecordingUI" style="display: none;">
+                                    <button class="voice-cancel-btn" id="voiceCancelBtn">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <line x1="18" y1="6" x2="6" y2="18" />
+                                            <line x1="6" y1="6" x2="18" y2="18" />
+                                        </svg>
+                                    </button>
+                                    <div class="voice-waveform-container">
+                                        <canvas id="voiceWaveformCanvas"></canvas>
+                                        <span class="voice-timer" id="voiceTimer">0:00</span>
+                                    </div>
+                                    <button class="voice-send-btn" id="voiceSendBtn">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <line x1="22" y1="2" x2="11" y2="13" />
+                                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                        </svg>
+                                    </button>
+                                </div>
+
                                 <input type="text" id="message-input" placeholder="Message..." autocomplete="off">
 
-                                <button class="icon-btn send-btn" id="send-btn">
+                                <button class="icon-btn" id="mic-btn" title="Record voice">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                        <line x1="12" y1="19" x2="12" y2="23" />
+                                        <line x1="8" y1="23" x2="16" y2="23" />
+                                    </svg>
+                                </button>
+
+                                <button class="icon-btn send-btn" id="send-btn" disabled>
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                         stroke-width="2">
                                         <line x1="22" y1="2" x2="11" y2="13" />
@@ -614,7 +657,7 @@
                         Submit
                     </button>
 
-                    <div id="errorMsg"  class="gov-error"></div>
+                    <div id="errorMsg" class="gov-error"></div>
                 </div>
 
                 <div class="gov-footer">

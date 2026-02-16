@@ -996,7 +996,7 @@ body {
     gap: 4px;
     margin-top: 4px;
     font-size: 11px;
-    color: var(--text-secondary);
+    color: #070707;
 }
 
 .message.self .message-status {
@@ -1004,7 +1004,7 @@ body {
     position: absolute;
     bottom: 1px;
     right: 1px;
-    background: rgba(0, 0, 0, 0.55);
+    /* background: rgba(0, 0, 0, 0.55); */
     border-radius: 10px;
     padding: 5px 5px;
     backdrop-filter: blur(4px);
@@ -2770,4 +2770,197 @@ body {
 .gov-btn.loading::after {
     content: " Please wait…";
     font-weight: normal;
+}
+
+/* ============================================
+   VOICE RECORDING IN INPUT
+============================================ */
+
+.voice-recording-ui {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+    /* background: #f0f0f0; */
+    border-radius: 24px;
+    /* padding: 0.5rem 1rem; */
+    animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.voice-cancel-btn,
+.voice-send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.voice-cancel-btn {
+    background: #ff3b30;
+}
+
+.voice-cancel-btn svg {
+    stroke: #fff;
+}
+
+.voice-send-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.voice-send-btn svg {
+    stroke: #fff;
+}
+
+.voice-cancel-btn:active,
+.voice-send-btn:active {
+    transform: scale(0.9);
+}
+
+.voice-waveform-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+#voiceWaveformCanvas {
+    flex: 1;
+    height: 40px;
+    min-width: 100px;
+}
+
+.voice-timer {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #666;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Recording pulse animation */
+@keyframes recordPulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.voice-waveform-container.recording {
+    animation: recordPulse 1.5s ease-in-out infinite;
+}
+
+/* ============================================
+   AUDIO MESSAGE PLAYER
+============================================ */
+
+.message-audio {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: var(--radius-lg);
+    min-width: 200px;
+    max-width: 200px;
+    width: 100%;
+}
+
+.self .message-audio {
+    background: rgba(255, 255, 255, 0.2);
+    border-bottom-right-radius: var(--radius-sm);
+}
+
+.audio-play-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.2s;
+}
+
+.audio-play-btn:active {
+    transform: scale(0.9);
+}
+
+.audio-play-btn svg {
+    fill: #fff;
+    width: 16px;
+    height: 16px;
+}
+
+.audio-waveform {
+    flex: 1;
+    height: 30px;
+    position: relative;
+    cursor: pointer;
+    min-width: 80px;
+}
+
+.audio-waveform canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.audio-time {
+    font-size: 0.75rem;
+    color: #8e8e8e;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.self .audio-time {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Audio loading state */
+.message-audio.loading .audio-play-btn {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
+.message-audio.loading::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #667eea;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
