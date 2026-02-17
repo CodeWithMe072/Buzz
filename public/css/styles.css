@@ -536,7 +536,7 @@ body {
 }
 
 .icon-btn {
-    width: 44px;
+    width: 31px;
     height: 44px;
     border: none;
     background: transparent;
@@ -1150,6 +1150,7 @@ body {
     font-family: var(--font-primary);
     color: var(--text-primary);
     outline: none;
+    width: 121px;
 }
 
 .chat-input input::placeholder {
@@ -1396,7 +1397,7 @@ body {
     .avatar,
     .reaction,
     .emoji-btn {
-        min-width: 44px;
+        min-width: 31px;
         min-height: 44px;
     }
 
@@ -2962,5 +2963,288 @@ body {
 @keyframes spin {
     to {
         transform: rotate(360deg);
+    }
+}
+/* =============================================================================
+   Audio Call Modals - Instagram Style
+   ============================================================================= */
+
+.call-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.call-modal {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    width: 100%;
+    max-width: 400px;
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Call Avatar */
+.call-avatar-container {
+    position: relative;
+    margin-bottom: 32px;
+}
+
+.call-avatar {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    font-weight: 600;
+    color: white;
+    text-transform: uppercase;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    position: relative;
+    z-index: 2;
+}
+
+.call-avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.call-avatar-ring {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    z-index: 1;
+}
+
+.call-avatar-ring.pulsing {
+    animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-ring {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.5;
+    }
+}
+
+/* Call Info */
+.call-username {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+.call-status {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.call-timer {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 40px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Call Controls */
+.call-controls {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 40px;
+}
+
+.call-control-btn {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.call-control-btn:active {
+    transform: scale(0.95);
+}
+
+.call-control-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.call-control-btn.end-call-btn {
+    background: #ef4444;
+    width: 72px;
+    height: 72px;
+    transform: rotate(135deg);
+}
+
+.call-control-btn.end-call-btn:hover {
+    background: #dc2626;
+}
+
+.call-control-btn.end-call-btn:active {
+    transform: rotate(135deg) scale(0.95);
+}
+
+.call-control-btn.end-call-btn svg {
+    transform: rotate(-135deg);
+}
+
+.call-control-btn.active {
+    background: var(--accent-blue);
+}
+
+.call-control-btn.muted {
+    background: #ef4444;
+}
+
+/* Incoming Call Controls */
+.incoming-call-controls {
+    display: flex;
+    gap: 48px;
+    align-items: center;
+    justify-content: center;
+    margin-top: 60px;
+}
+
+.incoming-call-btn {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.incoming-call-btn:active {
+    transform: scale(0.95);
+}
+
+.incoming-call-btn.decline-btn {
+    background: #ef4444;
+    color: white;
+    transform: rotate(135deg);
+}
+
+.incoming-call-btn.decline-btn svg {
+    transform: rotate(-135deg);
+}
+
+.incoming-call-btn.decline-btn:hover {
+    background: #dc2626;
+}
+
+.incoming-call-btn.accept-btn {
+    background: #22c55e;
+    color: white;
+}
+
+.incoming-call-btn.accept-btn:hover {
+    background: #16a34a;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Ringing animation for incoming calls */
+#incoming-call-modal .call-avatar-container {
+    animation: shake 0.5s ease-in-out infinite;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px) rotate(-2deg); }
+    75% { transform: translateX(5px) rotate(2deg); }
+}
+
+/* Mobile Responsive */
+@media (max-width: 480px) {
+    .call-avatar {
+        width: 120px;
+        height: 120px;
+        font-size: 42px;
+    }
+    
+    .call-username {
+        font-size: 24px;
+    }
+    
+    .call-control-btn {
+        width: 56px;
+        height: 56px;
+    }
+    
+    .call-control-btn.end-call-btn {
+        width: 64px;
+        height: 64px;
+    }
+    
+    .incoming-call-btn {
+        width: 64px;
+        height: 64px;
+    }
+    
+    .incoming-call-controls {
+        gap: 36px;
     }
 }
