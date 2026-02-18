@@ -2541,6 +2541,9 @@ async function unlockScreen() {
         const success = await fakePasswordApi(input.value);
         if (success) {
             document.getElementById("passwordOverlay").classList.remove("active");
+            btn.disabled = false;
+            btn.classList.remove("loading");
+            btn.textContent = "submit";
             return;
         }
 
@@ -2601,3 +2604,120 @@ async function fakePasswordApi(password) {
 document.getElementById("passwordInput").addEventListener("keydown", e => {
     if (e.key === "Enter") unlockScreen();
 });
+
+// ========================================
+// SHOW MEDIA BUTTON FUNCTIONALITY
+// ========================================
+
+document.getElementById("chatOption-ShowMedia").addEventListener("click", async () => {
+    // Show password overlay
+    document.getElementById("chatOption").classList.remove("active");
+    const passwordOverlay = document.getElementById("passwordOverlay");
+    const passwordInput = document.getElementById("passwordInput");
+    const errorMsg = document.getElementById("errorMsg");
+
+    // Reset password input
+    passwordInput.value = "";
+    errorMsg.textContent = "";
+    remainingAttempts = MAX_ATTEMPTS;
+
+    // Show overlay
+    passwordOverlay.classList.add("active");
+
+    // Override the unlock function temporarily
+    const originalUnlock = window.unlockScreen;
+    window.unlockScreen = async function () {
+        const btn = document.getElementById("submitBtn");
+        const input = document.getElementById("passwordInput");
+        const error = document.getElementById("errorMsg");
+
+        if (btn.disabled) return;
+
+        error.textContent = "";
+
+        // UI → loading
+        btn.disabled = true;
+        btn.classList.add("loading");
+        btn.textContent = "Verifying";
+
+        try {
+            const success = await fakePasswordApi(input.value);
+            if (success) {
+                // Password verified - fetch and show media
+                await fetchAndShowAllMedia();
+                document.getElementById("passwordOverlay").classList.remove("active");
+
+                // Restore original unlock function
+                window.unlockScreen = originalUnlock;
+                document.querySelectorAll("input[type=text]").forEach(input => input.value = "")
+
+                return;
+            }
+
+            remainingAttempts--;
+
+            if (remainingAttempts <= 0) {
+                blockUser(btn, input, error);
+                setTimeout(() => {
+                    window.unlockScreen = originalUnlock;
+                }, 3000);
+                return;
+            }
+
+            error.textContent = getAttemptMessage(remainingAttempts);
+            resetButton(btn);
+
+        } catch (err) {
+            error.textContent = "Server error. Please try again later.";
+            resetButton(btn);
+        }
+    };
+});
+
+async function fetchAndShowAllMedia() {
+    try {
+        // Show loading indicator
+        const loaderOverlay = document.getElementById("loader-overlay");
+        loaderOverlay.style.display = "flex";
+
+        // Fetch all media messages from the API
+        const response = await fetch(`/api/chats/media/${State.activeChat}-${State.currentUser.id}`);
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch media messages');
+        }
+
+        const data = await response.json();
+        console.log(data.data)
+        const messages = data.data || [];
+
+        // Filter only media messages (image, video, audio)
+        const mediaMessages = messages
+        console.log(mediaMessages)
+        if (mediaMessages.length === 0) {
+            loaderOverlay.style.display = "none";
+            showToast("No media found in this chat", "info");
+            return;
+        }
+
+        // Clear existing media items in viewer
+        viewer.mediaItems = [];
+        viewer.currentIndex = 0;
+
+        // Add all media to viewer
+        mediaMessages.forEach(msg => {
+            viewer.addItem(msg);
+        });
+
+        // Hide loader
+        loaderOverlay.style.display = "none";
+
+        // Open viewer with first media item
+        viewer.open(0);
+    } catch (error) {
+        console.error("Error fetching media:", error);
+        const loaderOverlay = document.getElementById("loader-overlay");
+        loaderOverlay.style.display = "none";
+        showToast("Failed to load media. Please try again.", "error");
+    }
+}
