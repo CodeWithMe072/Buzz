@@ -2179,6 +2179,10 @@ class MediaViewer {
         this.mediaItems = [];
         this.currentIndex = 0;
 
+        // frontend pagination config
+        this.chunkSize = 10;
+        this.renderedCount = 0;
+
         this.overlay = document.getElementById('mediaViewer');
         this.container = document.getElementById('mediaContainer');
         this.thumbnailContainer = document.getElementById('thumbnailContainer');
@@ -2206,10 +2210,12 @@ class MediaViewer {
                 index,
                 id: m.id ?? m.tempId,
                 type: m.type,
-                src: m.content,         // full media
-                thumb: m.thumb || null, // 🔑 image thumbnail
-                cover: m.cover || null  // video poster
+                src: m.content,
+                thumb: m.thumb || null,
+                cover: m.cover || null
             }));
+
+        this.renderedCount = 0;
     }
 
     getIndexByMessageId(messageId) {
@@ -2226,7 +2232,9 @@ class MediaViewer {
         this.currentIndex = index;
         this.overlay.classList.add('active');
         document.body.style.overflow = 'hidden';
-        this.render();
+
+        // render only needed chunk
+        this.render(true);
     }
 
     close() {
@@ -2241,66 +2249,96 @@ class MediaViewer {
         if (next < 0 || next >= this.mediaItems.length) return;
 
         this.currentIndex = next;
+
+        // if user is near end of rendered chunk, render more
+        if (this.currentIndex >= this.renderedCount - 3) {
+            this.renderMore();
+        }
+
         this.updateMedia();
     }
 
     /* ================= RENDER ================= */
 
-    render() {
-        this.container.innerHTML = '';
-        this.thumbnailContainer.innerHTML = '';
+    render(reset = false) {
+        if (reset) {
+            this.container.innerHTML = '';
+            this.thumbnailContainer.innerHTML = '';
+            this.renderedCount = 0;
+        }
 
-        this.mediaItems.forEach((item, index) => {
+        // ensure currentIndex is inside rendered area
+        const requiredCount = Math.max(this.currentIndex + 1, this.chunkSize);
 
-            /* ----- MAIN SLIDE ----- */
-            const slide = document.createElement('div');
-            slide.className = 'media-slide';
-            slide.dataset.index = index;
-            if (index === this.currentIndex) slide.classList.add('active');
-
-            if (item.type === 'video') {
-                const video = document.createElement('video');
-                video.src = item.src;
-                video.controls = true;
-                if (index === this.currentIndex) video.autoplay = true;
-                slide.appendChild(video);
-            } else {
-                const img = document.createElement('img');
-                img.src = item.src; // 🔑 original image
-                slide.appendChild(img);
-            }
-
-            this.container.appendChild(slide);
-
-            /* ----- THUMBNAIL ----- */
-            const thumb = document.createElement('div');
-            thumb.className = 'thumbnail-item';
-            thumb.dataset.index = index;
-            if (index === this.currentIndex) thumb.classList.add('active');
-
-            const img = document.createElement('img');
-
-            if (item.type === 'image') {
-                // ✅ images use thumb ONLY
-                img.src = item.thumb || item.src;
-            } else {
-                // ✅ videos: cover → thumb → content
-                img.src = item.cover || item.thumb || item.src;
-                thumb.classList.add('video');
-            }
-
-            img.loading = "lazy";
-            thumb.appendChild(img);
-
-            thumb.addEventListener('click', () => {
-                this.currentIndex = index;
-                this.updateMedia();
-            });
-
-            this.thumbnailContainer.appendChild(thumb);
-        });
+        while (this.renderedCount < requiredCount && this.renderedCount < this.mediaItems.length) {
+            this.appendItem(this.mediaItems[this.renderedCount], this.renderedCount);
+            this.renderedCount++;
+        }
 
         this.updateControls();
+        this.updateMedia();
+    }
+
+    renderMore() {
+        const target = Math.min(this.renderedCount + this.chunkSize, this.mediaItems.length);
+
+        while (this.renderedCount < target) {
+            this.appendItem(this.mediaItems[this.renderedCount], this.renderedCount);
+            this.renderedCount++;
+        }
+
+        this.updateControls();
+    }
+
+    appendItem(item, index) {
+        /* ----- MAIN SLIDE ----- */
+        const slide = document.createElement('div');
+        slide.className = 'media-slide';
+        slide.dataset.index = index;
+
+        if (item.type === 'video') {
+            const video = document.createElement('video');
+            video.src = item.src;
+            video.controls = true;
+            slide.appendChild(video);
+        } else {
+            const img = document.createElement('img');
+            img.loading = "lazy";
+            img.src = item.src;
+            slide.appendChild(img);
+        }
+
+        this.container.appendChild(slide);
+
+        /* ----- THUMBNAIL ----- */
+        const thumb = document.createElement('div');
+        thumb.className = 'thumbnail-item';
+        thumb.dataset.index = index;
+
+        const img = document.createElement('img');
+        img.loading = "lazy";
+
+        if (item.type === 'image') {
+            img.src = item.thumb || item.src;
+        } else {
+            img.src = item.cover || item.thumb || item.src;
+            thumb.classList.add('video');
+        }
+
+        thumb.appendChild(img);
+
+        thumb.addEventListener('click', () => {
+            this.currentIndex = index;
+
+            // if user clicks a thumbnail not yet rendered (rare case)
+            if (this.currentIndex >= this.renderedCount - 1) {
+                this.renderMore();
+            }
+
+            this.updateMedia();
+        });
+
+        this.thumbnailContainer.appendChild(thumb);
     }
 
     updateMedia() {
@@ -2314,6 +2352,7 @@ class MediaViewer {
 
         this.thumbnailContainer.querySelectorAll('.thumbnail-item').forEach((t, i) => {
             t.classList.toggle('active', i === this.currentIndex);
+
             if (i === this.currentIndex) {
                 t.scrollIntoView({ block: 'nearest', inline: 'center' });
             }
@@ -2364,6 +2403,17 @@ class MediaViewer {
             this.touchEndX = e.clientX;
             this.handleSwipe();
         });
+
+        // load more thumbnails if user scrolls near end
+        this.thumbnailContainer.addEventListener("scroll", () => {
+            const nearEnd =
+                this.thumbnailContainer.scrollLeft + this.thumbnailContainer.clientWidth >=
+                this.thumbnailContainer.scrollWidth - 200;
+
+            if (nearEnd && this.renderedCount < this.mediaItems.length) {
+                this.renderMore();
+            }
+        });
     }
 
     handleSwipe() {
@@ -2371,18 +2421,32 @@ class MediaViewer {
         if (Math.abs(diff) < 50) return;
         diff > 0 ? this.navigate(1) : this.navigate(-1);
     }
+
     addItem(msg) {
-        const index = this.mediaItems.length
+        if (!msg || !msg.content) return;
+        if (!(msg.type === "image" || msg.type === "video")) return;
+
+        const index = this.mediaItems.length;
+
         this.mediaItems.push({
             index,
             id: msg.id ?? msg.tempId,
             type: msg.type,
-            src: msg.content,         // full media
-            thumb: msg.thumb || null, // 🔑 image thumbnail
-            cover: msg.cover || null  // video poster
-        })
+            src: msg.content,
+            thumb: msg.thumb || null,
+            cover: msg.cover || null
+        });
+
+        // if viewer is open, only render if user is near end
+        if (this.overlay.classList.contains("active")) {
+            if (this.currentIndex >= this.renderedCount - 3) {
+                this.renderMore();
+            }
+            this.updateControls();
+        }
     }
 }
+
 
 
 // ========================================
