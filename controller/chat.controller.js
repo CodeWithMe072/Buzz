@@ -133,3 +133,49 @@ export const deleteChat = async (req, res) => {
         });
     }
 };
+
+export const getmedia = async (req, res) => {
+    try {
+        const chat_key = req.params.chat_key;
+
+        if (!chat_key) {
+            return res.status(400).json({
+                status: false,
+                message: "chat_key is required"
+            });
+        }
+
+        const [sender, receiver] = chat_key.split("-");
+
+        if (!sender || !receiver) {
+            return res.status(400).json({
+                status: false,
+                message: "Invalid chat_key format"
+            });
+        }
+
+        const media = await Message.find({
+            $or: [
+                { from: sender, to: receiver },
+                { from: receiver, to: sender }
+            ],
+            type: { $in: ["image", "video"] }
+        })
+            .select("type content cover thumb caption createdAt from to deletedFor autoDeleted")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            status: true,
+            message: "All media fetched successfully",
+            total: media.length,
+            data: media
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            status: false,
+            message: "Failed to fetch media"
+        });
+    }
+};
