@@ -191,8 +191,6 @@ function updateMessageSeenByTempId(chatId) {
     </svg>`;
 
             messageStatus.innerHTML = statusIcon
-
-
         }
     });
 }
@@ -1261,6 +1259,26 @@ function initChatWindow() {
         }
     });
 
+    document.addEventListener("paste", async (e) => {
+
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        for (let item of items) {
+
+            if (item.type.startsWith("image/")) {
+
+                e.preventDefault();
+
+                const blob = item.getAsFile();
+
+                if (!blob) return;
+
+                handlePastedImage(blob);
+            }
+        }
+    });
+
     // Send message on Enter (desktop)
     messageInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -1299,52 +1317,7 @@ function initChatWindow() {
             mediaInput.value = "";
             return;
         }
-        const fileUrl = URL.createObjectURL(file);
-        let activeChatOnline = State.conversations.find(c => c.id == State.activeChat)
-        const message = {
-            tempId: generateId(),
-            type: file.type.split("/")[0],
-            content: fileUrl,
-            uploadStatus: "uploading", // uploading | failed | uploaded
-            uploadProgress: 0,
-            caption: null,
-            clientTime: Date.now(),
-            replyTo: State.replyingTo,
-            user: State.currentUser.username,
-            status: { sent: true, delivered: activeChatOnline.online, seen: false },
-            timestamp: Date.now()
-        };
-        const conv = State.conversations.find(c => c.id === State.activeChat);
-        if (conv) {
-            conv.lastMessage = `📷 ${file.type.split("/")[0]}`;
-            conv.timestamp = Date.now();
-        }
-        const messagesContainer = document.getElementById('messages');
-
-
-        const messageEl = createMessageElement(message);
-        messagesContainer.appendChild(messageEl);
-
-
-        // Scroll to bottom
-        const container = document.getElementById('messages-container');
-        container.scrollTop = container.scrollHeight;
-        renderChatList()
-        // ✅ Send Cloudinary URL to chat
-        sendMessage(message.type, null, message.tempId);
-
-        try {
-            showToast("Uploading...", "info");
-
-            uploadMedia(message.tempId, State.activeChat, file)
-
-
-        } catch (err) {
-            showToast("Upload failed", "error");
-            console.error(err);
-        } finally {
-            mediaInput.value = ""; // reset
-        }
+        handelMedia(file)
     });
     initVoiceRecording()
     // Back button (mobile)
@@ -1359,6 +1332,66 @@ function initChatWindow() {
         State.replyingTo = null;
         document.getElementById('reply-preview').style.display = 'none';
     });
+}
+
+async function handelMedia(file) {
+    const fileUrl = URL.createObjectURL(file);
+    let activeChatOnline = State.conversations.find(c => c.id == State.activeChat)
+    const message = {
+        tempId: generateId(),
+        type: file.type.split("/")[0],
+        content: fileUrl,
+        uploadStatus: "uploading", // uploading | failed | uploaded
+        uploadProgress: 0,
+        caption: null,
+        clientTime: Date.now(),
+        replyTo: State.replyingTo,
+        user: State.currentUser.username,
+        status: { sent: true, delivered: activeChatOnline.online, seen: false },
+        timestamp: Date.now()
+    };
+    const conv = State.conversations.find(c => c.id === State.activeChat);
+    if (conv) {
+        conv.lastMessage = `📷 ${file.type.split("/")[0]}`;
+        conv.timestamp = Date.now();
+    }
+    const messagesContainer = document.getElementById('messages');
+
+
+    const messageEl = createMessageElement(message);
+    messagesContainer.appendChild(messageEl);
+
+
+    // Scroll to bottom
+    const container = document.getElementById('messages-container');
+    container.scrollTop = container.scrollHeight;
+    renderChatList()
+    // ✅ Send Cloudinary URL to chat
+    sendMessage(message.type, null, message.tempId);
+
+    try {
+        showToast("Uploading...", "info");
+
+        uploadMedia(message.tempId, State.activeChat, file)
+
+
+    } catch (err) {
+        showToast("Upload failed", "error");
+        console.error(err);
+    } finally {
+        mediaInput.value = ""; // reset
+    }
+}
+
+function handlePastedImage(blob) {
+
+    const file = new File(
+        [blob],
+        `pasted-${Date.now()}.png`,
+        { type: blob.type }
+    );
+
+    handelMedia(file);
 }
 // =============================================================================
 // VOICE RECORDING SYSTEM
@@ -1524,6 +1557,8 @@ function initVoiceRecording() {
             `${minutes}:${seconds.toString().padStart(2, '0')}`;
     }
 }
+
+
 
 async function sendVoiceMessage(audioBlob) {
     const audioUrl = URL.createObjectURL(audioBlob);

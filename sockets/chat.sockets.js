@@ -3,233 +3,300 @@ import { Message } from "../models/message.model.js";
 import { User } from "../models/user.model.js";
 import { telegramService } from "../services/telegram.service.js";
 
+// Key: userId, Value: Set of socket IDs
 const onlineUsers = new Map();
 
 export default function initSocket(io) {
-  io.on("connection", (socket) => {
-    const userId = socket.handshake.auth.userId;
-    if (!userId) return socket.disconnect(true);
+    io.on("connection", (socket) => {
 
-    onlineUsers.set(userId, socket.id);
-
-    // 🔥 BULK DELIVERY ON CONNECT
-    Message.find({
-      to: userId,
-      "status.delivered": false
-    })
-      .select("tempId from")
-      .then((messages) => {
-        if (!messages.length) return;
-
-        Message.updateMany(
-          {
-            to: userId,
-            "status.delivered": false
-          },
-          {
-            $set: {
-              "status.delivered": true,
-              deliveredAt: new Date()
-            }
-          }
-        ).catch(err => console.log(err));
-
-        for (const msg of messages) {
-          const senderSocketId = onlineUsers.get(msg.from);
-          if (!senderSocketId) continue;
-
-          io.to(senderSocketId).emit("message:delivered", {
-            tempId: msg.tempId
-          });
+        const userId = socket.handshake.auth?.userId;
+        if (!userId) {
+            socket.disconnect(true);
+            return;
         }
-      })
-      .catch(err => console.log(err));
 
-    socket.broadcast.emit("user:online", { userId });
-    socket.emit("online:list", {
-      users: Array.from(onlineUsers.keys())
-    });
+        /* =============================
+           MULTI DEVICE TRACKING
+        ============================== */
 
-    socket.on("private_message", async (payload) => {
-      const {
-        tempId, to, type, caption, replyTo, clientTime
-      } = payload.message;
-      let { content } = payload.message;
+        if (!onlineUsers.has(userId)) {
+            onlineUsers.set(userId, new Set());
+        }
 
-      if (!tempId || !to || !type) return;
+        onlineUsers.get(userId).add(socket.id);
+        socket.join(userId);
 
-      const receiverSocketId = onlineUsers.get(to);
-      const isReceiverOnline = Boolean(receiverSocketId);
+        const isFirstDevice = onlineUsers.get(userId).size === 1;
 
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("private_message", {
-          id: tempId,
-          from: userId,
-          type,
-          content,
-          caption,
-          replyTo,
-          timestamp: Date.now(),
-          status: { delivered: true }
+        if (isFirstDevice) {
+            socket.broadcast.emit("user:online", { userId });
+        }
+
+        socket.emit("online:list", {
+            users: Array.from(onlineUsers.keys())
         });
-      }
 
-      socket.emit("message_ack", { tempId, status: "sent" });
-      content = content ? content : " ";
+        /* =============================
+           PRIVATE MESSAGE
+        ============================== */
 
-      // 🔥 SEND TELEGRAM NOTIFICATION IF USER IS OFFLINE
-      if (!isReceiverOnline) {
-        try {
-          // Find users by 'extra' field (Telegram ID), not by MongoDB _id
-          const [receiver, sender] = await Promise.all([
-            User.findOne({ extra: to }).select('telegramChatId notificationsEnabled username'),
-            User.findOne({ extra: userId }).select('username')
-          ]);
+        socket.on("private_message", async (payload) => {
+            try {
+                const { tempId, to, type, caption, replyTo, clientTime } = payload.message;
+                let { content } = payload.message;
 
-          if (receiver?.telegramChatId && receiver?.notificationsEnabled) {
-            const senderName = sender?.username || 'Someone';
-            let messagePreview = '';
+                if (!tempId || !to || !type) return;
 
-            switch (type) {
-              case 'text':
-                messagePreview = content.length > 50
-                  ? content.substring(0, 50) + '...'
-                  : content;
-                break;
-              case 'image':
-                messagePreview = caption || 'Sent a photo';
-                break;
-              case 'video':
-                messagePreview = caption || 'Sent a video';
-                break;
-              case 'audio':
-                messagePreview = 'Sent a voice message';
-                break;
-              case 'file':
-                messagePreview = caption || 'Sent a file';
-                break;
-              default:
-                messagePreview = 'Sent a message';
+                content = content || " ";
+
+                const receiverSockets = onlineUsers.get(to);
+                const isReceiverOnline = receiverSockets && receiverSockets.size > 0;
+
+                // 1️⃣ SAVE FIRST (prevents ghost messages)
+                const newMessage = await Message.create({
+                    tempId,
+                    from: userId,
+                    to,
+                    type,
+                    content,
+                    caption,
+                    replyTo,
+                    clientTime,
+                    status: {
+                        sent: true,
+                        delivered: false,
+                        seen: false
+                    }
+                });
+
+                socket.emit("message_saved", {
+                    tempId,
+                    mongoId: newMessage._id
+                });
+
+                // 2️⃣ EMIT TO RECEIVER DEVICES
+                io.to(to).emit("private_message", {
+                    id: tempId,
+                    from: userId,
+                    type,
+                    content,
+                    caption,
+                    replyTo,
+                    timestamp: Date.now(),
+                    status: { delivered: false }
+                });
+
+                // 3️⃣ SYNC TO SENDER OTHER DEVICES
+                socket.to(userId).emit("private_message_sync", {
+                    tempId,
+                    to,
+                    type,
+                    content,
+                    caption,
+                    timestamp: Date.now()
+                });
+
+                socket.emit("message_ack", {
+                    tempId,
+                    status: "sent"
+                });
+
+                // 4️⃣ DELIVERY UPDATE (only if online)
+                if (isReceiverOnline) {
+                    await Message.updateOne(
+                        { _id: newMessage._id },
+                        {
+                            $set: {
+                                "status.delivered": true,
+                                deliveredAt: new Date()
+                            }
+                        }
+                    );
+
+                    io.to(userId).emit("message:delivered", { tempId });
+                }
+
+                // 5️⃣ TELEGRAM NOTIFICATION (ONLY if fully offline)
+                if (!isReceiverOnline) {
+                    const receiver = await User.findOne({ extra: to })
+                        .select("telegramChatId notificationsEnabled");
+
+                    if (receiver?.telegramChatId && receiver?.notificationsEnabled) {
+                        const sender = await User.findOne({ extra: userId })
+                            .select("username");
+
+                        const senderName = sender?.username || "Someone";
+
+                        const notification =
+                            telegramService.formatMessageNotification(
+                                senderName,
+                                type,
+                                type === "text"
+                                    ? content.substring(0, 50)
+                                    : (caption || `Sent a ${type}`)
+                            );
+
+                        await telegramService.sendNotification(
+                            receiver.telegramChatId,
+                            notification
+                        );
+                    }
+                }
+
+            } catch (error) {
+                console.error("Private Message Error:", error);
             }
-
-            const notification = telegramService.formatMessageNotification(
-              senderName,
-              type,
-              messagePreview
-            );
-
-            await telegramService.sendNotification(
-              receiver.telegramChatId,
-              notification
-            );
-
-          }
-        } catch (error) {
-          console.error('❌ Error sending Telegram notification:', error);
-        }
-      }
-
-      Message.create({
-        tempId,
-        from: userId,
-        to,
-        type,
-        content,
-        caption,
-        replyTo,
-        clientTime,
-        deletedFor: [],
-        status: {
-          sent: true,
-          delivered: isReceiverOnline,
-          seen: false
-        }
-      }).then(doc => {
-        socket.emit("message_saved", {
-          tempId,
-          mongoId: doc._id
         });
-      }).catch(err => console.log(err));
-    });
 
-    socket.on("typing:start", ({ to }) => {
-      const target = onlineUsers.get(to);
-      if (target) io.to(target).emit("typing:start", { user: userId });
-    });
+        /* =============================
+           DELIVERY SYNC AFTER CONNECT
+        ============================== */
 
-    socket.on("typing:stop", ({ to }) => {
-      const target = onlineUsers.get(to);
-      if (target) io.to(target).emit("typing:stop", { user: userId });
-    });
+        socket.on("sync:delivered", async () => {
+            try {
+                const undelivered = await Message.find({
+                    to: userId,
+                    "status.delivered": false
+                }).select("_id tempId from");
 
-    socket.on("media:uploaded", async ({ tempId, to, url, cover, thumb, mediaType }) => {
-      const receiverSocketId = onlineUsers.get(to);
+                if (!undelivered.length) return;
 
-      const payload = {
-        tempId,
-        url,
-        cover,
-        thumb,
-        mediaType
-      };
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("media:uploaded", payload);
-      }
+                const ids = undelivered.map(m => m._id);
 
-      socket.emit("media:uploaded", payload);
+                await Message.updateMany(
+                    { _id: { $in: ids } },
+                    {
+                        $set: {
+                            "status.delivered": true,
+                            deliveredAt: new Date()
+                        }
+                    }
+                );
 
-      try {
-        await Message.updateOne(
-          { tempId },
-          {
-            $set: {
-              content: url,
-              type: mediaType,
-              cover: cover ?? null,
-              thumb: thumb ?? null
+                undelivered.forEach(msg => {
+                    io.to(msg.from).emit("message:delivered", {
+                        tempId: msg.tempId
+                    });
+                });
+
+            } catch (error) {
+                console.error("Delivery Sync Error:", error);
             }
-          }
-        );
-      } catch (err) {
-        console.error("Mongo update failed:", err);
-      }
+        });
+
+        /* =============================
+           TYPING EVENTS
+        ============================== */
+
+        socket.on("typing:start", ({ to }) => {
+            io.to(to).emit("typing:start", { user: userId });
+        });
+
+        socket.on("typing:stop", ({ to }) => {
+            io.to(to).emit("typing:stop", { user: userId });
+        });
+
+        /* =============================
+           MEDIA UPLOAD UPDATE
+        ============================== */
+
+        socket.on("media:uploaded", async (payload) => {
+            try {
+                const { to, tempId, url, mediaType, cover, thumb } = payload;
+
+                if (!tempId) return;
+
+                // 1️⃣ Update DB first (single source of truth)
+                const updated = await Message.findOneAndUpdate(
+                    { tempId, from: userId },
+                    {
+                        $set: {
+                            content: url,
+                            type: mediaType,
+                            cover,
+                            thumb,
+                            "status.mediaReady": true
+                        }
+                    },
+                    { new: true }
+                );
+
+                if (!updated) return;
+
+                const emitPayload = {
+                    tempId,
+                    url,
+                    mediaType,
+                    cover,
+                    thumb,
+                    mediaReady: true
+                };
+
+                // 2️⃣ Emit to RECEIVER (all devices)
+                io.to(to).emit("media:uploaded", emitPayload);
+
+                // 3️⃣ Emit to SENDER (all devices including uploader)
+                io.to(userId).emit("media:uploaded", emitPayload);
+
+            } catch (err) {
+                console.error("Media update failed:", err);
+            }
+        });
+
+        /* =============================
+           SEEN STATUS
+        ============================== */
+
+        socket.on("chat:seen", async ({ from }) => {
+            try {
+                await Message.updateMany(
+                    {
+                        from,
+                        to: userId,
+                        "status.delivered": true,
+                        "status.seen": false
+                    },
+                    {
+                        $set: {
+                            "status.seen": true,
+                            seenAt: new Date()
+                        }
+                    }
+                );
+
+                io.to(from).emit("message:seen", { by: userId });
+                socket.to(userId).emit("chat:seen_sync", { from });
+
+            } catch (error) {
+                console.error("Seen update error:", error);
+            }
+        });
+
+        /* =============================
+           DISCONNECT
+        ============================== */
+
+        socket.on("disconnect", async () => {
+            const userSockets = onlineUsers.get(userId);
+
+            if (!userSockets) return;
+
+            userSockets.delete(socket.id);
+
+            if (userSockets.size === 0) {
+                onlineUsers.delete(userId);
+
+                socket.broadcast.emit("user:offline", { userId });
+
+                try {
+                    await User.updateOne(
+                        { extra: userId },
+                        { $set: { lastSeen: new Date() } }
+                    );
+                } catch (err) {
+                    console.error("LastSeen update failed:", err);
+                }
+            }
+        });
     });
-
-
-    socket.on("chat:seen", ({ from }) => {
-      const to = userId;
-
-      Message.updateMany(
-        {
-          from,
-          to,
-          "status.delivered": true,
-          "status.seen": false
-        },
-        {
-          $set: {
-            "status.seen": true,
-            seenAt: new Date()
-          }
-        }
-      ).then(() => {
-        const senderSocketId = onlineUsers.get(from);
-        if (senderSocketId) {
-          io.to(senderSocketId).emit("message:seen", {
-            by: to
-          });
-        }
-      }).catch(err => console.log(err));
-    });
-
-    socket.on("disconnect", async () => {
-      onlineUsers.delete(userId);
-      socket.broadcast.emit("user:offline", { userId });
-      const filter = { extra: userId }
-      User.updateOne(
-        filter,
-        { $set: { lastSeen: new Date() } }
-      ).catch(err => console.log(err))
-    });
-  });
 }
