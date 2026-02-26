@@ -40,7 +40,6 @@ router.post("/api/upload", upload.single("file"), (req, res) => {
   const isAudio = mime.startsWith("audio/");
   const publicId = req.file.filename;
   const baseUrl = req.file.path.split("/upload/")[0] + "/upload";
-  console.log(req.file.path)
   if (isVideo) {
     return res.status(200).json({
       type: "video",
