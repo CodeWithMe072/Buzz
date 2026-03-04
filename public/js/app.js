@@ -5,6 +5,13 @@
  */
 
 // =============================================================================
+// CONFIG
+// Frontend and backend run on the same origin (port 5500 dev, 8080 prod)
+// so BACKEND_URL is always "" — socket.io connects to the same server.
+// =============================================================================
+const BACKEND_URL = "";
+
+// =============================================================================
 // State Management
 // =============================================================================
 let socket = null;
@@ -26,6 +33,78 @@ const State = {
     messageIndex: {}
 };
 const UploadControllers = {};
+
+// =============================================================================
+// OUTBOX QUEUE — stores unsent text messages for retry on reconnect
+// =============================================================================
+const OutboxQueue = {
+    _queue: [],   // [{ tempId, to, type, content, caption, replyTo, clientTime, retries }]
+
+    add(msg) {
+        this._queue.push({ ...msg, retries: 0 });
+    },
+
+    remove(tempId) {
+        this._queue = this._queue.filter(m => m.tempId !== tempId);
+    },
+
+    getAll() {
+        return [...this._queue];
+    },
+
+    has(tempId) {
+        return this._queue.some(m => m.tempId === tempId);
+    }
+};
+
+// =============================================================================
+// UPLOAD QUEUE — stores pending media blobs for retry
+// =============================================================================
+const UploadQueue = {
+    _queue: {},   // { [tempId]: { msgId, receiver, blob, file, type } }
+
+    add(tempId, data) {
+        this._queue[tempId] = { ...data, retries: 0 };
+    },
+
+    remove(tempId) {
+        delete this._queue[tempId];
+    },
+
+    get(tempId) {
+        return this._queue[tempId] || null;
+    },
+
+    getAll() {
+        return Object.values(this._queue);
+    }
+};
+
+// =============================================================================
+// NETWORK MONITOR — tracks online/offline + socket connection state
+// =============================================================================
+const NetworkMonitor = {
+    isOnline: navigator.onLine,
+    isSocketConnected: false,
+
+    init() {
+        window.addEventListener('online', () => this._setOnline(true));
+        window.addEventListener('offline', () => this._setOnline(false));
+    },
+
+    _setOnline(val) {
+        this.isOnline = val;
+        updateConnectionBanner();
+        if (val && socket) {
+            // Browser came back online — reconnect socket if needed
+            if (!socket.connected) socket.connect();
+        }
+    },
+
+    get canSend() {
+        return this.isOnline && this.isSocketConnected;
+    }
+};
 let currentStream = null;
 let mediaRecorder = null;
 let audioChunks = [];
@@ -41,72 +120,169 @@ let recordedAudioBlob = null;
 const audioPlayers = new Map(); // Store audio elements per message
 
 function initSocket() {
-    let tonePath = "/tone/notices.mp3"
-    let tone = new Audio(tonePath)
+    const tone = new Audio("/tone/notices.mp3");
+
+    /* =============================================
+       INCOMING PRIVATE MESSAGE (from other user)
+    ============================================= */
     socket.on("private_message", (msg) => {
-        tone.currentTime = 0
+        // Play notification tone if chat is not active or is muted
+        if (State.playTune && msg.from !== State.activeChat) {
+            tone.currentTime = 0;
+            tone.play().catch(() => { });
+        }
+        console.log(".........................")
         const message = {
             id: msg.id,
             type: msg.type,
-            content: msg.content,
+            content: msg.content,       // real CDN URL (never null now)
+            cover: msg.cover || null,   // image/video cover thumbnail
+            thumb: msg.thumb || null,
             caption: msg.caption,
             sender: "other",
             timestamp: msg.timestamp,
             user: msg.from,
             replyTo: msg.replyTo,
             reactions: {},
-            // showTime: msg.showTime,
-            status: {
-                sent: true,
-                delivered: true,
-                seen: false
-            }
-        }
-        // Add to messages
+            status: { sent: true, delivered: true, seen: false }
+        };
+
+        // Store in state
         if (!State.messages[message.user]) {
             State.messages[message.user] = [];
         }
         State.messages[message.user].unshift(message);
-        State.messageIndex[message.id] = message.user
+        State.messageIndex[message.id] = message.user;
 
+        // Tell server this message was received (triggers delivered tick for sender)
+        socket.emit("message:received", { tempId: msg.id });
 
-        if (message.user == State.activeChat) {
-            // if (State.playTune == true) {
-            //     tone.play();
-            // }
+        if (message.user === State.activeChat) {
+            // Render message in open chat
             const messagesContainer = document.getElementById('messages');
-
-
             const messageEl = createMessageElement(message);
             messagesContainer.appendChild(messageEl);
 
-            // Scroll to bottom
             const container = document.getElementById('messages-container');
             container.scrollTop = container.scrollHeight;
-            socket.emit("chat:seen", {
-                from: State.activeChat
-            });
 
+            // Attach click → viewer for any media in this message
+            if (message.type === "image" || message.type === "video") {
+                attactEventOnMedia();
+                if (viewer && message.content) viewer.addItem(message);
+            }
 
+            // Mark as seen immediately since chat is open
+            socket.emit("chat:seen", { from: State.activeChat });
         }
+
+        // Update conversation preview
         const conv = State.conversations.find(c => c.id === message.user);
         if (conv) {
             conv.lastMessage = message.type === 'text' ? message.content : `📷 ${message.type}`;
             conv.timestamp = message.timestamp;
-            if (State.activeChat != message.user) {
-
-                conv.unread = conv.unread ? conv.unread + 1 : 1
-            } else {
-                conv.unread = 0
-            }
+            conv.unread = (State.activeChat === message.user) ? 0 : (conv.unread ? conv.unread + 1 : 1);
         }
         renderChatList();
     });
 
+    /* =============================================
+       SYNC: Messages sent from another device of ours
+    ============================================= */
+    socket.on("private_message_sync", (msg) => {
+        // This fires when we sent a message from another device/tab
+        if (!State.messages[msg.to]) {
+            State.messages[msg.to] = [];
+        }
+
+        // Avoid duplicates (tempId already exists)
+        const exists = State.messages[msg.to].find(m => (m.tempId || m.id) === msg.tempId);
+        if (exists) return;
+
+        const message = {
+            tempId: msg.tempId,
+            type: msg.type,
+            content: msg.content,
+            cover: msg.cover || null,
+            thumb: msg.thumb || null,
+            caption: msg.caption,
+            timestamp: msg.timestamp,
+            user: State.currentUser.id,
+            replyTo: null,
+            reactions: {},
+            status: { sent: true, delivered: false, seen: false }
+        };
+
+        State.messages[msg.to].unshift(message);
+        State.messageIndex[msg.tempId] = msg.to;
+
+        // If that chat is currently open, render the message
+        if (State.activeChat === msg.to) {
+            const messagesContainer = document.getElementById('messages');
+            const messageEl = createMessageElement(message);
+            messagesContainer.appendChild(messageEl);
+            const container = document.getElementById('messages-container');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Update conversation preview
+        const conv = State.conversations.find(c => c.id === msg.to);
+        if (conv) {
+            conv.lastMessage = msg.type === 'text' ? msg.content : `📷 ${msg.type}`;
+            conv.timestamp = msg.timestamp;
+        }
+        renderChatList();
+    });
+
+    /* =============================================
+       MESSAGE ACK: Server confirmed message was received
+    ============================================= */
+    socket.on("message_ack", ({ tempId, status }) => {
+        // status === "sent" — server got the message
+        // Update status icon from clock to single tick
+        if (status === "sent") {
+            const chatId = State.messageIndex[tempId];
+            if (!chatId) return;
+            const msgs = State.messages[chatId];
+            if (!msgs) return;
+            const msg = msgs.find(m => (m.tempId || m.id) === tempId);
+            if (msg && !msg.status.sent) {
+                msg.status.sent = true;
+                updateMessageByTempId(tempId, { status: { ...msg.status, sent: true } });
+            }
+        }
+    });
+
+    /* =============================================
+       MESSAGE SAVE FAILED: DB write error on server
+    ============================================= */
+    socket.on("message_save_failed", ({ tempId }) => {
+        updateMessageByTempId(tempId, { uploadStatus: "failed" });
+        showToast("Message failed to save. Please resend.", "error");
+    });
+
+    /* =============================================
+       DELIVERY CONFIRMED: Other user received our message
+    ============================================= */
+    socket.on("message:delivered", ({ tempId }) => {
+        updateMessageByTempId(tempId, { status: { sent: true, delivered: true, seen: false } });
+    });
+
+    /* =============================================
+       SEEN: Other user read our messages
+    ============================================= */
+    socket.on("message:seen", ({ by }) => {
+        console.log("on message seen");
+        
+        updateMessageSeenByTempId(by);
+    });
+
+    /* =============================================
+       TYPING INDICATORS
+    ============================================= */
     socket.on("typing:start", ({ user }) => {
         if (user !== State.activeChat) return;
         showTypingIndicator(true);
-
     });
 
     socket.on("typing:stop", ({ user }) => {
@@ -114,12 +290,13 @@ function initSocket() {
         showTypingIndicator(false);
     });
 
-
+    /* =============================================
+       ONLINE STATUS
+    ============================================= */
     socket.on("online:list", ({ users }) => {
         State.conversations.forEach(conv => {
             conv.online = users.includes(conv.id);
         });
-
         renderChatList();
     });
 
@@ -127,72 +304,170 @@ function initSocket() {
         const conv = State.conversations.find(c => c.id === userId);
         if (!conv) return;
         conv.online = true;
-        const statusEl = document.getElementById('online-status');
-        let lastseen = formatTime(new Date(conv.lastSeen).getTime())
-        statusEl.textContent = conv.online ? 'Active now' : `${lastseen == "Just now" ? "Just now" : "Last seen " + lastseen + " Ago"}`;
-        statusEl.className = `online-status ${conv.id == State.activeChat ? 'online' : ''}`;
+
+        // Only update the header status bar if this is the active chat
+        if (conv.id === State.activeChat) {
+            const statusEl = document.getElementById('online-status');
+            statusEl.textContent = 'Active now';
+            statusEl.className = 'online-status online';
+        }
         renderChatList();
     });
 
-    socket.on("user:offline", async ({ userId }) => {
+    socket.on("user:offline", ({ userId }) => {
         const conv = State.conversations.find(c => c.id === userId);
         if (!conv) return;
-
         conv.online = false;
-        conv.lastSeen = Date.now()
-        let lastseen = formatTime(new Date(conv.lastSeen).getTime())
-        const statusEl = document.getElementById('online-status');
-        statusEl.textContent = conv.id == State.activeChat ? `${lastseen == "Just now" ? "Just now" : "Last seen " + lastseen + " Ago"}` : 'Active now';
-        statusEl.className = `online-status ${conv.id == State.activeChat ? '' : 'online'}`;
+        conv.lastSeen = Date.now();
+
+        // Only update the header status bar if this is the active chat
+        if (conv.id === State.activeChat) {
+            const statusEl = document.getElementById('online-status');
+            const lastseen = formatTime(conv.lastSeen);
+            statusEl.textContent = lastseen === "Just now" ? "Just now" : `Last seen ${lastseen} ago`;
+            statusEl.className = 'online-status';
+        }
         renderChatList();
     });
 
+    /* =============================================
+       MEDIA UPLOAD COMPLETE
+       Fires for:
+         1. Sender's own echo  → update blob→real URL in sender DOM
+         2. Receiver's update  → message was stored with content:null,
+                                  now update it with the real URL
+    ============================================= */
     socket.on("media:uploaded", ({ tempId, url, cover, thumb, mediaType }) => {
-        updateMessageByTempId(tempId, {
-            content: url,
-            type: mediaType,
-            cover: cover ?? null,
-            thumb: thumb ?? null,
-            uploadStatus: "uploaded"
-        });
-    });
+        const chatId = State.messageIndex[tempId];
+        if (!chatId) return; // message not in our state, ignore
 
+        const msgs = State.messages[chatId] || [];
+        const msg = msgs.find(m => (m.tempId || m.id) === tempId);
+        if (!msg) return;
 
+        // Update state
+        msg.content = url;
+        msg.cover = cover ?? null;
+        msg.thumb = thumb ?? null;
+        msg.type = mediaType;
+        msg.uploadStatus = "uploaded";
 
-    socket.on("message:delivered", ({ tempId }) => {
-        updateMessageByTempId(tempId, {
-            status: { delivered: true }
-        });
-    })
-
-    socket.on("message:seen", ({ by }) => {
-        updateMessageSeenByTempId(by)
-    });
-
-}
-
-function updateMessageSeenByTempId(chatId) {
-    const msgs = State.messages[chatId] || [];
-    msgs.forEach(m => {
-        if (m.status.delivered && !m.status.seen) {
-            m.status.seen = true;
-            const msgEl = document.querySelector(
-                `.message[data-message-id="${m.id || m.tempId}"] .message-bubble`
-            );
-            if (!msgEl) return;
-
-
-            let messageStatus = msgEl.querySelector(".message-status")
-
-            let statusIcon = `
-    <svg class="status-icon double seen" viewBox="0 0 16 16">
-        <polyline points="2 8 6 12 14 4"/>
-        <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
-    </svg>`;
-
-            messageStatus.innerHTML = statusIcon
+        // If chat is currently open, update DOM
+        if (State.activeChat === chatId) {
+            // Check if this is a receiver message (has no .message-status element)
+            // or sender message — updateMediaDOM handles both
+            if (msg.user === State.currentUser.id || msg.user === State.currentUser.username) {
+                // Sender echo — already handled by updateMediaDOM in uploadMedia
+                // but call again as safety net in case DOM missed it
+                updateMediaDOM(tempId, { content: url, cover, thumb, type: mediaType, uploadStatus: "uploaded" });
+            } else {
+                // Receiver — update the "loading.." placeholder with real media
+                updateReceivedMediaDOM(tempId, { content: url, cover, thumb, type: mediaType });
+            }
         }
     });
+
+    /* =============================================
+       SOCKET CONNECT — fires on first connect AND every reconnect
+    ============================================= */
+    socket.on("connect", () => {
+        NetworkMonitor.isSocketConnected = true;
+        updateConnectionBanner();
+        console.log("socket connect...")
+        // Small delay — let socket fully stabilize before flushing
+        setTimeout(() => {
+            // Pull any messages we missed while offline
+            socket.emit("sync:delivered");
+
+            // Retry queued outgoing text messages
+            flushOutbox();
+
+            // Retry failed media uploads
+            flushUploadQueue();
+        }, 500);
+    });
+
+    /* =============================================
+       SOCKET DISCONNECT
+    ============================================= */
+    socket.on("disconnect", (reason) => {
+        NetworkMonitor.isSocketConnected = false;
+        updateConnectionBanner();
+        console.log("error---------------------")
+        console.warn("Socket disconnected:", reason);
+    });
+
+    /* =============================================
+       SOCKET RECONNECT ATTEMPT (show user feedback)
+    ============================================= */
+    socket.on("reconnect_attempt", (attempt) => {
+        console.log("jhhhhhhhhhhhhhhhhhhhhdf")
+        updateConnectionBanner(`Reconnecting... (attempt ${attempt})`);
+    });
+
+    socket.on("reconnect_failed", () => {
+        console.log("hjjjjjjjjjjjjjjjjjjjjjjjj")
+        updateConnectionBanner("Connection failed. Check your network.");
+    });
+
+    /* =============================================
+       message_ack: server confirmed it got our text message
+    ============================================= */
+    socket.on("message_ack", ({ tempId, status }) => {
+        if (status === "sent") {
+            // Remove from outbox — server got it
+            OutboxQueue.remove(tempId);
+            // Update status icon from clock → single tick
+            const chatId = State.messageIndex[tempId];
+            if (!chatId) return;
+            const msgs = State.messages[chatId] || [];
+            const msg = msgs.find(m => (m.tempId || m.id) === tempId);
+            if (msg) {
+                msg.status = { ...msg.status, sent: true };
+                updateStatusIcon(tempId, msg.status);
+            }
+        }
+    });
+
+    socket.on("message_save_failed", ({ tempId }) => {
+        updateMessageByTempId(tempId, { uploadStatus: "failed" });
+        showToast("Message failed to save. Will retry automatically.", "error");
+        // Keep in outbox so flushOutbox retries it
+    });
+}
+
+function markSeen(message) {
+    if (!message?.status?.delivered || message.status.seen) return;
+console.log(message)
+    message.status.seen = true;
+
+    const id = message.id || message.tempId;
+
+    const msgEl = document.querySelector(
+        `.message[data-message-id="${id}"] .message-bubble`
+    );
+
+    if (!msgEl) return;
+
+    const statusEl = msgEl.querySelector(".message-status");
+    if (!statusEl) return;
+
+    statusEl.innerHTML = `
+        <svg class="status-icon double seen" viewBox="0 0 16 16">
+            <polyline points="2 8 6 12 14 4"/>
+            <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0px);"/>
+        </svg>`;
+}
+
+function updateMessageSeenByTempId(chatId, tempId = null) {
+    const msgs = State.messages[chatId] || [];
+console.log(msgs)
+    if (tempId) {
+        const msg = msgs.find(m => m.id == tempId || m.tempId == tempId);
+        if (msg) markSeen(msg);
+    } else {
+        msgs.forEach(markSeen);
+    }
 }
 
 
@@ -210,7 +485,14 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
     const msg = msgs.find(m => (m.tempId || m.id) === tempId);
     if (!msg) return;
 
-    Object.assign(msg, updates);
+    // Deep merge status if present
+    if (updates.status) {
+        msg.status = { ...msg.status, ...updates.status };
+        const { status, ...rest } = updates;
+        Object.assign(msg, rest);
+    } else {
+        Object.assign(msg, updates);
+    }
 
     /* ---------- 2 Update DOM ---------- */
     const msgEl = document.querySelector(
@@ -273,10 +555,7 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
                         playIcon.innerHTML = "▶";
                         mediaContainer.appendChild(playIcon);
 
-                        // click → play video
-                        mediaContainer.onclick = () => {
-                            playVideoInline(mediaContainer, updates.content);
-                        };
+                        // click handled by attactEventOnMedia → opens viewer
                     }
 
                     img.src = previewSrc;
@@ -303,7 +582,7 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 
 
     /* ---------- Status update ---------- */
-    if (updates.status || updates.content || updates.cover) {
+    if ((updates.status || updates.content || updates.cover) && chatId != State.currentUser.id) {
         const messageStatus = msgEl.querySelector(".message-status");
         if (!messageStatus) return;
 
@@ -316,10 +595,10 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
             </svg>`;
         } else if (msg.status.delivered) {
             statusIcon = `
-<svg class="status-icon double delivered" viewBox="0 0 16 16">
-  <polyline points="2 8 6 12 14 4"/>
-  <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
-</svg>`;
+                <svg class="status-icon double delivered" viewBox="0 0 16 16">
+                <polyline points="2 8 6 12 14 4"/>
+                <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
+                </svg>`;
         } else {
             statusIcon = ` <svg class="status-icon single sent" viewBox="0 0 16 16">
         <polyline points="2 8 6 12 14 4"/>
@@ -332,12 +611,290 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
     container.scrollTop = container.scrollHeight;
 }
 
+// =============================================================================
+// CONNECTION BANNER — shows offline / reconnecting state to user
+// =============================================================================
+function updateConnectionBanner(customMsg = null) {
+    let banner = document.getElementById("connection-banner");
 
-// send message to another user
-function sendsocketMessage(message) {
-    socket.emit("private_message", {
-        message
+    if (!banner) {
+        banner = document.createElement("div");
+        banner.id = "connection-banner";
+        banner.style.cssText = `
+            position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+            padding: 8px 16px; font-size: 13px; text-align: center;
+            font-weight: 500; transition: all 0.3s ease;
+            display: none;
+        `;
+        document.body.prepend(banner);
+    }
+
+    if (NetworkMonitor.canSend) {
+        banner.style.display = "none";
+    } else if (!NetworkMonitor.isOnline) {
+        banner.textContent = "You are offline. Messages will send when you reconnect.";
+        banner.style.background = "#e53e3e";
+        banner.style.color = "#fff";
+        banner.style.display = "block";
+    } else {
+        // Online but socket reconnecting
+        banner.textContent = customMsg || "Reconnecting to server...";
+        banner.style.background = "#d69e2e";
+        banner.style.color = "#fff";
+        banner.style.display = "block";
+    }
+}
+
+// =============================================================================
+// FLUSH OUTBOX — retry all queued text messages after reconnect
+// =============================================================================
+const MAX_RETRIES = 5;
+
+function flushOutbox() {
+    const pending = OutboxQueue.getAll();
+    if (!pending.length) return;
+
+    console.log(`Flushing outbox: ${pending.length} messages`);
+    pending.forEach(item => {
+        if (item.retries >= MAX_RETRIES) {
+            // Give up — mark as permanently failed in UI
+            updateMessageByTempId(item.tempId, { uploadStatus: "failed" });
+            OutboxQueue.remove(item.tempId);
+            showToast("A message could not be sent after multiple retries.", "error");
+            return;
+        }
+
+        item.retries++;
+
+        console.log(item.retries++)
+        socket.emit("private_message", {
+            message: {
+                tempId: item.tempId,
+                to: item.to,
+                type: item.type,
+                content: item.content,
+                caption: item.caption,
+                replyTo: item.replyTo,
+                clientTime: item.clientTime
+            }
+        });
+
     });
+}
+
+// =============================================================================
+// FLUSH UPLOAD QUEUE — retry failed media uploads after reconnect
+// =============================================================================
+function flushUploadQueue() {
+    const pending = UploadQueue.getAll();
+    if (!pending.length) return;
+
+    console.log(`Flushing upload queue: ${pending.length} uploads`);
+
+    pending.forEach(item => {
+        if (item.retries >= MAX_RETRIES) {
+            updateMessageByTempId(item.msgId, { uploadStatus: "failed" });
+            UploadQueue.remove(item.msgId);
+            showToast("A media upload failed after multiple retries.", "error");
+            return;
+        }
+
+        item.retries++;
+
+        if (item.type === "audio") {
+            uploadAudio(item.msgId, item.receiver, item.blob).catch(() => { });
+        } else {
+            uploadMedia(item.msgId, item.receiver, item.file).catch(() => { });
+        }
+    });
+}
+
+// =============================================================================
+// STATUS ICON HELPER — update a single message's tick icon in DOM
+// =============================================================================
+function updateStatusIcon(tempId, status) {
+    const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
+    if (!msgEl) return;
+    const statusEl = msgEl.querySelector(".message-status");
+    if (!statusEl) return;
+
+    if (status.seen) {
+        statusEl.innerHTML = `<svg class="status-icon double seen" viewBox="0 0 16 16" style="transform:translateX(3px)">
+            <polyline points="2 8 6 12 14 4"/>
+            <polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/>
+        </svg>`;
+    } else if (status.delivered) {
+        statusEl.innerHTML = `<svg class="status-icon double delivered" viewBox="0 0 16 16">
+            <polyline points="2 8 6 12 14 4"/>
+            <polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/>
+        </svg>`;
+    } else if (status.sent) {
+        statusEl.innerHTML = `<svg class="status-icon single sent" viewBox="0 0 16 16">
+            <polyline points="2 8 6 12 14 4"/>
+        </svg>`;
+    } else {
+        // Pending (queued, not yet sent)
+        statusEl.innerHTML = `<svg class="status-icon clock" viewBox="0 0 16 16">
+            <circle cx="8" cy="8" r="6.5"/>
+            <polyline points="8 4 8 8 11 10"/>
+        </svg>`;
+    }
+}
+
+// =============================================================================
+// DOM helpers for media upload completion (sender side)
+// =============================================================================
+
+/**
+ * After upload succeeds, swap the sender's blob preview with the real CDN URL.
+ * Works whether the chat is open or not — state is always updated; DOM only if visible.
+ */
+function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus }) {
+    const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
+    if (!msgEl) return; // chat not open — state was already updated, nothing to do in DOM
+
+    const mediaContainer = msgEl.querySelector(".message-media");
+    if (!mediaContainer) return;
+
+    // Remove uploading overlay
+    const overlay = mediaContainer.querySelector(".media-overlay");
+    if (overlay) overlay.remove();
+
+    const previewSrc = cover || content;
+
+    if (type === "image") {
+        let img = mediaContainer.querySelector("img");
+        if (!img) {
+            img = document.createElement("img");
+            mediaContainer.appendChild(img);
+        }
+        img.src = previewSrc;
+        img.alt = "Image message";
+    }
+
+    if (type === "video") {
+        let img = mediaContainer.querySelector("img.video-thumb");
+        if (!img) {
+            mediaContainer.innerHTML = "";
+            img = document.createElement("img");
+            img.className = "video-thumb";
+            mediaContainer.appendChild(img);
+
+            const playIcon = document.createElement("div");
+            playIcon.className = "video-play-icon";
+            playIcon.innerHTML = "▶";
+            mediaContainer.appendChild(playIcon);
+        }
+        if (previewSrc) {
+            img.src = previewSrc;
+        }
+        // click handled by attactEventOnMedia → opens viewer
+    }
+
+    // Update status icon to single sent tick
+    const statusEl = msgEl.querySelector(".message-status");
+    if (statusEl) {
+        statusEl.innerHTML = `<svg class="status-icon single sent" viewBox="0 0 16 16">
+            <polyline points="2 8 6 12 14 4"/>
+        </svg>`;
+    }
+
+    // Re-attach viewer events and add item
+    attactEventOnMedia();
+    if (viewer) {
+        const chatId = State.messageIndex[tempId];
+        const msg = chatId ? (State.messages[chatId] || []).find(m => m.tempId === tempId) : null;
+        if (msg) viewer.addItem(msg);
+    }
+}
+
+/**
+ * After audio upload succeeds, replace the local blob player with the real URL player.
+ */
+function updateAudioDOM(tempId, realUrl) {
+    const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
+    if (!msgEl) return;
+
+    const audioContainer = msgEl.querySelector(".message-audio");
+    if (!audioContainer) return;
+
+    const newPlayer = createAudioPlayer(realUrl, tempId);
+    audioContainer.replaceWith(newPlayer);
+
+    // Update status icon
+    const statusEl = msgEl.querySelector(".message-status");
+    if (statusEl) {
+        statusEl.innerHTML = `<svg class="status-icon single sent" viewBox="0 0 16 16">
+            <polyline points="2 8 6 12 14 4"/>
+        </svg>`;
+    }
+}
+
+/**
+ * Receiver-side: replaces a "loading.." placeholder with real media
+ * when media:uploaded fires after private_message was received with content:null
+ */
+function updateReceivedMediaDOM(tempId, { content, cover, thumb, type }) {
+    const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
+    if (!msgEl) return;
+
+    const previewSrc = cover || content;
+
+    if (type === "image" || type === "video") {
+        // Replace the text placeholder with a proper media container
+        let mediaContainer = msgEl.querySelector(".message-media");
+        if (!mediaContainer) {
+            // Was rendered as "loading.." text node — rebuild the whole media section
+            mediaContainer = document.createElement("div");
+            mediaContainer.className = "message-media";
+            // Insert before text/caption if any, otherwise prepend
+            const textEl = msgEl.querySelector(".messag-text");
+            if (textEl) msgEl.insertBefore(mediaContainer, textEl);
+            else msgEl.prepend(mediaContainer);
+        } else {
+            // Clear old placeholder content
+            mediaContainer.innerHTML = "";
+        }
+
+        if (type === "image") {
+            const img = document.createElement("img");
+            img.src = previewSrc;
+            img.alt = "Image message";
+            mediaContainer.appendChild(img);
+        }
+
+        if (type === "video") {
+            const img = document.createElement("img");
+            img.className = "video-thumb";
+            if (previewSrc) img.src = previewSrc;
+            const playIcon = document.createElement("div");
+            playIcon.className = "video-play-icon";
+            playIcon.innerHTML = "▶";
+            mediaContainer.appendChild(img);
+            mediaContainer.appendChild(playIcon);
+            // click handled by attactEventOnMedia → opens viewer
+        }
+
+        attactEventOnMedia();
+        if (viewer) {
+            const chatId = State.messageIndex[tempId];
+            const msg = chatId ? (State.messages[chatId] || []).find(m => (m.id || m.tempId) === tempId) : null;
+            if (msg) viewer.addItem(msg);
+        }
+    }
+
+    if (type === "audio") {
+        const audioContainer = msgEl.querySelector(".message-audio");
+        if (audioContainer) {
+            const newPlayer = createAudioPlayer(content, tempId);
+            audioContainer.replaceWith(newPlayer);
+        }
+    }
+}
+
+// Direct socket emit helper (kept for compatibility)
+function sendsocketMessage(message) {
+    socket.emit("private_message", { message });
 }
 // =============================================================================
 // Setup typing
@@ -501,23 +1058,24 @@ async function initAuth() {
 
 
         }
-        socket = io({
-            auth: {
-                userId: State.currentUser.id
-            }
+        socket = io(BACKEND_URL, {
+            auth: { userId: State.currentUser.id },
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 10000,
+            timeout: 10000,
+            transports: ["websocket", "polling"]   // try ws first, fall back to polling
         });
-        initSocket()
+        initSocket();
+        // Sync connection state in case socket already connected before listeners registered
+        NetworkMonitor.isSocketConnected = socket.connected;
         renderChatList();
         showChatScreen();
         return;
     }
     // No saved user, hide loader and show login
     hideLoader();
-
-
-
-
-
 }
 
 function setButtonLoading(btn, text) {
@@ -620,8 +1178,18 @@ function handelAuthForm() {
 
             }
 
-            socket = io({ auth: { userId: State.currentUser.id } });
+            socket = io(BACKEND_URL, {
+                auth: { userId: State.currentUser.id },
+                reconnection: true,
+                reconnectionAttempts: Infinity,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 10000,
+                timeout: 10000,
+                transports: ["websocket", "polling"]
+            });
             initSocket();
+            // Sync connection state in case socket already connected before listeners registered
+            NetworkMonitor.isSocketConnected = socket.connected;
             renderChatList();
 
             resetButtonLoading(submitBtn);
@@ -907,18 +1475,44 @@ function renderMessages(chatId) {
 
 function attactEventOnMedia() {
     document.querySelectorAll(".message-media").forEach(media => {
-        const clean = media.cloneNode(true); // removes listeners
+        const clean = media.cloneNode(true);
         media.replaceWith(clean);
 
         clean.addEventListener("click", () => {
             const msgEl = clean.closest('.message');
+            if (!msgEl) return;
             const messageId = msgEl.dataset.messageId;
             const index = viewer.getIndexByMessageId(messageId);
             if (index !== -1) viewer.open(index);
         });
     });
+}
 
+/**
+ * Play a video inline inside its message bubble.
+ * Replaces the thumbnail+play-icon with an actual <video> element.
+ */
+function playVideoInline(mediaContainer, videoUrl) {
+    if (!videoUrl) return;
 
+    // Remove thumbnail and play icon
+    mediaContainer.innerHTML = "";
+
+    const video = document.createElement("video");
+    video.src = videoUrl;
+    video.controls = true;
+    video.autoplay = true;
+    video.playsInline = true;   // important for iOS
+    video.style.width = "100%";
+    video.style.height = "100%";
+    video.style.borderRadius = "inherit";
+
+    mediaContainer.appendChild(video);
+
+    // Reset onclick so clicking the video itself doesn't re-trigger
+    mediaContainer.onclick = null;
+
+    video.play().catch(() => { });
 }
 
 
@@ -1007,12 +1601,17 @@ function createMessageElement(msg) {
 
             if (msg.cover) {
                 thumb.src = msg.cover;
-            } else {
-                // 2️⃣ generate thumbnail from video blob
-                generateVideoThumbnail(msg.content).then((dataUrl) => {
-                    thumb.src = dataUrl.url;
-                    msg.cover = dataUrl.url; // cache it for reuse
-                });
+            } else if (msg.content) {
+                // generate thumbnail from video URL/blob — catch errors for cross-origin or invalid URLs
+                generateVideoThumbnail(msg.content)
+                    .then((dataUrl) => {
+                        thumb.src = dataUrl.url;
+                        msg.cover = dataUrl.url; // cache it for reuse
+                    })
+                    .catch(() => {
+                        // thumbnail generation failed (e.g. cross-origin video), show play icon only
+                        thumb.style.display = "none";
+                    });
             }
         }
         bubbleDiv.appendChild(mediaDiv);
@@ -1335,51 +1934,57 @@ function initChatWindow() {
 }
 
 async function handelMedia(file) {
-    const fileUrl = URL.createObjectURL(file);
-    let activeChatOnline = State.conversations.find(c => c.id == State.activeChat)
+    if (!State.activeChat) return;
+
+    const mediaInput = document.getElementById('media-input');
+    const localUrl = URL.createObjectURL(file);
+    const mediaType = file.type.split("/")[0]; // "image" or "video"
+    const to = State.activeChat;
+
+    // ── STEP 1: Build message with local blob URL for instant preview ──
     const message = {
         tempId: generateId(),
-        type: file.type.split("/")[0],
-        content: fileUrl,
-        uploadStatus: "uploading", // uploading | failed | uploaded
-        uploadProgress: 0,
+        type: mediaType,
+        content: localUrl,
+        uploadStatus: "uploading",
         caption: null,
         clientTime: Date.now(),
         replyTo: State.replyingTo,
         user: State.currentUser.username,
-        status: { sent: true, delivered: activeChatOnline.online, seen: false },
+        status: { sent: false, delivered: false, seen: false },
         timestamp: Date.now()
     };
-    const conv = State.conversations.find(c => c.id === State.activeChat);
-    if (conv) {
-        conv.lastMessage = `📷 ${file.type.split("/")[0]}`;
-        conv.timestamp = Date.now();
-    }
+
+    // Store in state
+    if (!State.messages[to]) State.messages[to] = [];
+    State.messages[to].unshift(message);
+    State.messageIndex[message.tempId] = to;
+
+    // ── STEP 2: Show in sender UI immediately with uploading spinner ──
     const messagesContainer = document.getElementById('messages');
-
-
     const messageEl = createMessageElement(message);
     messagesContainer.appendChild(messageEl);
+    document.getElementById('messages-container').scrollTop = 99999;
 
+    // Update conversation preview
+    const conv = State.conversations.find(c => c.id === to);
+    if (conv) {
+        conv.lastMessage = `📷 ${mediaType}`;
+        conv.timestamp = message.timestamp;
+    }
+    renderChatList();
 
-    // Scroll to bottom
-    const container = document.getElementById('messages-container');
-    container.scrollTop = container.scrollHeight;
-    renderChatList()
-    // ✅ Send Cloudinary URL to chat
-    sendMessage(message.type, null, message.tempId);
+    // Clear reply and input
+    State.replyingTo = null;
+    document.getElementById('reply-preview').style.display = 'none';
+    if (mediaInput) mediaInput.value = "";
 
+    // ── STEP 3: Upload → on success server notifies receiver via media:uploaded ──
     try {
-        showToast("Uploading...", "info");
-
-        uploadMedia(message.tempId, State.activeChat, file)
-
-
+        await uploadMedia(message.tempId, to, file);
     } catch (err) {
-        showToast("Upload failed", "error");
+        showToast("Upload failed. Tap to retry.", "error");
         console.error(err);
-    } finally {
-        mediaInput.value = ""; // reset
     }
 }
 
@@ -1561,55 +2166,51 @@ function initVoiceRecording() {
 
 
 async function sendVoiceMessage(audioBlob) {
-    const audioUrl = URL.createObjectURL(audioBlob);
-    let activeChatOnline = State.conversations.find(c => c.id === State.activeChat);
+    if (!State.activeChat) return;
 
+    const localUrl = URL.createObjectURL(audioBlob);
+    const to = State.activeChat;
+
+    // ── STEP 1: Build message with local blob URL ──
     const message = {
         tempId: generateId(),
         type: "audio",
-        content: audioUrl,
+        content: localUrl,           // local blob for immediate playback in sender UI
         uploadStatus: "uploading",
         caption: null,
         clientTime: Date.now(),
         replyTo: State.replyingTo,
         user: State.currentUser.username,
-        status: { sent: true, delivered: activeChatOnline.online, seen: false },
-        timestamp: Date.now(),
-        duration: 0 // Will be set after upload
+        status: { sent: false, delivered: false, seen: false },
+        timestamp: Date.now()
     };
 
-    // Add to state
-    if (!State.messages[State.activeChat]) {
-        State.messages[State.activeChat] = [];
-    }
-    State.messages[State.activeChat].unshift(message);
-    State.messageIndex[message.tempId] = State.activeChat;
+    // Store in state
+    if (!State.messages[to]) State.messages[to] = [];
+    State.messages[to].unshift(message);
+    State.messageIndex[message.tempId] = to;
 
-    // Update conversation preview
-    const conv = State.conversations.find(c => c.id === State.activeChat);
-    if (conv) {
-        conv.lastMessage = "🎤 Voice message";
-        conv.timestamp = Date.now();
-    }
-
-    // Render to DOM
+    // ── STEP 2: Show in sender UI immediately ──
     const messagesContainer = document.getElementById("messages");
     const messageEl = createMessageElement(message);
     messagesContainer.appendChild(messageEl);
+    document.getElementById("messages-container").scrollTop = 99999;
 
-    const container = document.getElementById("messages-container");
-    container.scrollTop = container.scrollHeight;
-
+    // Update conversation preview
+    const conv = State.conversations.find(c => c.id === to);
+    if (conv) {
+        conv.lastMessage = "🎤 Voice message";
+        conv.timestamp = message.timestamp;
+    }
     renderChatList();
 
-    // Send socket message
-    message.to = State.activeChat;
-    message.content = null
-    sendsocketMessage(message);
+    // Clear reply state
+    State.replyingTo = null;
+    document.getElementById("reply-preview").style.display = "none";
 
-    // Upload audio
+    // ── STEP 3: Upload → on success server notifies receiver via media:uploaded ──
     try {
-        await uploadAudio(message.tempId, State.activeChat, audioBlob);
+        await uploadAudio(message.tempId, to, audioBlob);
     } catch (err) {
         showToast("Upload failed", "error");
         console.error(err);
@@ -1619,6 +2220,12 @@ async function sendVoiceMessage(audioBlob) {
 async function uploadAudio(msgId, receiver, audioBlob) {
     const controller = new AbortController();
     UploadControllers[msgId] = controller;
+
+    // Register in upload queue for retry
+    UploadQueue.add(msgId, { msgId, receiver, blob: audioBlob, type: "audio" });
+
+    // Audio upload timeout: 2 minutes
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     try {
         const formData = new FormData();
@@ -1630,26 +2237,53 @@ async function uploadAudio(msgId, receiver, audioBlob) {
             signal: controller.signal
         });
 
-        if (!res.ok) throw new Error("Upload failed");
+        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
 
         const data = await res.json();
+        const realUrl = data.original;
 
-        socket.emit("media:uploaded", {
-            tempId: msgId,
-            to: receiver,
-            url: data.original,
-            cover: null,
-            thumb: null,
-            mediaType: "audio"
+        const chatId = State.messageIndex[msgId];
+        const msg = chatId ? (State.messages[chatId] || []).find(m => m.tempId === msgId) : null;
+
+        // ── STEP 1: Update sender state ──
+        if (msg) {
+            msg.content = realUrl;
+            msg.uploadStatus = "uploaded";
+            msg.status = { sent: true, delivered: false, seen: false };
+        }
+
+        // ── STEP 2: Update sender DOM ──
+        updateAudioDOM(msgId, realUrl);
+
+        // ── STEP 3: Emit to server ──
+        socket.emit("private_message", {
+            message: {
+                tempId: msgId,
+                to: receiver,
+                type: "audio",
+                content: realUrl,
+                caption: null,
+                replyTo: msg?.replyTo || null,
+                clientTime: msg?.clientTime || Date.now()
+            }
         });
+
+        OutboxQueue.add({ tempId: msgId, to: receiver, type: "audio", content: realUrl, caption: null, replyTo: msg?.replyTo || null, clientTime: msg?.clientTime || Date.now() });
+
+        // Succeeded — remove from upload queue
+        UploadQueue.remove(msgId);
 
     } catch (err) {
-        if (err.name === "AbortError") return;
-
-        updateMessageByTempId(msgId, {
-            uploadStatus: "failed"
-        });
+        if (err.name === "AbortError") {
+            updateMessageByTempId(msgId, { uploadStatus: "failed" });
+            showToast("Voice upload timed out. Will retry when connected.", "error");
+            return;
+        }
+        updateMessageByTempId(msgId, { uploadStatus: "failed" });
+        showToast("Voice upload failed. Will retry automatically.", "error");
+        throw err;
     } finally {
+        clearTimeout(timeoutId);
         delete UploadControllers[msgId];
     }
 }
@@ -1851,6 +2485,15 @@ async function uploadMedia(msgId, receiver, file) {
     const controller = new AbortController();
     UploadControllers[msgId] = controller;
 
+    const mediaType = file.type.split("/")[0];
+
+    // Register in upload queue so reconnect can retry
+    UploadQueue.add(msgId, { msgId, receiver, file, type: mediaType });
+
+    // Upload timeout: 60s for images, 3 min for video
+    const timeoutMs = mediaType === "video" ? 180000 : 60000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
         const formData = new FormData();
         formData.append("file", file);
@@ -1861,34 +2504,83 @@ async function uploadMedia(msgId, receiver, file) {
             signal: controller.signal
         });
 
-        if (!res.ok) throw new Error("Upload failed");
+        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
 
         const data = await res.json();
-        socket.emit("media:uploaded", {
-            tempId: msgId,
-            to: receiver,
-            url: data.original,          // original
-            cover: data.cover_270,      // NEW
-            thumb: data.thumb_50,      // NEW
-            mediaType: data.type
+
+        const realUrl = data.original;
+        const cover = data.cover_270 || null;
+        const thumb = data.thumb_50 || null;
+        const realType = data.type || mediaType;
+
+        // Find message in state for metadata
+        const chatId = State.messageIndex[msgId];
+        const msg = chatId ? (State.messages[chatId] || []).find(m => m.tempId === msgId) : null;
+
+        // ── STEP 1: Update sender state ──
+        if (msg) {
+            msg.content = realUrl;
+            msg.cover = cover;
+            msg.thumb = thumb;
+            msg.type = realType;
+            msg.uploadStatus = "uploaded";
+            msg.status = { sent: true, delivered: false, seen: false };
+        }
+
+        // ── STEP 2: Update sender DOM ──
+        updateMediaDOM(msgId, { content: realUrl, cover, thumb, type: realType, uploadStatus: "uploaded" });
+
+        // ── STEP 3: Emit to server with real URL ──
+        socket.emit("private_message", {
+            message: {
+                tempId: msgId,
+                to: receiver,
+                type: realType,
+                content: realUrl,
+                caption: msg?.caption || null,
+                replyTo: msg?.replyTo || null,
+                clientTime: msg?.clientTime || Date.now(),
+                cover,
+                thumb
+            }
         });
+
+        // Add text message to outbox too so ack can remove it
+        OutboxQueue.add({ tempId: msgId, to: receiver, type: realType, content: realUrl, caption: msg?.caption || null, replyTo: msg?.replyTo || null, clientTime: msg?.clientTime || Date.now() });
+
+        // Upload succeeded — remove from upload queue
+        UploadQueue.remove(msgId);
 
     } catch (err) {
-        if (err.name === "AbortError") return;
-
-        updateMessageByTempId(msgId, {
-            uploadStatus: "failed"
-        });
+        if (err.name === "AbortError") {
+            // Timeout or manual cancel — keep in UploadQueue for retry
+            updateMessageByTempId(msgId, { uploadStatus: "failed" });
+            showToast("Upload timed out. Will retry when connected.", "error");
+            return;
+        }
+        // Network error — keep in UploadQueue for retry
+        updateMessageByTempId(msgId, { uploadStatus: "failed" });
+        showToast("Upload failed. Will retry automatically.", "error");
+        throw err;
     } finally {
+        clearTimeout(timeoutId);
         delete UploadControllers[msgId];
     }
 }
 
 
 
-function sendMessage(type = 'text', content = null, OldtempId = undefined) {
+function sendMessage() {
+    // TEXT messages only — media is handled by handelMedia() / sendVoiceMessage()
     if (!State.activeChat) return;
+
+    const messageInput = document.getElementById('message-input');
+    const textContent = messageInput.value.trim();
+    if (!textContent) return;
+
     const to = State.activeChat;
+
+    // Stop typing indicator
     const typingState = State.typingTimeouts[to];
     if (typingState?.isTyping) {
         socket.emit("typing:stop", { to });
@@ -1896,34 +2588,59 @@ function sendMessage(type = 'text', content = null, OldtempId = undefined) {
         typingState.isTyping = false;
     }
 
-    const messageInput = document.getElementById('message-input');
-    const textContent = messageInput.value.trim();
-    if (type === 'text' && !textContent) return;
-    // if (type !== 'text' && !content) return;
-    let activeChatOnline = State.conversations.find(c => c.id == State.activeChat)
+    const isSending = NetworkMonitor.canSend;
+
     const message = {
-        tempId: OldtempId ? OldtempId : generateId(),
-        type: type,
-        content: type === 'text' ? sanitizeInput(textContent) : content,
-        caption: type !== 'text' && textContent ? sanitizeInput(textContent) : null,
+        tempId: generateId(),
+        type: "text",
+        content: sanitizeInput(textContent),
+        caption: null,
         clientTime: Date.now(),
         replyTo: State.replyingTo,
         user: State.currentUser.username,
-        status: { sent: true, delivered: activeChatOnline.online, seen: false },
+        // show clock if offline, single tick if online
+        status: { sent: isSending, delivered: false, seen: false },
         timestamp: Date.now()
     };
 
+    // Store in state
+    if (!State.messages[to]) State.messages[to] = [];
+    State.messages[to].unshift(message);
+    State.messageIndex[message.tempId] = to;
 
-    // Add to messages
-    if (!State.messages[State.activeChat]) {
-        State.messages[State.activeChat] = [];
+    if (isSending) {
+        // Connected — emit immediately
+        socket.emit("private_message", {
+            message: {
+                tempId: message.tempId,
+                to,
+                type: "text",
+                content: message.content,
+                caption: null,
+                replyTo: message.replyTo,
+                clientTime: message.clientTime
+            }
+        });
+        // Also add to outbox — removed when server sends message_ack
+        OutboxQueue.add({ tempId: message.tempId, to, type: "text", content: message.content, caption: null, replyTo: message.replyTo, clientTime: message.clientTime });
+    } else {
+        // Offline — queue for retry on reconnect
+        OutboxQueue.add({ tempId: message.tempId, to, type: "text", content: message.content, caption: null, replyTo: message.replyTo, clientTime: message.clientTime });
+        showToast("You're offline. Message queued and will send when reconnected.", "info");
     }
-    State.messages[State.activeChat].unshift(message);
-    State.messageIndex[message.tempId] = State.activeChat
-    message.to = State.activeChat
-    sendsocketMessage(message)
-    // Update conversation
 
+    // Update conversation preview
+    const conv = State.conversations.find(c => c.id === to);
+    if (conv) {
+        conv.lastMessage = textContent;
+        conv.timestamp = message.timestamp;
+    }
+
+    // Render message in UI
+    const messagesContainer = document.getElementById('messages');
+    const messageEl = createMessageElement(message);
+    messagesContainer.appendChild(messageEl);
+    document.getElementById('messages-container').scrollTop = 99999;
 
     // Clear input
     messageInput.value = '';
@@ -1931,25 +2648,7 @@ function sendMessage(type = 'text', content = null, OldtempId = undefined) {
     State.replyingTo = null;
     document.getElementById('reply-preview').style.display = 'none';
 
-    if (type !== "image" && type !== "video") {
-        const conv = State.conversations.find(c => c.id === State.activeChat);
-        if (conv) {
-            conv.lastMessage = type === 'text' ? textContent : `📷 ${type}`;
-            conv.timestamp = Date.now();
-        }
-        const messagesContainer = document.getElementById('messages');
-
-
-        const messageEl = createMessageElement(message);
-        messagesContainer.appendChild(messageEl);
-
-
-        // Scroll to bottom
-        const container = document.getElementById('messages-container');
-        container.scrollTop = container.scrollHeight;
-        renderChatList();
-    }
-
+    renderChatList();
 }
 
 function showTypingIndicator(show) {
@@ -2109,6 +2808,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
     // Simulate initial load time
+    NetworkMonitor.init();
     await initAuth();
     hideLoader();
 

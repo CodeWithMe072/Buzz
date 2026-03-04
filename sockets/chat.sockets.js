@@ -1,40 +1,32 @@
-// socket/socket.js
 import { Message } from "../models/message.model.js";
 import { User } from "../models/user.model.js";
 import { telegramService } from "../services/telegram.service.js";
-
-// Key: userId, Value: Set of socket IDs
-const onlineUsers = new Map();
+import { redis } from "../lib/redis.js";
 
 export default function initSocket(io) {
-    io.on("connection", (socket) => {
+
+    io.on("connection", async (socket) => {
 
         const userId = socket.handshake.auth?.userId;
-        if (!userId) {
-            socket.disconnect(true);
-            return;
-        }
+        if (!userId) return socket.disconnect(true);
 
         /* =============================
            MULTI DEVICE TRACKING
         ============================== */
 
-        if (!onlineUsers.has(userId)) {
-            onlineUsers.set(userId, new Set());
-        }
-
-        onlineUsers.get(userId).add(socket.id);
+        await redis.sadd(`user:${userId}:sockets`, socket.id);
+        await redis.sadd("online:users", userId);
         socket.join(userId);
 
-        const isFirstDevice = onlineUsers.get(userId).size === 1;
+        const sockets = await redis.smembers(`user:${userId}:sockets`);
+        const isFirstDevice = sockets.length === 1;
 
         if (isFirstDevice) {
             socket.broadcast.emit("user:online", { userId });
         }
 
-        socket.emit("online:list", {
-            users: Array.from(onlineUsers.keys())
-        });
+        const users = await redis.smembers("online:users");
+        socket.emit("online:list", { users });
 
         /* =============================
            PRIVATE MESSAGE
@@ -45,36 +37,19 @@ export default function initSocket(io) {
                 const { tempId, to, type, caption, replyTo, clientTime } = payload.message;
                 let { content } = payload.message;
 
+                // ── FIX: also extract cover and thumb (sent by client after media upload) ──
+                const cover = payload.message.cover || null;
+                const thumb = payload.message.thumb || null;
+
                 if (!tempId || !to || !type) return;
 
-                content = content || " ";
+                content = content || null;
+                const now = Date.now();
 
-                const receiverSockets = onlineUsers.get(to);
-                const isReceiverOnline = receiverSockets && receiverSockets.size > 0;
+                // Cache sender for delivery ACK
+                await redis.set(`msg:${tempId}:from`, userId, "EX", 86400);
 
-                // 1️⃣ SAVE FIRST (prevents ghost messages)
-                const newMessage = await Message.create({
-                    tempId,
-                    from: userId,
-                    to,
-                    type,
-                    content,
-                    caption,
-                    replyTo,
-                    clientTime,
-                    status: {
-                        sent: true,
-                        delivered: false,
-                        seen: false
-                    }
-                });
-
-                socket.emit("message_saved", {
-                    tempId,
-                    mongoId: newMessage._id
-                });
-
-                // 2️⃣ EMIT TO RECEIVER DEVICES
+                // Emit to receiver instantly — include cover + thumb so they can show thumbnail
                 io.to(to).emit("private_message", {
                     id: tempId,
                     from: userId,
@@ -82,18 +57,22 @@ export default function initSocket(io) {
                     content,
                     caption,
                     replyTo,
-                    timestamp: Date.now(),
+                    cover,      // ← NEW: video cover / image preview
+                    thumb,      // ← NEW: small thumbnail
+                    timestamp: now,
                     status: { delivered: false }
                 });
 
-                // 3️⃣ SYNC TO SENDER OTHER DEVICES
+                // Sync to sender's other devices
                 socket.to(userId).emit("private_message_sync", {
                     tempId,
                     to,
                     type,
                     content,
                     caption,
-                    timestamp: Date.now()
+                    cover,
+                    thumb,
+                    timestamp: now
                 });
 
                 socket.emit("message_ack", {
@@ -101,27 +80,42 @@ export default function initSocket(io) {
                     status: "sent"
                 });
 
-                // 4️⃣ DELIVERY UPDATE (only if online)
-                if (isReceiverOnline) {
-                    await Message.updateOne(
-                        { _id: newMessage._id },
-                        {
-                            $set: {
-                                "status.delivered": true,
-                                deliveredAt: new Date()
+                // Save to DB async — include cover + thumb
+                (async () => {
+                    try {
+                        await Message.create({
+                            tempId,
+                            from: userId,
+                            to,
+                            type,
+                            content,
+                            caption,
+                            cover,   // ← NEW
+                            thumb,   // ← NEW
+                            replyTo,
+                            clientTime,
+                            status: {
+                                sent: true,
+                                delivered: false,
+                                seen: false
                             }
-                        }
-                    );
+                        });
+                        socket.emit("message_saved", { tempId });
+                    } catch (err) {
+                        console.error("Message Save Failed:", err);
+                        socket.emit("message_save_failed", { tempId });
+                    }
+                })();
 
-                    io.to(userId).emit("message:delivered", { tempId });
-                }
+                // Telegram fallback
+                const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+                if (!receiverSockets.length) {
 
-                // 5️⃣ TELEGRAM NOTIFICATION (ONLY if fully offline)
-                if (!isReceiverOnline) {
                     const receiver = await User.findOne({ extra: to })
                         .select("telegramChatId notificationsEnabled");
 
                     if (receiver?.telegramChatId && receiver?.notificationsEnabled) {
+
                         const sender = await User.findOne({ extra: userId })
                             .select("username");
 
@@ -149,36 +143,65 @@ export default function initSocket(io) {
         });
 
         /* =============================
+           DELIVERY ACK
+        ============================== */
+
+        socket.on("message:received", async ({ tempId }) => {
+            try {
+
+                const senderId = await redis.get(`msg:${tempId}:from`);
+                if (!senderId) return;
+
+                io.to(senderId).emit("message:delivered", { tempId });
+
+                // Persist async
+                (async () => {
+                    try {
+                        await Message.updateOne(
+                            { tempId, to: userId },
+                            {
+                                $set: {
+                                    "status.delivered": true,
+                                    deliveredAt: new Date()
+                                }
+                            }
+                        );
+                    } catch (err) {
+                        console.error("Delivery Save Failed:", err);
+                    }
+                })();
+
+            } catch (err) {
+                console.error("Delivery ACK failed:", err);
+            }
+        });
+
+        /* =============================
            DELIVERY SYNC AFTER CONNECT
         ============================== */
 
         socket.on("sync:delivered", async () => {
             try {
+                // ── FIX: select cover + thumb so receiver gets them on sync ──
                 const undelivered = await Message.find({
                     to: userId,
                     "status.delivered": false
-                }).select("_id tempId from");
-
-                if (!undelivered.length) return;
-
-                const ids = undelivered.map(m => m._id);
-
-                await Message.updateMany(
-                    { _id: { $in: ids } },
-                    {
-                        $set: {
-                            "status.delivered": true,
-                            deliveredAt: new Date()
-                        }
-                    }
-                );
+                }).select("tempId from type content caption cover thumb replyTo createdAt");
 
                 undelivered.forEach(msg => {
-                    io.to(msg.from).emit("message:delivered", {
-                        tempId: msg.tempId
+                    socket.emit("private_message", {
+                        id: msg.tempId,
+                        from: msg.from,
+                        type: msg.type,
+                        content: msg.content,
+                        caption: msg.caption,
+                        cover: msg.cover || null,   // ← NEW
+                        thumb: msg.thumb || null,   // ← NEW
+                        replyTo: msg.replyTo,
+                        timestamp: msg.createdAt,
+                        status: { delivered: false }
                     });
                 });
-
             } catch (error) {
                 console.error("Delivery Sync Error:", error);
             }
@@ -198,30 +221,16 @@ export default function initSocket(io) {
 
         /* =============================
            MEDIA UPLOAD UPDATE
+           NOTE: This is now only used to update the DB with the real URL
+           after the client has already sent private_message with cover/thumb.
+           The receiver already got the full message via private_message.
         ============================== */
 
         socket.on("media:uploaded", async (payload) => {
             try {
+
                 const { to, tempId, url, mediaType, cover, thumb } = payload;
-
                 if (!tempId) return;
-
-                // 1️⃣ Update DB first (single source of truth)
-                const updated = await Message.findOneAndUpdate(
-                    { tempId, from: userId },
-                    {
-                        $set: {
-                            content: url,
-                            type: mediaType,
-                            cover,
-                            thumb,
-                            "status.mediaReady": true
-                        }
-                    },
-                    { new: true }
-                );
-
-                if (!updated) return;
 
                 const emitPayload = {
                     tempId,
@@ -232,11 +241,29 @@ export default function initSocket(io) {
                     mediaReady: true
                 };
 
-                // 2️⃣ Emit to RECEIVER (all devices)
+                // Still emit to both sides for any UI that needs it
                 io.to(to).emit("media:uploaded", emitPayload);
-
-                // 3️⃣ Emit to SENDER (all devices including uploader)
                 io.to(userId).emit("media:uploaded", emitPayload);
+
+                // Persist async — update content + cover + thumb in DB
+                (async () => {
+                    try {
+                        await Message.updateOne(
+                            { tempId, from: userId },
+                            {
+                                $set: {
+                                    content: url,
+                                    type: mediaType,
+                                    cover: cover || null,
+                                    thumb: thumb || null,
+                                    "status.mediaReady": true
+                                }
+                            }
+                        );
+                    } catch (err) {
+                        console.error("Media Save Failed:", err);
+                    }
+                })();
 
             } catch (err) {
                 console.error("Media update failed:", err);
@@ -248,7 +275,18 @@ export default function initSocket(io) {
         ============================== */
 
         socket.on("chat:seen", async ({ from }) => {
+
             try {
+
+                const senderSockets = await redis.smembers(`user:${from}:sockets`);
+                if (!senderSockets.length) return;
+                console.log(senderSockets)
+                senderSockets.forEach(socketId => {
+                    io.to(socketId).emit("message:seen", { by: userId });
+                });
+
+                socket.to(userId).emit("chat:seen_sync", { from });
+
                 await Message.updateMany(
                     {
                         from,
@@ -264,12 +302,10 @@ export default function initSocket(io) {
                     }
                 );
 
-                io.to(from).emit("message:seen", { by: userId });
-                socket.to(userId).emit("chat:seen_sync", { from });
-
             } catch (error) {
-                console.error("Seen update error:", error);
+                console.error("Seen save failed:", error);
             }
+
         });
 
         /* =============================
@@ -277,25 +313,20 @@ export default function initSocket(io) {
         ============================== */
 
         socket.on("disconnect", async () => {
-            const userSockets = onlineUsers.get(userId);
 
-            if (!userSockets) return;
+            await redis.srem(`user:${userId}:sockets`, socket.id);
 
-            userSockets.delete(socket.id);
+            const sockets = await redis.smembers(`user:${userId}:sockets`);
 
-            if (userSockets.size === 0) {
-                onlineUsers.delete(userId);
+            if (!sockets.length) {
 
+                await redis.srem("online:users", userId);
                 socket.broadcast.emit("user:offline", { userId });
 
-                try {
-                    await User.updateOne(
-                        { extra: userId },
-                        { $set: { lastSeen: new Date() } }
-                    );
-                } catch (err) {
-                    console.error("LastSeen update failed:", err);
-                }
+                await User.updateOne(
+                    { extra: userId },
+                    { $set: { lastSeen: new Date() } }
+                );
             }
         });
     });
