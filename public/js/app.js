@@ -32,6 +32,35 @@ const State = {
     playTune: true,
     messageIndex: {}
 };
+const UploadManager = {
+    queue: [],
+    uploading: false,
+
+    add(task) {
+        this.queue.push(task);
+        this.process();
+    },
+
+    async process() {
+
+        if (this.uploading) return;
+
+        const next = this.queue.shift();
+
+        if (!next) return;
+
+        this.uploading = true;
+
+        try {
+            await next();
+        } catch (err) {
+            console.error("Upload failed:", err);
+        } finally {
+            this.uploading = false;
+            this.process();
+        }
+    }
+};
 const UploadControllers = {};
 
 // =============================================================================
@@ -273,7 +302,7 @@ function initSocket() {
     ============================================= */
     socket.on("message:seen", ({ by }) => {
         console.log("on message seen");
-        
+
         updateMessageSeenByTempId(by);
     });
 
@@ -438,7 +467,7 @@ function initSocket() {
 
 function markSeen(message) {
     if (!message?.status?.delivered || message.status.seen) return;
-console.log(message)
+    console.log(message)
     message.status.seen = true;
 
     const id = message.id || message.tempId;
@@ -461,7 +490,7 @@ console.log(message)
 
 function updateMessageSeenByTempId(chatId, tempId = null) {
     const msgs = State.messages[chatId] || [];
-console.log(msgs)
+    console.log(msgs)
     if (tempId) {
         const msg = msgs.find(m => m.id == tempId || m.tempId == tempId);
         if (msg) markSeen(msg);
@@ -1937,7 +1966,15 @@ async function handelMedia(file) {
     if (!State.activeChat) return;
 
     const mediaInput = document.getElementById('media-input');
-    const localUrl = URL.createObjectURL(file);
+    if (file.type.startsWith("image/")) {
+        file = await imageCompression(file, {
+            maxSizeMB: 1,
+            maxWidthOrHeight: 1280,
+            useWebWorker: true
+        });
+    }
+    const localUrl =
+    URL.createObjectURL(file);
     const mediaType = file.type.split("/")[0]; // "image" or "video"
     const to = State.activeChat;
 
@@ -1981,7 +2018,9 @@ async function handelMedia(file) {
 
     // ── STEP 3: Upload → on success server notifies receiver via media:uploaded ──
     try {
-        await uploadMedia(message.tempId, to, file);
+        UploadManager.add(() =>
+            uploadMedia(message.tempId, to, file)
+        );
     } catch (err) {
         showToast("Upload failed. Tap to retry.", "error");
         console.error(err);
@@ -2480,7 +2519,118 @@ function drawStaticWaveform(canvas, progress = 0) {
 }
 
 
+async function uploadFileInChunks(file, msgId) {
 
+    const CHUNK_SIZE = 1024 * 1024; // 1MB
+
+    const totalChunks = Math.ceil(
+        file.size / CHUNK_SIZE
+    );
+
+    const fileId =
+        `${Date.now()}_${Math.random()}`;
+
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+
+        const start = chunkIndex * CHUNK_SIZE;
+
+        const end = Math.min(
+            start + CHUNK_SIZE,
+            file.size
+        );
+
+        const chunk = file.slice(start, end);
+
+        const formData = new FormData();
+
+        formData.append("chunk", chunk);
+
+        formData.append("fileId", fileId);
+
+        formData.append(
+            "chunkIndex",
+            chunkIndex
+        );
+
+        formData.append(
+            "totalChunks",
+            totalChunks
+        );
+
+        formData.append(
+            "fileName",
+            file.name
+        );
+
+        let uploaded = false;
+
+        let retries = 0;
+
+        while (!uploaded && retries < 3) {
+
+            try {
+
+                const res = await fetch(
+                    "/api/upload-chunk",
+                    {
+                        method: "POST",
+                        body: formData
+                    }
+                );
+
+                if (!res.ok) {
+                    throw new Error("Chunk upload failed");
+                }
+
+                uploaded = true;
+
+            } catch (err) {
+
+                retries++;
+
+                await new Promise(resolve =>
+                    setTimeout(resolve, retries * 2000)
+                );
+            }
+        }
+
+        if (!uploaded) {
+            throw new Error(
+                `Chunk ${chunkIndex} failed`
+            );
+        }
+
+        const progress = Math.round(
+            ((chunkIndex + 1) / totalChunks) * 100
+        );
+
+        console.log(
+            `Upload ${msgId}: ${progress}%`
+        );
+    }
+
+    // finalize upload
+    const finalRes = await fetch(
+        "/api/complete-upload",
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                fileId,
+                fileName: file.name,
+                mimeType: file.type
+            })
+        }
+    );
+
+    if (!finalRes.ok) {
+        throw new Error("Finalize failed");
+    }
+
+    return await finalRes.json();
+}
 async function uploadMedia(msgId, receiver, file) {
     const controller = new AbortController();
     UploadControllers[msgId] = controller;
@@ -2495,18 +2645,11 @@ async function uploadMedia(msgId, receiver, file) {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-        const formData = new FormData();
-        formData.append("file", file);
+        const data = await uploadFileInChunks(
+            file,
+            msgId,
 
-        const res = await fetch("/api/upload", {
-            method: "POST",
-            body: formData,
-            signal: controller.signal
-        });
-
-        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-
-        const data = await res.json();
+        );
 
         const realUrl = data.original;
         const cover = data.cover_270 || null;
