@@ -2960,6 +2960,15 @@ body {
     animation: spin 0.8s linear infinite;
 }
 
+.chat-video-preview {
+    width: 100%;
+    max-width: 280px;
+    border-radius: 12px;
+    object-fit: cover;
+    background: #000;
+    cursor: pointer;
+}
+
 @keyframes spin {
     to {
         transform: rotate(360deg);
