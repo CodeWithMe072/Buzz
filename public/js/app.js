@@ -564,33 +564,32 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 
             /* ---------- VIDEO MESSAGE (THUMB ONLY) ---------- */
             if (updates.type === "video") {
-                let img = mediaContainer.querySelector("img");
-                let playIcon = mediaContainer.querySelector(".video-play-icon");
 
-                const preloadImg = new Image();
-                preloadImg.src = previewSrc;
-                preloadImg.alt = "Video thumbnail";
+                mediaContainer.innerHTML = "";
 
-                preloadImg.onload = () => {
-                    if (!img) {
-                        mediaContainer.innerHTML = "";
+                const video =
+                    document.createElement(
+                        "video"
+                    );
 
-                        img = document.createElement("img");
-                        img.className = "video-thumb";
-                        mediaContainer.appendChild(img);
+                video.src =
+                    updates.content;
 
-                        playIcon = document.createElement("div");
-                        playIcon.className = "video-play-icon";
-                        playIcon.innerHTML = "▶";
-                        mediaContainer.appendChild(playIcon);
+                video.className =
+                    "chat-video-preview";
 
-                        // click handled by attactEventOnMedia → opens viewer
-                    }
+                video.controls = false;
 
-                    img.src = previewSrc;
-                    img.alt = "Video thumbnail";
+                video.muted = true;
 
-                };
+                video.playsInline = true;
+
+                video.preload =
+                    "metadata";
+
+                mediaContainer.appendChild(
+                    video
+                );
             }
 
             if (mediaOverlay) mediaOverlay.remove();
@@ -802,22 +801,31 @@ function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus }) {
     }
 
     if (type === "video") {
-        let img = mediaContainer.querySelector("img.video-thumb");
-        if (!img) {
-            mediaContainer.innerHTML = "";
-            img = document.createElement("img");
-            img.className = "video-thumb";
-            mediaContainer.appendChild(img);
 
-            const playIcon = document.createElement("div");
-            playIcon.className = "video-play-icon";
-            playIcon.innerHTML = "▶";
-            mediaContainer.appendChild(playIcon);
-        }
-        if (previewSrc) {
-            img.src = previewSrc;
-        }
-        // click handled by attactEventOnMedia → opens viewer
+        mediaContainer.innerHTML = "";
+
+        const video =
+            document.createElement(
+                "video"
+            );
+
+        video.src = content;
+
+        video.className =
+            "chat-video-preview";
+
+        video.controls = false;
+
+        video.muted = true;
+
+        video.playsInline = true;
+
+        video.preload =
+            "metadata";
+
+        mediaContainer.appendChild(
+            video
+        );
     }
 
     // Update status icon to single sent tick
@@ -1618,30 +1626,63 @@ function createMessageElement(msg) {
         }
 
         if (msg.type === "video") {
-            const thumb = document.createElement("img");
-            thumb.className = "video-thumb";
 
-            const playIcon = document.createElement("div");
-            playIcon.className = "video-play-icon";
-            playIcon.innerHTML = "▶";
+            const video =
+                document.createElement(
+                    "video"
+                );
 
-            mediaDiv.appendChild(thumb);
-            mediaDiv.appendChild(playIcon);
+            video.src =
+                msg.content;
 
-            if (msg.cover) {
-                thumb.src = msg.cover;
-            } else if (msg.content) {
-                // generate thumbnail from video URL/blob — catch errors for cross-origin or invalid URLs
-                generateVideoThumbnail(msg.content)
-                    .then((dataUrl) => {
-                        thumb.src = dataUrl.url;
-                        msg.cover = dataUrl.url; // cache it for reuse
-                    })
-                    .catch(() => {
-                        // thumbnail generation failed (e.g. cross-origin video), show play icon only
-                        thumb.style.display = "none";
-                    });
-            }
+            video.className =
+                "chat-video-preview";
+
+            video.controls = false;
+
+            video.muted = true;
+
+            video.playsInline = true;
+
+            video.preload =
+                "metadata";
+
+            video.autoplay = false;
+
+            video.loop = false;
+
+            mediaDiv.appendChild(
+                video
+            );
+
+            // Click opens viewer
+            video.addEventListener(
+                "click",
+                (e) => {
+
+                    e.stopPropagation();
+
+                    const msgEl =
+                        video.closest(
+                            ".message"
+                        );
+
+                    if (!msgEl) return;
+
+                    const messageId =
+                        msgEl.dataset
+                            .messageId;
+
+                    const index =
+                        viewer.getIndexByMessageId(
+                            messageId
+                        );
+
+                    if (index !== -1) {
+                        viewer.open(index);
+                    }
+                }
+            );
         }
         bubbleDiv.appendChild(mediaDiv);
     }
@@ -1965,20 +2006,10 @@ function initChatWindow() {
 async function handelMedia(file) {
     if (!State.activeChat) return;
 
-    const mediaInput = document.getElementById('media-input');
-    if (file.type.startsWith("image/")) {
-        file = await imageCompression(file, {
-            maxSizeMB: 1,
-            maxWidthOrHeight: 1280,
-            useWebWorker: true
-        });
-    }
-    const localUrl =
-    URL.createObjectURL(file);
-    const mediaType = file.type.split("/")[0]; // "image" or "video"
+    // ✅ Create blob URL from ORIGINAL file immediately — no waiting
+    const localUrl = URL.createObjectURL(file);
+    const mediaType = file.type.split("/")[0];
     const to = State.activeChat;
-
-    // ── STEP 1: Build message with local blob URL for instant preview ──
     const message = {
         tempId: generateId(),
         type: mediaType,
@@ -1986,45 +2017,29 @@ async function handelMedia(file) {
         uploadStatus: "uploading",
         caption: null,
         clientTime: Date.now(),
-        replyTo: State.replyingTo,
-        user: State.currentUser.username,
+        replyTo: State.replyingTo,        // ← carry reply context
+        user: State.currentUser.username, // ← THIS is what was missing!
         status: { sent: false, delivered: false, seen: false },
         timestamp: Date.now()
     };
 
-    // Store in state
+    // Show in UI immediately
     if (!State.messages[to]) State.messages[to] = [];
     State.messages[to].unshift(message);
     State.messageIndex[message.tempId] = to;
-
-    // ── STEP 2: Show in sender UI immediately with uploading spinner ──
     const messagesContainer = document.getElementById('messages');
-    const messageEl = createMessageElement(message);
-    messagesContainer.appendChild(messageEl);
+    messagesContainer.appendChild(createMessageElement(message));
     document.getElementById('messages-container').scrollTop = 99999;
 
-    // Update conversation preview
-    const conv = State.conversations.find(c => c.id === to);
-    if (conv) {
-        conv.lastMessage = `📷 ${mediaType}`;
-        conv.timestamp = message.timestamp;
+    // ✅ Compress in background AFTER showing preview
+    if (file.type.startsWith("image/")) {
+        file = await imageCompression(file, {
+            maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true
+        });
     }
-    renderChatList();
 
-    // Clear reply and input
-    State.replyingTo = null;
-    document.getElementById('reply-preview').style.display = 'none';
-    if (mediaInput) mediaInput.value = "";
-
-    // ── STEP 3: Upload → on success server notifies receiver via media:uploaded ──
-    try {
-        UploadManager.add(() =>
-            uploadMedia(message.tempId, to, file)
-        );
-    } catch (err) {
-        showToast("Upload failed. Tap to retry.", "error");
-        console.error(err);
-    }
+    // Now upload the (maybe compressed) file
+    UploadManager.add(() => uploadMedia(message.tempId, to, file));
 }
 
 function handlePastedImage(blob) {
@@ -2520,117 +2535,65 @@ function drawStaticWaveform(canvas, progress = 0) {
 
 
 async function uploadFileInChunks(file, msgId) {
+    const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks
+    const PARALLEL = 3;               // 3 chunks at once
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const fileId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    const CHUNK_SIZE = 1024 * 1024; // 1MB
+    // Build all chunk tasks
+    const tasks = Array.from({ length: totalChunks }, (_, i) => i);
+    let done = 0;
 
-    const totalChunks = Math.ceil(
-        file.size / CHUNK_SIZE
-    );
+    // Process in parallel batches
+    for (let i = 0; i < tasks.length; i += PARALLEL) {
+        const batch = tasks.slice(i, i + PARALLEL);
 
-    const fileId =
-        `${Date.now()}_${Math.random()}`;
+        await Promise.all(batch.map(async (chunkIndex) => {
+            const start = chunkIndex * CHUNK_SIZE;
+            const chunk = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
 
-    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+            let retries = 0;
+            while (retries < 3) {
+                try {
+                    const formData = new FormData();
+                    formData.append("chunk", chunk);
+                    formData.append("fileId", fileId);
+                    formData.append("chunkIndex", chunkIndex);
+                    formData.append("totalChunks", totalChunks);
+                    formData.append("fileName", file.name);
 
-        const start = chunkIndex * CHUNK_SIZE;
-
-        const end = Math.min(
-            start + CHUNK_SIZE,
-            file.size
-        );
-
-        const chunk = file.slice(start, end);
-
-        const formData = new FormData();
-
-        formData.append("chunk", chunk);
-
-        formData.append("fileId", fileId);
-
-        formData.append(
-            "chunkIndex",
-            chunkIndex
-        );
-
-        formData.append(
-            "totalChunks",
-            totalChunks
-        );
-
-        formData.append(
-            "fileName",
-            file.name
-        );
-
-        let uploaded = false;
-
-        let retries = 0;
-
-        while (!uploaded && retries < 3) {
-
-            try {
-
-                const res = await fetch(
-                    "/api/upload-chunk",
-                    {
-                        method: "POST",
-                        body: formData
-                    }
-                );
-
-                if (!res.ok) {
-                    throw new Error("Chunk upload failed");
+                    const res = await fetch("/api/upload-chunk", {
+                        method: "POST", body: formData
+                    });
+                    if (!res.ok) throw new Error("failed");
+                    break;
+                } catch {
+                    retries++;
+                    if (retries >= 3) throw new Error(`Chunk ${chunkIndex} failed`);
+                    await new Promise(r => setTimeout(r, retries * 1000));
                 }
-
-                uploaded = true;
-
-            } catch (err) {
-
-                retries++;
-
-                await new Promise(resolve =>
-                    setTimeout(resolve, retries * 2000)
-                );
             }
-        }
 
-        if (!uploaded) {
-            throw new Error(
-                `Chunk ${chunkIndex} failed`
-            );
-        }
-
-        const progress = Math.round(
-            ((chunkIndex + 1) / totalChunks) * 100
-        );
-
-        console.log(
-            `Upload ${msgId}: ${progress}%`
-        );
+            done++;
+            // Update progress bar
+            const pct = Math.round((done / totalChunks) * 100);
+            document.querySelector(
+                `[id="${msgId}"] .qi-fill`
+            ); // if you have a progress bar
+            console.log(`${msgId}: ${pct}%`);
+        }));
     }
 
-    // finalize upload
-    const finalRes = await fetch(
-        "/api/complete-upload",
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                fileId,
-                fileName: file.name,
-                mimeType: file.type
-            })
-        }
-    );
-
-    if (!finalRes.ok) {
-        throw new Error("Finalize failed");
-    }
-
-    return await finalRes.json();
+    // Finalize
+    const res = await fetch("/api/complete-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId, fileName: file.name, mimeType: file.type })
+    });
+    if (!res.ok) throw new Error("Finalize failed");
+    return await res.json();
 }
+
 async function uploadMedia(msgId, receiver, file) {
     const controller = new AbortController();
     UploadControllers[msgId] = controller;
@@ -3003,34 +2966,6 @@ document.addEventListener("click", (e) => {
     }
 });
 
-
-function generateVideoThumbnail(videoSrc) {
-    return new Promise((resolve, reject) => {
-        const video = document.createElement("video");
-        video.src = videoSrc;
-        video.muted = true;
-        video.playsInline = true;
-        video.crossOrigin = "anonymous";
-
-        video.onloadeddata = () => {
-            // seek a little to avoid black frame
-            video.currentTime = Math.min(0.5, video.duration / 2);
-        };
-
-        video.onseeked = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            resolve({ url: canvas.toDataURL("image/jpeg", 0.75), duration: video.duration });
-        };
-
-        video.onerror = reject;
-    });
-}
 
 
 function getVideoDuration(videoUrl) {
@@ -3615,6 +3550,92 @@ document.getElementById("chatOption-ShowMedia").addEventListener("click", async 
         }
     };
 });
+
+
+async function generateVideoThumbnail(videoUrl) {
+
+    return new Promise(
+        (resolve, reject) => {
+            const video = document.createElement("video");
+            let timeout;
+            // =========================================================================
+            // Cleanup
+            // =========================================================================
+            function cleanup() {
+                clearTimeout(timeout);
+                video.pause();
+                video.removeAttribute("src");
+                video.load();
+            }
+            // =========================================================================
+            // Timeout Protection
+            // =========================================================================
+            timeout = setTimeout(() => {
+                cleanup();
+                reject(new Error("Thumbnail timeout"));
+            }, 15000);
+            // =========================================================================
+            // Video Config
+            // =========================================================================
+            video.crossOrigin = "anonymous";
+            video.muted = true;
+            video.playsInline = true;
+            video.preload = "metadata";
+            video.autoplay = false;
+            // IMPORTANT
+            video.src = videoUrl;
+            // =========================================================================
+            // Metadata Loaded
+            // =========================================================================
+            video.onloadedmetadata =
+                () => {
+                    // Prevent invalid seek
+                    const seekTime = Math.min(1, Math.max(0, video.duration / 2));
+                    // Small delay improves reliability
+                    setTimeout(() => {
+                        try {
+                            video.currentTime = seekTime;
+                        } catch (err) {
+                            cleanup();
+                            reject(err);
+                        }
+                    }, 200);
+                };
+            // =========================================================================
+            // Frame Ready
+            // =========================================================================
+
+            video.onseeked = () => {
+                try {
+                    const canvas = document.createElement("canvas");
+                    canvas.width = 270;
+                    canvas.height = 270;
+                    const ctx = canvas.getContext("2d");
+                    // Black background
+                    ctx.fillStyle = "#000";
+                    ctx.fillRect(0, 0, 270, 270);
+                    // Draw frame
+                    ctx.drawImage(video, 0, 0, 270, 270);
+                    const url = canvas.toDataURL("image/jpeg", 0.7);
+                    cleanup();
+                    resolve({ url });
+
+                } catch (err) {
+                    cleanup();
+                    reject(err);
+                }
+            };
+
+            // =========================================================================
+            // Error Handling
+            // =========================================================================
+
+            video.onerror = (e) => {
+                cleanup();
+                reject(new Error("Video load failed"));
+            };
+        });
+}
 
 async function fetchAndShowAllMedia() {
     try {

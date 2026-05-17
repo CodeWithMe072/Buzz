@@ -1,277 +1,507 @@
 import express from "express";
 import multer from "multer";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-import cloudinary from "../config/cloudinary.js";
+
+import {
+    S3Client,
+    PutObjectCommand,
+} from "@aws-sdk/client-s3";
+
 import fs from "fs";
+import fse from "fs-extra";
 import path from "path";
 import os from "os";
-import fse from "fs-extra";
+import crypto from "crypto";
 
 const router = express.Router();
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => {
-    const isVideo = file.mimetype.startsWith("video/");
-    const isAudio = file.mimetype.startsWith("audio/");
+// =============================================================================
+// Cloudflare R2 Client
+// =============================================================================
 
-    return {
-      folder: "chat_media",
-      resource_type: (isVideo || isAudio) ? "video" : "image",
-      public_id: `${Date.now()}_${file.originalname.split(".")[0]}`
-    };
-  }
+const s3 = new S3Client({
+    region: "auto",
+
+    endpoint: process.env.R2_ENDPOINT,
+
+    credentials: {
+        accessKeyId:
+            process.env.R2_ACCESS_KEY_ID,
+
+        secretAccessKey:
+            process.env.R2_SECRET_ACCESS_KEY,
+    },
 });
+
+// =============================================================================
+// ENV
+// =============================================================================
+
+const BUCKET =
+    process.env.R2_BUCKET;
+
+// Example:
+// https://pub-xxxxx.r2.dev
+// OR
+// https://cdn.yourdomain.com
+
+const PUBLIC_BASE_URL =
+    process.env.R2_PUBLIC_URL;
+
+// =============================================================================
+// Public URL Helper
+// =============================================================================
+
+function getPublicFileUrl(key) {
+    return `${PUBLIC_BASE_URL}/${key}`;
+}
+
+// =============================================================================
+// Upload File To R2
+// =============================================================================
+
+async function uploadToR2(
+    filePath,
+    key,
+    mimeType
+) {
+
+    const fileStream =
+        fs.createReadStream(filePath);
+
+    await s3.send(
+        new PutObjectCommand({
+            Bucket: BUCKET,
+
+            Key: key,
+
+            Body: fileStream,
+
+            ContentType: mimeType,
+
+            CacheControl:
+                "public, max-age=31536000",
+        })
+    );
+
+    return getPublicFileUrl(key);
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+function makeImageUrls(originalUrl) {
+    return {
+        type: "image",
+
+        original: originalUrl,
+
+        cover_270: originalUrl,
+
+        thumb_50: originalUrl,
+    };
+}
+
+function makeVideoUrls(originalUrl) {
+    return {
+        type: "video",
+
+        original: originalUrl,
+
+        cover_270: null,
+
+        thumb_50: null,
+    };
+}
+
+// =============================================================================
+// Safe File Name
+// =============================================================================
+
+function generateFileKey(fileName, mimeType) {
+    const ext = path.extname(fileName) || `.${mimeType.split("/")[1]}`;
+    const cleanName =
+        path.basename(fileName, ext).replace(/[^a-zA-Z0-9_-]/g, "_");
+    const uniqueId = crypto.randomUUID();
+    return `chat_media/${uniqueId}_${cleanName}${ext}`;
+}
+
+// =============================================================================
+// Multer
+// =============================================================================
 
 const chunkUpload = multer({
-  dest: path.join(os.tmpdir(), "chunks"),
-  limits: {
-    fileSize: 5 * 1024 * 1024
-  }
+    dest: path.join(os.tmpdir(), "chunks"),
+
+    limits: { fileSize: 5 * 1024 * 1024, },
 });
 
-const upload = multer({
-  storage,
-  limits: {
-    files: 1,
-    fileSize: 50 * 1024 * 1024
-  }
+const diskUpload = multer({
+    dest: os.tmpdir(),
+
+    limits: {
+        files: 1,
+
+        fileSize:
+            100 * 1024 * 1024,
+    },
 });
 
-router.post("/api/upload", upload.single("file"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
-  }
+// =============================================================================
+// Upload Small File
+// =============================================================================
 
-  const mime = req.file.mimetype;
+router.post("/api/upload", diskUpload.single("file"), async (req, res) => {
 
-  const isVideo = mime.startsWith("video/");
-  const isAudio = mime.startsWith("audio/");
-  const publicId = req.file.filename;
-  const baseUrl = req.file.path.split("/upload/")[0] + "/upload";
-  if (isVideo) {
-    return res.status(200).json({
-      type: "video",
-      original: req.file.path,
-      cover_270: `${baseUrl}/so_0,w_270,h_270,c_fill,f_jpg/${publicId}.jpg`,
-      thumb_50: `${baseUrl}/so_0,w_50,h_50,c_fill,f_jpg/${publicId}.jpg`
-    });
-  }
-
-  if (isAudio) {
-    return res.status(200).json({
-      type: "audio",
-      original: req.file.path,
-      cover_270: null,
-      thumb_50: null
-    });
-  }
-
-  // image
-  return res.status(200).json({
-    type: "image",
-    original: req.file.path,
-    cover_270: `${baseUrl}/w_270,h_270,c_fill/${publicId}.jpg`,
-    thumb_50: `${baseUrl}/w_50,h_50,c_fill/${publicId}.jpg`
-  });
-});
-
-router.post(
-  "/api/upload-chunk",
-  chunkUpload.single("chunk"),
-  async (req, res) => {
-
-    try {
-
-      const {
-        fileId,
-        chunkIndex
-      } = req.body;
-
-      if (!req.file) {
+    if (!req.file) {
         return res
-          .status(400)
-          .json({
-            error: "No chunk uploaded"
-          });
-      }
+            .status(400)
 
-      const chunkDir =
-        path.join(
-          os.tmpdir(),
-          "chunks",
-          fileId
-        );
-
-      await fse.ensureDir(chunkDir);
-
-      const finalChunkPath =
-        path.join(
-          chunkDir,
-          chunkIndex
-        );
-
-      await fse.move(
-        req.file.path,
-        finalChunkPath,
-        { overwrite: true }
-      );
-
-      return res.json({
-        success: true
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      return res
-        .status(500)
-        .json({
-          error: "Chunk upload failed"
-        });
+            .json({
+                error:
+                    "No file uploaded",
+            });
     }
-  }
-);
 
-router.post(
-  "/api/complete-upload",
-  express.json(),
-  async (req, res) => {
+    const {
+        mimetype,
+        path: tmpPath,
+        originalname,
+    } = req.file;
+
+    const isVideo =
+        mimetype.startsWith(
+            "video/"
+        );
+
+    const isAudio =
+        mimetype.startsWith(
+            "audio/"
+        );
+
+    const key =
+        generateFileKey(
+            originalname,
+            mimetype
+        );
 
     try {
 
-      const {
-        fileId,
-        fileName,
-        mimeType
-      } = req.body;
+        const url =
+            await uploadToR2(
+                tmpPath,
+                key,
+                mimetype
+            );
 
-      const chunkDir =
-        path.join(
-          os.tmpdir(),
-          "chunks",
-          fileId
+        await fse.remove(
+            tmpPath
         );
 
-      const mergedPath =
-        path.join(
-          os.tmpdir(),
-          `${Date.now()}_${fileName}`
+        if (isVideo) {
+            return res.json(
+                makeVideoUrls(url)
+            );
+        }
+
+        if (isAudio) {
+            return res.json({
+                type: "audio",
+
+                original: url,
+
+                cover_270: null,
+
+                thumb_50: null,
+            });
+        }
+
+        return res.json(
+            makeImageUrls(url)
         );
-
-      const chunkFiles =
-        (await fse.readdir(chunkDir))
-        .sort((a, b) => Number(a) - Number(b));
-
-      const writeStream =
-        fs.createWriteStream(
-          mergedPath
-        );
-
-      for (const chunkFile of chunkFiles) {
-
-        const chunkPath =
-          path.join(
-            chunkDir,
-            chunkFile
-          );
-
-        const chunkBuffer =
-          await fse.readFile(chunkPath);
-
-        writeStream.write(chunkBuffer);
-      }
-
-      writeStream.end();
-
-      await new Promise((resolve) => {
-        writeStream.on("finish", resolve);
-      });
-
-      const isVideo =
-        mimeType.startsWith("video/");
-
-      const isAudio =
-        mimeType.startsWith("audio/");
-
-      const uploadResult =
-        await cloudinary.uploader.upload(
-          mergedPath,
-          {
-            folder: "chat_media",
-            resource_type:
-              (isVideo || isAudio)
-                ? "video"
-                : "image"
-          }
-        );
-
-      const publicId =
-        uploadResult.public_id;
-
-      const baseUrl =
-        uploadResult.secure_url
-          .split("/upload/")[0]
-          + "/upload";
-
-      // cleanup
-      await fse.remove(chunkDir);
-
-      await fse.remove(mergedPath);
-
-      if (isVideo) {
-
-        return res.json({
-          type: "video",
-          original:
-            uploadResult.secure_url,
-
-          cover_270:
-            `${baseUrl}/so_0,w_270,h_270,c_fill,f_jpg/${publicId}.jpg`,
-
-          thumb_50:
-            `${baseUrl}/so_0,w_50,h_50,c_fill,f_jpg/${publicId}.jpg`
-        });
-      }
-
-      if (isAudio) {
-
-        return res.json({
-          type: "audio",
-          original:
-            uploadResult.secure_url,
-
-          cover_270: null,
-          thumb_50: null
-        });
-      }
-
-      return res.json({
-        type: "image",
-        original:
-          uploadResult.secure_url,
-
-        cover_270:
-          `${baseUrl}/w_270,h_270,c_fill/${publicId}.jpg`,
-
-        thumb_50:
-          `${baseUrl}/w_50,h_50,c_fill/${publicId}.jpg`
-      });
 
     } catch (err) {
 
-      console.error(err);
+        console.error(
+            "[upload] R2 error:",
+            err?.name,
+            err?.message
+        );
 
-      return res
-        .status(500)
-        .json({
-          error: "Finalize upload failed"
-        });
+        await fse
+            .remove(tmpPath)
+            .catch(() => { });
+
+        return res
+            .status(500)
+            .json({
+                error:
+                    "Upload failed",
+            });
     }
-  }
+}
 );
 
+// =============================================================================
+// Upload Chunk
+// =============================================================================
 
+router.post(
+    "/api/upload-chunk",
+
+    chunkUpload.single(
+        "chunk"
+    ),
+
+    async (req, res) => {
+
+        try {
+
+            const {
+                fileId,
+                chunkIndex,
+            } = req.body;
+
+            if (!req.file) {
+                return res
+                    .status(400)
+                    .json({
+                        error:
+                            "No chunk uploaded",
+                    });
+            }
+
+            const chunkDir =
+                path.join(
+                    os.tmpdir(),
+                    "chunks",
+                    fileId
+                );
+
+            await fse.ensureDir(
+                chunkDir
+            );
+
+            await fse.move(
+                req.file.path,
+
+                path.join(
+                    chunkDir,
+                    String(chunkIndex)
+                ),
+
+                {
+                    overwrite: true,
+                }
+            );
+
+            return res.json({
+                success: true,
+            });
+
+        } catch (err) {
+
+            console.error(
+                "[upload-chunk] error:",
+                err?.name,
+                err?.message
+            );
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "Chunk upload failed",
+                });
+        }
+    }
+);
+
+// =============================================================================
+// Complete Upload
+// =============================================================================
+
+router.post("/api/complete-upload", express.json(),
+    async (req, res) => {
+        const { fileId, fileName, mimeType, } = req.body;
+        const chunkDir = path.join(os.tmpdir(), "chunks", fileId);
+
+        const mergedPath = path.join(os.tmpdir(), `${Date.now()}_${fileName}`);
+
+        try {
+
+            // =========================================================================
+            // Get Chunks
+            // =========================================================================
+
+            const chunkFiles =
+                (
+                    await fse.readdir(
+                        chunkDir
+                    )
+                ).sort(
+                    (a, b) =>
+                        Number(a) -
+                        Number(b)
+                );
+
+            // =========================================================================
+            // Merge Chunks Using Streams
+            // =========================================================================
+
+            const writeStream =
+                fs.createWriteStream(
+                    mergedPath
+                );
+
+            for (const chunkFile of chunkFiles) {
+
+                const chunkPath =
+                    path.join(
+                        chunkDir,
+                        chunkFile
+                    );
+
+                await new Promise(
+                    (
+                        resolve,
+                        reject
+                    ) => {
+
+                        const readStream =
+                            fs.createReadStream(
+                                chunkPath
+                            );
+
+                        readStream.on(
+                            "error",
+                            reject
+                        );
+
+                        readStream.on(
+                            "end",
+                            resolve
+                        );
+
+                        readStream.pipe(
+                            writeStream,
+                            {
+                                end: false,
+                            }
+                        );
+                    }
+                );
+            }
+
+            writeStream.end();
+
+            await new Promise(
+                (
+                    resolve,
+                    reject
+                ) => {
+
+                    writeStream.on(
+                        "finish",
+                        resolve
+                    );
+
+                    writeStream.on(
+                        "error",
+                        reject
+                    );
+                }
+            );
+
+            // =========================================================================
+            // Upload To R2
+            // =========================================================================
+
+            const isVideo =
+                mimeType.startsWith(
+                    "video/"
+                );
+
+            const isAudio =
+                mimeType.startsWith(
+                    "audio/"
+                );
+
+            const key =
+                generateFileKey(
+                    fileName,
+                    mimeType
+                );
+
+            const url =
+                await uploadToR2(
+                    mergedPath,
+                    key,
+                    mimeType
+                );
+
+            // =========================================================================
+            // Cleanup
+            // =========================================================================
+
+            await fse.remove(
+                chunkDir
+            );
+
+            await fse.remove(
+                mergedPath
+            );
+
+            // =========================================================================
+            // Response
+            // =========================================================================
+
+            if (isVideo) {
+                return res.json(
+                    makeVideoUrls(url)
+                );
+            }
+
+            if (isAudio) {
+                return res.json({
+                    type: "audio",
+
+                    original: url,
+
+                    cover_270: null,
+
+                    thumb_50: null,
+                });
+            }
+
+            return res.json(
+                makeImageUrls(url)
+            );
+
+        } catch (err) {
+
+            console.error(
+                "[complete-upload] error:",
+                err?.name,
+                err?.message
+            );
+
+            await fse
+                .remove(chunkDir)
+                .catch(() => { });
+
+            await fse
+                .remove(mergedPath)
+                .catch(() => { });
+
+            return res
+                .status(500)
+                .json({
+                    error:
+                        "Finalize upload failed",
+                });
+        }
+    }
+);
 
 export default router;

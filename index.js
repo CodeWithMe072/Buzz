@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import cors from "cors";
 import { fileURLToPath } from "url";
 import http from "http";
 import { Server } from "socket.io";
@@ -21,35 +22,56 @@ const PORT = process.env.PORT || 5500;
 /* ---------- Mongo ---------- */
 await connectMongo();
 
+/* ---------- CORS ---------- */
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+}));
+
 /* ---------- Express ---------- */
 app.set("view engine", "ejs");
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
 app.use(express.static(path.join(__dirname, "public")));
 
-startAutoDeleteSeenMessagesJob()
+startAutoDeleteSeenMessagesJob();
+
 /* ---------- Routes ---------- */
 app.get("/", (req, res) => res.render("index"));
+
 app.use(chatRoutes);
 app.use(authRoutes);
 app.use(uploadRoutes);
 
 /* ---------- Server ---------- */
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
+  }
+});
 
 /* ---------- Socket ---------- */
 initSocket(io);
 
 /* ---------- Start ---------- */
 
-
 if (process.env.NODE_ENV == "PROD") {
-  server.listen(process.env.PORT || 8080, '0.0.0.0', () => {
-    console.log(`Server running at http://0.0.0.0:${PORT || 8080}`);
+  server.listen(process.env.PORT || 8080, "0.0.0.0", () => {
+    console.log(
+      `Server running at http://0.0.0.0:${PORT || 8080}`
+    );
   });
 } else {
   server.listen(PORT, () => {
-    console.log(`Server running on http://127.0.0.1:${PORT}`);
+    console.log(
+      `Server running on http://127.0.0.1:${PORT}`
+    );
   });
 }
