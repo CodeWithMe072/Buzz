@@ -977,32 +977,64 @@ function generateId() {
 }
 
 function formatTime(timestamp) {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now - date;
-    // Less than a minute
-    if (diff < 60000) return 'Just now';
 
-    // Less than an hour
+    if (diff < 60000) return 'Just now';
     if (diff < 3600000) {
         const mins = Math.floor(diff / 60000);
         return `${mins}m`;
     }
-
-    // Less than a day
     if (diff < 86400000) {
-        const hours = Math.floor(diff / 3600000);
-        return `${hours}h`;
+        // Same day — show clock time (e.g. "3:45 PM")
+        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     }
-
-    // Less than a week
+    if (diff < 172800000) return 'Yesterday';
     if (diff < 604800000) {
-        const days = Math.floor(diff / 86400000);
-        return `${days}d`;
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return days[date.getDay()];
     }
-
-    // Format as date
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function startTimeTicker() {
+    // Refresh all visible timestamps every 30 seconds
+    setInterval(() => {
+        // Chat list timestamps
+        document.querySelectorAll('.chat-item-time').forEach(el => {
+            const convId = el.closest('.chat-item')?.dataset?.convId;
+            if (!convId) return;
+            const conv = State.conversations.find(c => c.id === convId);
+            if (conv?.timestamp) el.textContent = formatTime(conv.timestamp);
+        });
+
+        // Message timestamps
+        document.querySelectorAll('.message-time').forEach(el => {
+            const msgEl = el.closest('.message');
+            if (!msgEl) return;
+            const msgId = msgEl.dataset.messageId;
+            const chatId = State.activeChat;
+            if (!chatId) return;
+            const msg = (State.messages[chatId] || []).find(
+                m => (m.id || m.tempId) === msgId
+            );
+            if (msg?.timestamp) el.textContent = formatTime(msg.timestamp);
+        });
+
+        // Last seen status in chat header
+        if (State.activeChat) {
+            const conv = State.conversations.find(c => c.id === State.activeChat);
+            if (conv && !conv.online && conv.lastSeen) {
+                const statusEl = document.getElementById('online-status');
+                if (statusEl && !statusEl.classList.contains('online')) {
+                    const t = formatTime(new Date(conv.lastSeen).getTime());
+                    statusEl.textContent = t === 'Just now' ? 'Just now' : `Last seen ${t} ago`;
+                }
+            }
+        }
+    }, 30000);
 }
 
 function showToast(message, type = 'info') {
@@ -1109,6 +1141,7 @@ async function initAuth() {
         NetworkMonitor.isSocketConnected = socket.connected;
         renderChatList();
         showChatScreen();
+        startTimeTicker();
         return;
     }
     // No saved user, hide loader and show login
@@ -1357,6 +1390,7 @@ function renderChatList() {
     State.conversations.forEach(conv => {
         const item = document.createElement('div');
         item.className = `chat-item ${State.activeChat === conv.id ? 'active' : ''}`;
+        item.dataset.convId = conv.id;
 
         item.innerHTML = `
             <div class="avatar ${conv.online ? 'online' : ''}">
