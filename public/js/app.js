@@ -160,13 +160,14 @@ function initSocket() {
             tone.currentTime = 0;
             tone.play().catch(() => { });
         }
-        console.log(".........................")
         const message = {
             id: msg.id,
             type: msg.type,
             content: msg.content,       // real CDN URL (never null now)
             cover: msg.cover || null,   // image/video cover thumbnail
             thumb: msg.thumb || null,
+            fileName: msg.fileName || null,
+            fileSize: msg.fileSize || null,
             caption: msg.caption,
             sender: "other",
             timestamp: msg.timestamp,
@@ -606,6 +607,22 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
             audioContainer.replaceWith(newPlayer);
         }
 
+        if (updates.type === "document" && updates.content) {
+            const docContainer = msgEl.querySelector(".message-document");
+            if (docContainer) {
+                const meta = docContainer.querySelector(".doc-meta");
+                if (meta) meta.textContent = updates.fileSize ? formatFileSize(updates.fileSize) : "";
+
+                const actionsDiv = docContainer.querySelector(".doc-actions");
+                if (actionsDiv) {
+                    actionsDiv.innerHTML = `
+               <a href="${msg.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a>
+               <button class="doc-btn doc-save" onclick="forceDownload('${msg.content}', '${msg.fileName || 'document'}')">Save as</button>
+            `;
+                }
+            }
+        }
+
     }
 
 
@@ -702,6 +719,8 @@ function flushOutbox() {
                 type: item.type,
                 content: item.content,
                 caption: item.caption,
+                fileName: msg?.fileName || null,
+                fileSize: msg?.fileSize || null,
                 replyTo: item.replyTo,
                 clientTime: item.clientTime
             }
@@ -1740,6 +1759,30 @@ function createMessageElement(msg) {
         audioDiv.textContent = "Loading voice message...";
         bubbleDiv.appendChild(audioDiv);
     }
+
+    if (msg.type === "document") {
+        const fileInfo = getFileIcon(msg.fileName || msg.content || "");
+        const docDiv = document.createElement("div");
+        docDiv.className = "message-document";
+
+        const isUploading = msg.uploadStatus === "uploading";
+
+        docDiv.innerHTML = `
+        <div class="doc-icon-wrap" style="color:${fileInfo.color}">
+            <i class="ti ${fileInfo.icon}" style="font-size:32px"></i>
+        </div>
+        <div class="doc-info">
+            <div class="doc-filename">${msg.fileName || "Document"}</div>
+            <div class="doc-meta">${msg.fileSize ? formatFileSize(msg.fileSize) : ""}${isUploading ? " · Uploading..." : ""}</div>
+        </div>
+        ${!isUploading && msg.content ? `
+        <div class="doc-actions">
+             <a href="${msg.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a>
+    <button class="doc-btn doc-save" onclick="forceDownload('${msg.content}', '${msg.fileName || 'document'}')">Save as</button>
+        </div>` : `<div class="doc-actions"><span class="doc-uploading">⏳</span></div>`}
+    `;
+        bubbleDiv.appendChild(docDiv);
+    }
     // Text content
     if (msg.type === 'text' || msg.caption) {
         const textDiv = document.createElement('div');
@@ -2012,11 +2055,17 @@ function initChatWindow() {
             return;
         }
         // Validate type
-        if (
-            !file.type.startsWith("image/") &&
-            !file.type.startsWith("video/")
-        ) {
-            showToast("Only image or video allowed", "error");
+        const docTypes = [
+            "application/pdf", "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-powerpoint",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "text/plain", "text/csv"
+        ];
+        if (!file.type.startsWith("image/") && !file.type.startsWith("video/") && !docTypes.includes(file.type)) {
+            showToast("File type not supported", "error");
             mediaInput.value = "";
             return;
         }
@@ -2042,12 +2091,17 @@ async function handelMedia(file) {
 
     // ✅ Create blob URL from ORIGINAL file immediately — no waiting
     const localUrl = URL.createObjectURL(file);
-    const mediaType = file.type.split("/")[0];
+    const mediaType = file.type.startsWith("image/") ? "image"
+        : file.type.startsWith("video/") ? "video"
+            : file.type.startsWith("audio/") ? "audio"
+                : "document";
     const to = State.activeChat;
     const message = {
         tempId: generateId(),
         type: mediaType,
-        content: localUrl,
+        content: mediaType === "document" ? null : localUrl,  // no local preview for docs
+        fileName: file.name,
+        fileSize: file.size,
         uploadStatus: "uploading",
         caption: null,
         clientTime: Date.now(),
@@ -2379,7 +2433,49 @@ async function uploadAudio(msgId, receiver, audioBlob) {
 // =============================================================================
 // AUDIO MESSAGE PLAYER
 // =============================================================================
+function getFileIcon(fileName) {
+    const ext = (fileName || "").split(".").pop().toLowerCase();
+    const map = {
+        pdf: { icon: "ti-file-type-pdf", color: "#e53935" },
+        doc: { icon: "ti-file-type-doc", color: "#1565c0" },
+        docx: { icon: "ti-file-type-docx", color: "#1565c0" },
+        xls: { icon: "ti-file-type-xls", color: "#2e7d32" },
+        xlsx: { icon: "ti-file-type-xls", color: "#2e7d32" },
+        csv: { icon: "ti-csv", color: "#2e7d32" },
+        ppt: { icon: "ti-file-type-ppt", color: "#e65100" },
+        pptx: { icon: "ti-file-type-ppt", color: "#e65100" },
+        txt: { icon: "ti-file-text", color: "#546e7a" },
+    };
+    return map[ext] || { icon: "ti-file", color: "#546e7a" };
+}
 
+async function forceDownload(url, fileName) {
+    try {
+        showToast("Downloading...", "info");
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    } catch (err) {
+        showToast("Download failed", "error");
+        console.error(err);
+    }
+}
+
+function formatFileSize(bytes) {
+    if (!bytes) return "";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
 // Add this to your existing audio player code
 
 function createAudioPlayer(audioUrl, messageId) {
