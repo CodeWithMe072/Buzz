@@ -2974,3 +2974,101 @@ body {
         transform: rotate(360deg);
     }
 }
+
+/* Document message bubble */
+.message-document {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 10px;
+    min-width: 220px;
+    max-width: 280px;
+    flex-wrap: wrap;
+}
+
+.doc-icon-wrap {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 10px;
+}
+
+.doc-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.doc-filename {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+}
+
+.doc-meta {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    margin-top: 2px;
+}
+
+.doc-actions {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.12);
+    margin-top: 4px;
+}
+
+.doc-btn {
+    flex: 1;
+    text-align: center;
+    padding: 6px 0;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.doc-open {
+    color: #4fc3f7;
+}
+
+.doc-save {
+    color: #4fc3f7;
+}
+
+.doc-btn:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+/* For received (other side) messages */
+.message.other .message-document {
+    background: rgba(0,0,0,0.08);
+}
+
+.message.other .doc-filename {
+    color: #111;
+}
+
+.message.other .doc-meta {
+    color: rgba(0,0,0,0.5);
+}
+
+.message.other .doc-actions {
+    border-top-color: rgba(0,0,0,0.1);
+}
+
+.message.other .doc-btn {
+    color: #1565c0;
+}
