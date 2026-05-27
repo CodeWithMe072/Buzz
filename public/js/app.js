@@ -607,6 +607,8 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
             audioContainer.replaceWith(newPlayer);
         }
 
+        console.log("updates", updates)
+
         if (updates.type === "document" && updates.content) {
             const docContainer = msgEl.querySelector(".message-document");
             if (docContainer) {
@@ -796,18 +798,24 @@ function updateStatusIcon(tempId, status) {
  * After upload succeeds, swap the sender's blob preview with the real CDN URL.
  * Works whether the chat is open or not — state is always updated; DOM only if visible.
  */
-function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus }) {
+function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus, fileName, fileSize }) {
     const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
+    console.log(msgEl)
     if (!msgEl) return; // chat not open — state was already updated, nothing to do in DOM
 
     const mediaContainer = msgEl.querySelector(".message-media");
-    if (!mediaContainer) return;
+    const mediaDocument = msgEl.querySelector(".message-document");
+    console.log(mediaContainer)
+    if (!mediaContainer && !mediaDocument) return;
 
     // Remove uploading overlay
-    const overlay = mediaContainer.querySelector(".media-overlay");
+    let overlay = null
+    if (mediaContainer) overlay = mediaContainer.querySelector(".media-overlay");
+    if (mediaDocument) overlay = mediaDocument.querySelector(".media-overlay");
     if (overlay) overlay.remove();
 
     const previewSrc = cover || content;
+    console.log(TypeError, previewSrc)
 
     if (type === "image") {
         let img = mediaContainer.querySelector("img");
@@ -845,6 +853,25 @@ function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus }) {
         mediaContainer.appendChild(
             video
         );
+    }
+
+    if (type == "document") {
+
+        console.log(type == "document")
+        const docContainer = msgEl.querySelector(".message-document");
+        if (docContainer) {
+            const meta = docContainer.querySelector(".doc-meta");
+            if (meta) meta.textContent = fileSize ? formatFileSize(fileSize) : "";
+
+            const actionsDiv = docContainer.querySelector(".doc-actions");
+            if (actionsDiv) {
+                actionsDiv.innerHTML = `
+               <a href="${content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a>
+               <button class="doc-btn doc-save" onclick="forceDownload('${content}', '${fileName || 'document'}')">Save as</button>
+            `;
+            }
+        }
+
     }
 
     // Update status icon to single sent tick
@@ -2743,7 +2770,7 @@ async function uploadMedia(msgId, receiver, file) {
             msgId,
 
         );
-
+        console.log("data", data)
         const realUrl = data.original;
         const cover = data.cover_270 || null;
         const thumb = data.thumb_50 || null;
@@ -2764,7 +2791,7 @@ async function uploadMedia(msgId, receiver, file) {
         }
 
         // ── STEP 2: Update sender DOM ──
-        updateMediaDOM(msgId, { content: realUrl, cover, thumb, type: realType, uploadStatus: "uploaded" });
+        updateMediaDOM(msgId, { content: realUrl, cover, thumb, type: realType, uploadStatus: "uploaded", fileName: file.name, fileSize: file.size });
 
         // ── STEP 3: Emit to server with real URL ──
         socket.emit("private_message", {
