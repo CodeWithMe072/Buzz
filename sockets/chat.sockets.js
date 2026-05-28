@@ -286,7 +286,6 @@ export default function initSocket(io) {
 
                 const senderSockets = await redis.smembers(`user:${from}:sockets`);
                 if (!senderSockets.length) return;
-                console.log(senderSockets)
                 senderSockets.forEach(socketId => {
                     io.to(socketId).emit("message:seen", { by: userId });
                 });
