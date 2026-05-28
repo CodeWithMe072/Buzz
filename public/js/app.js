@@ -30,7 +30,8 @@ const State = {
     isSwiping: false,
     allusers: [],
     playTune: true,
-    messageIndex: {}
+    messageIndex: {},
+    apiMessagesLoaded: false
 };
 const UploadManager = {
     queue: [],
@@ -181,6 +182,16 @@ function initSocket() {
         if (!State.messages[message.user]) {
             State.messages[message.user] = [];
         }
+        // ✅ DUPLICATE CHECK — if message id already exists in state (came from API), skip render
+        const alreadyExists = State.messages[message.user].some(
+            m => m.id === message.id || m.tempId === message.id
+        );
+
+        if (alreadyExists) {
+            // Message already in state from API load — just emit received so DB gets updated
+            socket.emit("message:received", { tempId: msg.id });
+            return; // ← skip everything else, no duplicate render
+        }
         State.messages[message.user].unshift(message);
         State.messageIndex[message.id] = message.user;
 
@@ -267,18 +278,17 @@ function initSocket() {
     /* =============================================
        MESSAGE ACK: Server confirmed message was received
     ============================================= */
+    // KEEP ONLY ONE message_ack handler — the complete one:
     socket.on("message_ack", ({ tempId, status }) => {
-        // status === "sent" — server got the message
-        // Update status icon from clock to single tick
         if (status === "sent") {
+            OutboxQueue.remove(tempId);   // ← critical: remove so it's not retried
             const chatId = State.messageIndex[tempId];
             if (!chatId) return;
-            const msgs = State.messages[chatId];
-            if (!msgs) return;
+            const msgs = State.messages[chatId] || [];
             const msg = msgs.find(m => (m.tempId || m.id) === tempId);
-            if (msg && !msg.status.sent) {
-                msg.status.sent = true;
-                updateMessageByTempId(tempId, { status: { ...msg.status, sent: true } });
+            if (msg) {
+                msg.status = { ...msg.status, sent: true };
+                updateStatusIcon(tempId, msg.status);
             }
         }
     });
@@ -403,16 +413,19 @@ function initSocket() {
     socket.on("connect", () => {
         NetworkMonitor.isSocketConnected = true;
         updateConnectionBanner();
-        console.log("socket connect...")
-        // Small delay — let socket fully stabilize before flushing
+
         setTimeout(() => {
-            // Pull any messages we missed while offline
-            socket.emit("sync:delivered");
+            // ✅ Only sync from socket if API didn't already load messages
+            // On first app open, API loads everything — sync:delivered would just duplicate them
+            if (!State.apiMessagesLoaded) {
+                socket.emit("sync:delivered");
+            } else {
+                // API already loaded — just tell server we're online and update delivery statuses
+                // Reset flag so future reconnects (after going offline) still sync properly
+                State.apiMessagesLoaded = false;
+            }
 
-            // Retry queued outgoing text messages
             flushOutbox();
-
-            // Retry failed media uploads
             flushUploadQueue();
         }, 500);
     });
@@ -423,7 +436,6 @@ function initSocket() {
     socket.on("disconnect", (reason) => {
         NetworkMonitor.isSocketConnected = false;
         updateConnectionBanner();
-        console.log("error---------------------")
         console.warn("Socket disconnected:", reason);
     });
 
@@ -1173,6 +1185,7 @@ async function initAuth() {
 
 
         }
+        State.apiMessagesLoaded = true
         socket = io(BACKEND_URL, {
             auth: { userId: State.currentUser.id },
             reconnection: true,
@@ -1293,7 +1306,7 @@ function handelAuthForm() {
 
 
             }
-
+            State.apiMessagesLoaded = true
             socket = io(BACKEND_URL, {
                 auth: { userId: State.currentUser.id },
                 reconnection: true,
@@ -2436,9 +2449,6 @@ async function uploadAudio(msgId, receiver, audioBlob) {
                 clientTime: msg?.clientTime || Date.now()
             }
         });
-
-        OutboxQueue.add({ tempId: msgId, to: receiver, type: "audio", content: realUrl, caption: null, replyTo: msg?.replyTo || null, clientTime: msg?.clientTime || Date.now() });
-
         // Succeeded — remove from upload queue
         UploadQueue.remove(msgId);
 
@@ -2809,9 +2819,6 @@ async function uploadMedia(msgId, receiver, file) {
                 thumb
             }
         });
-
-        // Add text message to outbox too so ack can remove it
-        OutboxQueue.add({ tempId: msgId, to: receiver, type: realType, content: realUrl, caption: msg?.caption || null, replyTo: msg?.replyTo || null, clientTime: msg?.clientTime || Date.now() });
 
         // Upload succeeded — remove from upload queue
         UploadQueue.remove(msgId);

@@ -188,26 +188,32 @@ export default function initSocket(io) {
 
         socket.on("sync:delivered", async () => {
             try {
-                // ── FIX: select cover + thumb so receiver gets them on sync ──
                 const undelivered = await Message.find({
                     to: userId,
                     "status.delivered": false
                 }).select("tempId from type content caption cover thumb replyTo createdAt");
 
-                undelivered.forEach(msg => {
+                for (const msg of undelivered) {
+                    // FIX: skip if sender is online — they already sent it live,
+                    // emitting again = duplicate on receiver
+                    const senderSockets = await redis.smembers(`user:${msg.from}:sockets`);
+
+                    // FIX: use socket.emit (only to THIS socket), not io.to(userId)
+                    // io.to(userId) broadcasts to ALL devices of this user, causing
+                    // duplicates on multi-device setups
                     socket.emit("private_message", {
                         id: msg.tempId,
                         from: msg.from,
                         type: msg.type,
                         content: msg.content,
                         caption: msg.caption,
-                        cover: msg.cover || null,   // ← NEW
-                        thumb: msg.thumb || null,   // ← NEW
+                        cover: msg.cover || null,
+                        thumb: msg.thumb || null,
                         replyTo: msg.replyTo,
                         timestamp: msg.createdAt,
                         status: { delivered: false }
                     });
-                });
+                }
             } catch (error) {
                 console.error("Delivery Sync Error:", error);
             }
