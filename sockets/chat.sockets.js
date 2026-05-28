@@ -34,7 +34,7 @@ export default function initSocket(io) {
 
         socket.on("private_message", async (payload) => {
             try {
-                const { tempId, to, type, caption, replyTo, clientTime } = payload.message;
+                const { tempId, to, type, caption, replyTo, clientTime, fileName = null, fileSize = null } = payload.message;
                 let { content } = payload.message;
 
                 // ── FIX: also extract cover and thumb (sent by client after media upload) ──
@@ -55,6 +55,8 @@ export default function initSocket(io) {
                     from: userId,
                     type,
                     content,
+                    fileName,
+                    fileSize,
                     caption,
                     replyTo,
                     cover,      // ← NEW: video cover / image preview
@@ -69,6 +71,8 @@ export default function initSocket(io) {
                     to,
                     type,
                     content,
+                    fileName,
+                    fileSize,
                     caption,
                     cover,
                     thumb,
@@ -89,6 +93,8 @@ export default function initSocket(io) {
                             to,
                             type,
                             content,
+                            fileName,
+                            fileSize,
                             caption,
                             cover,   // ← NEW
                             thumb,   // ← NEW

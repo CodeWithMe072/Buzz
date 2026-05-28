@@ -2802,6 +2802,8 @@ async function uploadMedia(msgId, receiver, file) {
                 content: realUrl,
                 caption: msg?.caption || null,
                 replyTo: msg?.replyTo || null,
+                fileName: file?.name || null,
+                fileSize: file?.fileSize || null,
                 clientTime: msg?.clientTime || Date.now(),
                 cover,
                 thumb
