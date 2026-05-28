@@ -79,6 +79,8 @@ export const getallMessage = async (req, res) => {
                             to: "$$m.to",
                             type: "$$m.type",
                             content: "$$m.content",
+                            fileName: "$$m.fileName",
+                            fileSize: "$$m.fileSize",
                             cover: "$$m.cover",
                             thumb: "$$m.thumb",
                             caption: "$$m.caption",

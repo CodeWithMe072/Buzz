@@ -23,7 +23,7 @@ const messageSchema = new mongoose.Schema(
     /* ---------- Content ---------- */
     type: {
       type: String,
-      enum: ["text", "image", "video", "audio","document"],
+      enum: ["text", "image", "video", "audio", "document"],
       required: true,
     },
 
@@ -48,6 +48,14 @@ const messageSchema = new mongoose.Schema(
     },
 
     replyTo: {
+      type: String,                 // tempId
+      default: null,
+    },
+    fileName: {
+      type: String,                 // tempId
+      default: null,
+    },
+    fileSize: {
       type: String,                 // tempId
       default: null,
     },
