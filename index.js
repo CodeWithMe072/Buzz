@@ -12,6 +12,7 @@ import chatRoutes from "./routes/chat.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import initSocket from "./sockets/chat.sockets.js";
 import { startAutoDeleteSeenMessagesJob } from "./jobs/autoDeleteSeenMessages.js";
+import { startMessageStatusSyncJob } from "./jobs/messageStatusSync.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +38,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(express.static(path.join(__dirname, "public")));
 
-startAutoDeleteSeenMessagesJob();
+
 
 /* ---------- Routes ---------- */
 app.get("/", (req, res) => res.render("index"));
@@ -59,6 +60,10 @@ const io = new Server(server, {
 
 /* ---------- Socket ---------- */
 initSocket(io);
+
+// Background jobs (pass io so jobs can emit socket events)
+startAutoDeleteSeenMessagesJob();
+startMessageStatusSyncJob(io);
 
 /* ---------- Start ---------- */
 
