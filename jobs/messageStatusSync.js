@@ -132,7 +132,8 @@ async function fixDeliveredAndSeenByReplyDetection(io) {
                                 }
                             }
                         }
-                    ]
+                    ],
+                    { updatePipeline: true }  // ← required for array pipeline in Mongoose
                 );
 
                 if (result.modifiedCount > 0) {
@@ -240,7 +241,8 @@ async function autoDeleteOldSeenMessages(io) {
                     }
                 }
             }
-        ]
+        ],
+        { updatePipeline: true }  // ← required for array pipeline in Mongoose
     );
 
     if (result.modifiedCount > 0) {
