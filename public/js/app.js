@@ -430,26 +430,78 @@ function initSocket() {
         }, 500);
     });
 
-    /* =============================================
-       SOCKET DISCONNECT
-    ============================================= */
+    /* ═══════════════════════════════════════════════════════════
+       SOCKET DISCONNECT — with reason-based handling
+
+       Reasons socket.io auto-reconnects (soft disconnect):
+         "transport close"       → network blip, WiFi drop, phone screen off
+         "transport error"       → server error mid-connection
+         "ping timeout"          → slow network, missed heartbeat
+
+       Reasons we do NOT reconnect (hard disconnect):
+         "io client disconnect"  → we called socket.disconnect() (logout)
+         "io server disconnect"  → server kicked us (auth fail etc.)
+    ═══════════════════════════════════════════════════════════ */
     socket.on("disconnect", (reason) => {
         NetworkMonitor.isSocketConnected = false;
+
+        console.warn(`[SOCKET] Disconnected — reason: ${reason}`);
+
+        const hardDisconnect =
+            reason === "io client disconnect" ||
+            reason === "io server disconnect";
+
+        if (hardDisconnect) {
+            // Intentional — logout or server kicked us. Do not reconnect.
+            console.log("[SOCKET] Hard disconnect — not reconnecting");
+            updateConnectionBanner();
+            return;
+        }
+
+        // Soft disconnect (network/sleep) — socket.io will auto-reconnect
         updateConnectionBanner();
-        console.warn("Socket disconnected:", reason);
     });
 
     /* =============================================
-       SOCKET RECONNECT ATTEMPT (show user feedback)
+       RECONNECT ATTEMPT — show progress to user
     ============================================= */
     socket.on("reconnect_attempt", (attempt) => {
-        console.log("jhhhhhhhhhhhhhhhhhhhhdf")
         updateConnectionBanner(`Reconnecting... (attempt ${attempt})`);
     });
 
     socket.on("reconnect_failed", () => {
-        console.log("hjjjjjjjjjjjjjjjjjjjjjjjj")
         updateConnectionBanner("Connection failed. Check your network.");
+    });
+
+    /* ═══════════════════════════════════════════════════════════
+       PAGE VISIBILITY
+       Handles: phone screen off/on, tab switch, app background/foreground
+       When user comes back → force reconnect if socket dropped
+    ═══════════════════════════════════════════════════════════ */
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+            console.log("[VISIBILITY] Page visible — checking socket");
+            if (socket && !socket.connected) {
+                console.log("[VISIBILITY] Socket dead — reconnecting");
+                socket.connect();
+            }
+        }
+    });
+
+    /* ═══════════════════════════════════════════════════════════
+       BROWSER ONLINE/OFFLINE EVENTS
+       Handles: WiFi toggle, airplane mode, cable unplug
+    ═══════════════════════════════════════════════════════════ */
+    window.addEventListener("online", () => {
+        console.log("[NETWORK] Browser came online");
+        if (socket && !socket.connected) {
+            socket.connect();
+        }
+    });
+
+    window.addEventListener("offline", () => {
+        // socket.io will detect via ping timeout — nothing to force here
+        console.log("[NETWORK] Browser went offline");
     });
 
     /* =============================================
