@@ -2,7 +2,6 @@ import { Message } from "../models/message.model.js";
 import { User } from "../models/user.model.js";
 import { telegramService } from "../services/telegram.service.js";
 import { redis } from "../lib/redis.js";
-
 export default function initSocket(io) {
 
     io.on("connection", async (socket) => {
@@ -13,6 +12,14 @@ export default function initSocket(io) {
         /* =============================
            MULTI DEVICE TRACKING
         ============================== */
+
+        // ── Cancel any pending offline timer for this user (reconnect within grace period) ──
+        const pendingTimer = disconnectTimers.get(userId);
+        if (pendingTimer) {
+            clearTimeout(pendingTimer);
+            disconnectTimers.delete(userId);
+            console.log(`[RECONNECT] ${userId} reconnected within grace period — offline timer cancelled`);
+        }
 
         await redis.sadd(`user:${userId}:sockets`, socket.id);
         await redis.sadd("online:users", userId);
@@ -319,26 +326,103 @@ export default function initSocket(io) {
 
         });
 
-        /* =============================
-           DISCONNECT
-        ============================== */
+        /* ═══════════════════════════════════════════════════════════
+           DISCONNECT — with grace period
+           
+           PROBLEM: Socket.io fires "disconnect" for ALL reasons including:
+             - slow network blip (transport close, ping timeout)
+             - browser tab switch on mobile (page hidden)
+             - brief WiFi drop
+           
+           If we immediately clear Redis + broadcast offline, the user
+           appears offline for a 1-second network hiccup.
 
-        socket.on("disconnect", async () => {
+           SOLUTION: 30-second grace period.
+             - Always remove THIS socket.id from Redis immediately (socket is dead)
+             - If user has no sockets left → wait 30s before marking offline
+             - If they reconnect within 30s → cancel the timer, they stay online
+             - If tab close / browser close / phone screen off → they won't
+               reconnect, timer fires, they go offline correctly
+        ═══════════════════════════════════════════════════════════ */
 
+        socket.on("disconnect", async (reason) => {
+
+            console.log(`[DISCONNECT] userId=${userId} socketId=${socket.id} reason=${reason}`);
+
+            // ── Step 1: Always remove this dead socket ID ──
             await redis.srem(`user:${userId}:sockets`, socket.id);
 
-            const sockets = await redis.smembers(`user:${userId}:sockets`);
+            // ── Step 2: Check remaining sockets for this user ──
+            const remainingSockets = await redis.smembers(`user:${userId}:sockets`);
 
-            if (!sockets.length) {
-
-                await redis.srem("online:users", userId);
-                socket.broadcast.emit("user:offline", { userId });
-
-                await User.updateOne(
-                    { extra: userId },
-                    { $set: { lastSeen: new Date() } }
-                );
+            if (remainingSockets.length > 0) {
+                // User still has other active connections (multi-device) → stay online
+                console.log(`[DISCONNECT] ${userId} still has ${remainingSockets.length} socket(s) — staying online`);
+                return;
             }
+
+            // ── Step 3: No sockets left — start grace period ──
+            // Cancel any previous pending offline timer for this user
+            const existingTimer = disconnectTimers.get(userId);
+            if (existingTimer) {
+                clearTimeout(existingTimer);
+                disconnectTimers.delete(userId);
+            }
+
+            console.log(`[DISCONNECT] ${userId} has no sockets — starting 30s grace period`);
+
+            // Reasons that are definitely a hard disconnect (no reconnect coming):
+            // "server namespace disconnect" = server called socket.disconnect()
+            // "client namespace disconnect" = client called socket.disconnect() explicitly (logout)
+            const isHardDisconnect =
+                reason === "server namespace disconnect" ||
+                reason === "client namespace disconnect";
+
+            // For hard disconnects (logout, server kick) → go offline immediately, no grace
+            if (isHardDisconnect) {
+                await markUserOffline(userId, socket);
+                return;
+            }
+
+            // For everything else (transport close, ping timeout, network blip,
+            // tab close, browser close, phone screen off) → wait 30s
+            // If they reconnect, the "connection" handler will cancel this timer
+            const timer = setTimeout(async () => {
+                // Double-check: did they reconnect in the meantime?
+                const currentSockets = await redis.smembers(`user:${userId}:sockets`);
+                if (currentSockets.length > 0) {
+                    console.log(`[OFFLINE TIMER] ${userId} reconnected — cancelled`);
+                    disconnectTimers.delete(userId);
+                    return;
+                }
+
+                await markUserOffline(userId, socket);
+                disconnectTimers.delete(userId);
+            }, 30_000); // 30 second grace period
+
+            disconnectTimers.set(userId, timer);
         });
     });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SHARED HELPERS
+═══════════════════════════════════════════════════════════ */
+
+// In-memory map: userId → setTimeout handle
+// Tracks pending "go offline" timers during grace period
+const disconnectTimers = new Map();
+
+async function markUserOffline(userId, socket) {
+    try {
+        await redis.srem("online:users", userId);
+        socket.broadcast.emit("user:offline", { userId });
+        await User.updateOne(
+            { extra: userId },
+            { $set: { lastSeen: new Date() } }
+        );
+        console.log(`[OFFLINE] ${userId} marked offline`);
+    } catch (err) {
+        console.error(`[OFFLINE] Failed to mark ${userId} offline:`, err);
+    }
 }

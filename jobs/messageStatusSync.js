@@ -6,21 +6,23 @@ import { redis } from "../lib/redis.js";
  * ─────────────────────────────────────────────────────────────
  *  MESSAGE STATUS SYNC JOB
  *
- *  Runs every minute and does 3 things:
+ *  CORRECT LOGIC (fixed):
  *
- *  1. DELIVERED FIX
- *     For every message where receiver has EVER sent back a message
- *     to the sender, that proves the receiver was online and received
- *     old messages too → mark those old messages delivered.
+ *  DELIVERED:
+ *    A message can be marked delivered ONLY if the receiver
+ *    is currently ONLINE (Redis check). Nothing else.
+ *    We do NOT use reply history for delivered — receiver
+ *    being online = they can receive it right now.
  *
- *  2. SEEN FIX
- *     Same logic — if receiver replied, they clearly saw the msgs.
- *     Mark all undelivered/unseen messages as delivered + seen.
- *     Also fills in seenAt if missing.
+ *  SEEN:
+ *    A message can be marked seen ONLY if the receiver sent
+ *    a reply AFTER that specific message was created.
+ *    "receiver replied at some point in the past" is NOT enough —
+ *    the reply must be NEWER than the message itself.
  *
- *  3. AUTO DELETE
- *     Messages where seenAt is older than 30 minutes → mark autoDeleted
- *     and push both users into deletedFor[] so it hides from both sides.
+ *  AUTO DELETE:
+ *    Messages seen > 30 minutes ago → mark autoDeleted,
+ *    hide from both sides, notify via socket.
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -29,13 +31,14 @@ export function startMessageStatusSyncJob(io) {
     // ─── Run every 1 minute ───
     cron.schedule("* * * * *", async () => {
         try {
-            await fixDeliveredAndSeenByReplyDetection(io);
+            await fixDeliveredStatus(io);
+            await fixSeenStatus(io);
         } catch (err) {
             console.error("[STATUS SYNC JOB ERROR]", err);
         }
     });
 
-    // ─── Auto-delete seen messages older than 30 min (every minute) ───
+    // ─── Auto-delete seen messages older than 30 min ───
     cron.schedule("* * * * *", async () => {
         try {
             await autoDeleteOldSeenMessages(io);
@@ -49,24 +52,14 @@ export function startMessageStatusSyncJob(io) {
 
 
 /* ══════════════════════════════════════════════════════════════
-   STEP 1 & 2 — Fix delivered + seen by detecting reply activity
+   STEP 1 — Fix DELIVERED
+   Rule: receiver must be ONLINE right now (Redis)
    ══════════════════════════════════════════════════════════════ */
 
-async function fixDeliveredAndSeenByReplyDetection(io) {
+async function fixDeliveredStatus(io) {
 
-    /**
-     * LOGIC:
-     * Find all messages that are NOT delivered yet.
-     * For each (sender → receiver) pair, check:
-     *   → Has the receiver EVER sent a message back to the sender?
-     *   → If YES: receiver was active. Mark all those stuck messages
-     *             as delivered=true, seen=true, seenAt=now (if missing).
-     *   → If NO:  check if receiver is currently online via Redis.
-     *             If online: mark delivered=true only.
-     */
-
-    // Get all unique (from, to) pairs that have undelivered messages
-    const undeliveredPairs = await Message.aggregate([
+    // Find all unique (from → to) pairs with undelivered messages
+    const pairs = await Message.aggregate([
         {
             $match: {
                 "status.delivered": false,
@@ -78,122 +71,142 @@ async function fixDeliveredAndSeenByReplyDetection(io) {
                 _id: { from: "$from", to: "$to" }
             }
         },
-        { $limit: 200 } // safety cap per run
+        { $limit: 200 }
     ]);
 
-    if (!undeliveredPairs.length) return;
+    if (!pairs.length) return;
 
-    for (const pair of undeliveredPairs) {
+    for (const pair of pairs) {
         const senderId = pair._id.from;
         const receiverId = pair._id.to;
 
         try {
+            // ── ONLY mark delivered if receiver is online right now ──
+            const receiverOnline = await redis.sismember("online:users", receiverId);
+            if (!receiverOnline) continue;
 
-            // ── Check if receiver ever replied to sender ──
-            const receiverReplied = await Message.exists({
-                from: receiverId,
-                to: senderId
-            });
-
-            if (receiverReplied) {
-                // Receiver was active and clearly saw+received old messages.
-                // Mark all their undelivered messages as delivered + seen.
-
-                const now = new Date();
-
-                const result = await Message.updateMany(
-                    {
-                        from: senderId,
-                        to: receiverId,
-                        autoDeleted: false,
-                        $or: [
-                            { "status.delivered": false },
-                            { "status.seen": false }
-                        ]
-                    },
-                    [
-                        {
-                            $set: {
-                                "status.delivered": true,
-                                "status.seen": true,
-                                deliveredAt: {
-                                    $cond: [
-                                        { $not: ["$deliveredAt"] },
-                                        now,
-                                        "$deliveredAt"
-                                    ]
-                                },
-                                seenAt: {
-                                    $cond: [
-                                        { $not: ["$seenAt"] },
-                                        now,
-                                        "$seenAt"
-                                    ]
-                                }
-                            }
-                        }
-                    ],
-                    { updatePipeline: true }  // ← required for array pipeline in Mongoose
-                );
-
-                if (result.modifiedCount > 0) {
-                    console.log(
-                        `[STATUS SYNC] ${senderId}→${receiverId}: ` +
-                        `${result.modifiedCount} msgs marked delivered+seen ` +
-                        `(reply detected)`
-                    );
-
-                    // ── Notify sender via socket if they're online ──
-                    if (io) {
-                        const senderSockets = await redis.smembers(`user:${senderId}:sockets`);
-                        if (senderSockets.length) {
-                            io.to(senderId).emit("messages:bulk_seen", {
-                                by: receiverId
-                            });
-                        }
+            const result = await Message.updateMany(
+                {
+                    from: senderId,
+                    to: receiverId,
+                    "status.delivered": false,
+                    autoDeleted: false
+                },
+                {
+                    $set: {
+                        "status.delivered": true,
+                        deliveredAt: new Date()
                     }
                 }
+            );
 
-            } else {
-                // Receiver never replied — check if they're online right now
-                const receiverOnline = await redis.sismember("online:users", receiverId);
+            if (result.modifiedCount > 0) {
+                console.log(`[DELIVERED] ${senderId}→${receiverId}: ${result.modifiedCount} msgs`);
 
-                if (receiverOnline) {
-                    // Online but hasn't replied yet → mark delivered only
-                    const result = await Message.updateMany(
-                        {
-                            from: senderId,
-                            to: receiverId,
-                            "status.delivered": false,
-                            autoDeleted: false
-                        },
-                        {
-                            $set: {
-                                "status.delivered": true,
-                                deliveredAt: new Date()
-                            }
-                        }
-                    );
-
-                    if (result.modifiedCount > 0) {
-                        console.log(
-                            `[STATUS SYNC] ${senderId}→${receiverId}: ` +
-                            `${result.modifiedCount} msgs marked delivered ` +
-                            `(receiver is online)`
-                        );
-
-                        if (io) {
-                            io.to(senderId).emit("messages:bulk_delivered", {
-                                to: receiverId
-                            });
-                        }
-                    }
+                if (io) {
+                    io.to(senderId).emit("messages:bulk_delivered", { to: receiverId });
                 }
-                // else: receiver offline and never replied → do nothing yet
             }
 
-        } catch (pairErr) {
-            console.error(`[STATUS SYNC] Error for pair ${senderId}→${receiverId}:`, pairErr);
+        } catch (err) {
+            console.error(`[DELIVERED] Error ${senderId}→${receiverId}:`, err);
+        }
+    }
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   STEP 2 — Fix SEEN
+   Rule: receiver must have sent a reply AFTER the message createdAt
+         i.e. lastReplyAt > message.createdAt
+   ══════════════════════════════════════════════════════════════ */
+
+async function fixSeenStatus(io) {
+
+    // Find all unique (from → to) pairs with unseen messages
+    const pairs = await Message.aggregate([
+        {
+            $match: {
+                "status.seen": false,
+                "status.delivered": true,   // must be delivered first
+                autoDeleted: false
+            }
+        },
+        {
+            $group: {
+                _id: { from: "$from", to: "$to" },
+                oldestUnseen: { $min: "$createdAt" } // oldest unseen msg time
+            }
+        },
+        { $limit: 200 }
+    ]);
+
+    if (!pairs.length) return;
+
+    for (const pair of pairs) {
+        const senderId = pair._id.from;
+        const receiverId = pair._id.to;
+        const oldestUnseenAt = pair.oldestUnseen;
+
+        try {
+            // ── Find the receiver's most recent reply to sender ──
+            const lastReply = await Message.findOne(
+                {
+                    from: receiverId,
+                    to: senderId
+                },
+                { createdAt: 1 }
+            ).sort({ createdAt: -1 });
+
+            // No reply at all → receiver never responded → skip
+            if (!lastReply) continue;
+
+            // Reply exists but it's OLDER than the unseen messages → skip
+            // This is the KEY FIX: reply must be AFTER the message was sent
+            if (lastReply.createdAt <= oldestUnseenAt) continue;
+
+            // Reply is newer than some unseen messages →
+            // Only mark seen the messages that were created BEFORE the last reply
+            const now = new Date();
+
+            const result = await Message.updateMany(
+                {
+                    from: senderId,
+                    to: receiverId,
+                    "status.seen": false,
+                    autoDeleted: false,
+                    createdAt: { $lte: lastReply.createdAt } // only msgs before the reply
+                },
+                [
+                    {
+                        $set: {
+                            "status.seen": true,
+                            seenAt: {
+                                $cond: [
+                                    { $not: ["$seenAt"] },
+                                    now,
+                                    "$seenAt"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                { updatePipeline: true }
+            );
+
+            if (result.modifiedCount > 0) {
+                console.log(`[SEEN] ${senderId}→${receiverId}: ${result.modifiedCount} msgs (reply at ${lastReply.createdAt})`);
+
+                if (io) {
+                    const senderSockets = await redis.smembers(`user:${senderId}:sockets`);
+                    if (senderSockets.length) {
+                        io.to(senderId).emit("messages:bulk_seen", { by: receiverId });
+                    }
+                }
+            }
+
+        } catch (err) {
+            console.error(`[SEEN] Error ${senderId}→${receiverId}:`, err);
         }
     }
 }

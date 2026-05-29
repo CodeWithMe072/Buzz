@@ -1,10 +1,22 @@
-
 import { Message } from "../models/message.model.js"
+
 export const getallMessage = async (req, res) => {
     const { userId: activeUserId } = req.body;
 
+    if (!activeUserId) {
+        return res.status(400).json({ status: false, message: "userId is required" });
+    }
+
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+
     const allMessage = await Message.aggregate([
-        /* 1️⃣ Only messages where user involved & not deleted */
+
+        /* ─────────────────────────────────────────────
+           1️⃣  BASE FILTER
+           - User must be sender OR receiver
+           - Not deleted for this user
+           - Not autoDeleted
+        ───────────────────────────────────────────── */
         {
             $match: {
                 $and: [
@@ -14,17 +26,72 @@ export const getallMessage = async (req, res) => {
                             { to: activeUserId }
                         ]
                     },
-                    {
-                        deletedFor: { $ne: activeUserId }
-                    }
+                    { deletedFor: { $ne: activeUserId } },
+                    { autoDeleted: { $ne: true } }
                 ]
             }
         },
 
-        /* 2️⃣ Sort latest first */
+        /* ─────────────────────────────────────────────
+           2️⃣  TAG EACH MESSAGE with why it should show:
+
+           isMySentUndelivered   → I sent it, receiver hasn't delivered yet
+           isMySentUnseen        → I sent it, receiver hasn't seen yet
+           isReceivedUnseen      → receiver sent it to me, I haven't seen yet
+           isRecent              → createdAt within last 30 min (normal chat msgs)
+        ───────────────────────────────────────────── */
+        {
+            $addFields: {
+
+                // Messages I sent that are not yet delivered or not yet seen
+                isMySentPending: {
+                    $and: [
+                        { $eq: ["$from", activeUserId] },
+                        {
+                            $or: [
+                                { $eq: ["$status.delivered", false] },
+                                { $eq: ["$status.seen", false] }
+                            ]
+                        }
+                    ]
+                },
+
+                // Messages sent TO me that I haven't seen yet
+                isReceivedUnseen: {
+                    $and: [
+                        { $eq: ["$to", activeUserId] },
+                        { $eq: ["$status.seen", false] }
+                    ]
+                },
+
+                // Recent messages (within last 30 min) — normal conversation
+                isRecent: {
+                    $gte: ["$createdAt", thirtyMinutesAgo]
+                }
+            }
+        },
+
+        /* ─────────────────────────────────────────────
+           3️⃣  KEEP MESSAGE IF any tag is true
+        ───────────────────────────────────────────── */
+        {
+            $match: {
+                $or: [
+                    { isMySentPending: true },
+                    { isReceivedUnseen: true },
+                    { isRecent: true }
+                ]
+            }
+        },
+
+        /* ─────────────────────────────────────────────
+           4️⃣  SORT — newest first
+        ───────────────────────────────────────────── */
         { $sort: { createdAt: -1 } },
 
-        /* 3️⃣ Group by OTHER USER */
+        /* ─────────────────────────────────────────────
+           5️⃣  GROUP BY OTHER USER
+        ───────────────────────────────────────────── */
         {
             $group: {
                 _id: {
@@ -35,36 +102,94 @@ export const getallMessage = async (req, res) => {
                     ]
                 },
 
-                messages: { $push: "$$ROOT" },
+                allMsgs: { $push: "$$ROOT" },
 
-                /* 🔥 COUNT UNREAD PER CHAT */
+                // Count unread: messages sent TO me that I haven't seen
                 unreadCount: {
                     $sum: {
-                        $cond: [
-                            {
-                                $and: [
-                                    { $eq: ["$to", activeUserId] },
-                                    { $eq: ["$status.seen", false] }
-                                ]
-                            },
-                            1,
-                            0
-                        ]
+                        $cond: [{ $eq: ["$isReceivedUnseen", true] }, 1, 0]
                     }
                 }
             }
         },
 
-        /* 4️⃣ Limit messages to last 10 */
+        /* ─────────────────────────────────────────────
+           6️⃣  SMART SLICE PER CHAT
+           - My undelivered/unseen sent msgs  → show ALL (no limit)
+           - Received unseen msgs             → show ALL (no limit)
+           - Recent msgs (normal chat)        → show last 10 only
+           
+           Strategy: separate then merge and re-sort
+        ───────────────────────────────────────────── */
         {
             $project: {
                 _id: 1,
                 unreadCount: 1,
-                messages: { $slice: ["$messages", 10] }
+
+                // All my pending sent messages (no limit)
+                pendingMsgs: {
+                    $filter: {
+                        input: "$allMsgs",
+                        as: "m",
+                        cond: { $eq: ["$$m.isMySentPending", true] }
+                    }
+                },
+
+                // All unseen received messages (no limit)
+                unseenMsgs: {
+                    $filter: {
+                        input: "$allMsgs",
+                        as: "m",
+                        cond: {
+                            $and: [
+                                { $eq: ["$$m.isReceivedUnseen", true] },
+                                { $eq: ["$$m.isMySentPending", false] }
+                            ]
+                        }
+                    }
+                },
+
+                // Recent normal messages — limit to 10, exclude already covered above
+                recentMsgs: {
+                    $slice: [
+                        {
+                            $filter: {
+                                input: "$allMsgs",
+                                as: "m",
+                                cond: {
+                                    $and: [
+                                        { $eq: ["$$m.isMySentPending", false] },
+                                        { $eq: ["$$m.isReceivedUnseen", false] },
+                                        { $eq: ["$$m.isRecent", true] }
+                                    ]
+                                }
+                            }
+                        },
+                        10
+                    ]
+                }
             }
         },
 
-        /* 5️⃣ Shape response for frontend */
+        /* ─────────────────────────────────────────────
+           7️⃣  MERGE all 3 buckets into one messages array
+        ───────────────────────────────────────────── */
+        {
+            $addFields: {
+                messages: {
+                    $sortArray: {
+                        input: {
+                            $concatArrays: ["$pendingMsgs", "$unseenMsgs", "$recentMsgs"]
+                        },
+                        sortBy: { createdAt: -1 }
+                    }
+                }
+            }
+        },
+
+        /* ─────────────────────────────────────────────
+           8️⃣  FINAL SHAPE for frontend
+        ───────────────────────────────────────────── */
         {
             $project: {
                 _id: 1,
@@ -75,6 +200,7 @@ export const getallMessage = async (req, res) => {
                         as: "m",
                         in: {
                             id: "$$m._id",
+                            tempId: "$$m.tempId",
                             user: "$$m.from",
                             to: "$$m.to",
                             type: "$$m.type",
