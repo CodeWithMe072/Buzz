@@ -3059,9 +3059,6 @@ body {
     background: rgba(0,0,0,0.08);
 }
 
-.message.other .doc-filename {
-    color: #111;
-}
 
 .message.other .doc-meta {
     color: rgba(0,0,0,0.5);
