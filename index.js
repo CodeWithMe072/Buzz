@@ -42,6 +42,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 /* ---------- Routes ---------- */
 app.get("/", (req, res) => res.render("index"));
+app.get("/api/version",(req,res)=>res.json({version:"1.0"}))
 
 app.use(chatRoutes);
 app.use(authRoutes);
