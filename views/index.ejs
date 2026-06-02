@@ -12,7 +12,8 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 
     <!-- Ensure proper viewport settings -->
-    <meta name="viewport"content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 
     <!-- iOS Web App Capable -->
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -542,7 +543,9 @@
                                         <polyline points="21 15 16 10 5 21" />
                                     </svg>
                                 </button>
-                                <input type="file" id="media-input"  accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="display: none;">
+                                <input type="file" id="media-input"
+                                    accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                                    style="display: none;">
 
                                 <!-- Voice Recording UI (replaces input when recording) -->
                                 <div class="voice-recording-ui" id="voiceRecordingUI" style="display: none;">
@@ -678,9 +681,26 @@
     </div>
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/auth.controller.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
-    <script src="/js/app.js"></script>
-   
+    <script
+        src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
+
+    <!-- Core modules (no DOM deps, load first) -->
+    <script src="/js/state.js"></script>
+    <script src="/js/utils.js"></script>
+
+    <!-- Feature modules (depend on state + utils) -->
+    <script src="/js/audio.player.js"></script>
+    <script src="/js/media.viewer.js"></script>
+    <script src="/js/messages.dom.js"></script>
+    <script src="/js/socket.js"></script>
+    <script src="/js/chat.js"></script>
+    <script src="/js/input.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/ui.extras.js"></script>
+
+    <!-- Entry point (always last) -->
+     <script src="/js/main.js"></script>
+
 </body>
 
 </html>

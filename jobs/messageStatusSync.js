@@ -226,7 +226,7 @@ async function autoDeleteOldSeenMessages(io) {
             "status.seen": true,
             $expr: {
                 $lte: [
-                    { $ifNull: ["$seenAt", "$createdAt"] },
+                    { $ifNull: ["$seenAt"] },
                     thirtyMinutesAgo
                 ]
             },

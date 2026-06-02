@@ -15,7 +15,7 @@ export function startAutoDeleteSeenMessagesJob() {
 
                     $expr: {
                         $lte: [
-                            { $ifNull: ["$seenAt", "$createdAt"] },
+                            { $ifNull: ["$seenAt"] },
                             thirtyMinutesAgo
                         ]
                     },
