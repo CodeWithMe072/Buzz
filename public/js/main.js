@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (data.version !== localStorage.getItem("version")) {
             localStorage.setItem("version", data.version);
             window.location.reload();
-            await fetch("/auth/flush-redis");
+            await fetch("/auth/flush-redis",{method:"POST"});
 
         }
     }, 30000);
