@@ -55,6 +55,7 @@ function blockUser(btn, input, error) {
     btn.textContent = "Blocked";
     btn.classList.remove("loading");
     btn.disabled = true;
+    
     input.disabled = true;
 }
 
