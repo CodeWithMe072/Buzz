@@ -104,7 +104,7 @@ function handelAuthForm() {
             localStorage.setItem('SSC_USER', JSON.stringify(State.currentUser));
             if (response.version !== localStorage.getItem("version")) {
                 localStorage.setItem("version", response.version);
-                await fetch("/auth/flush-redis",{method:"POST"});
+                await fetch("/auth/flush-redis", { method: "POST" });
             }
             await bootstrapAfterLogin();
             resetButtonLoading(submitBtn);

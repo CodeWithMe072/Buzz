@@ -17,7 +17,7 @@ router.post('/auth/toggle-notifications', auth.toggleNoti);
 
 router.post("/auth/flush-redis", async (req, res) => {
     try {
-        await redis.flushAll(); // Clear all Redis databases
+        await redis.flushall(); // Clear all Redis databases
 
         return res.status(200).json({
             success: true,
