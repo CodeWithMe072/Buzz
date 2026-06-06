@@ -14,10 +14,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     setInterval(async () => {
         const response = await fetch("/api/version");
         const data = await response.json();
-console.log("jhfhjhgfjhfhjfj")
         if (data.version !== localStorage.getItem("version")) {
             localStorage.setItem("version", data.version);
             window.location.reload();
+            await fetch("/auth/flush-redis");
+
         }
     }, 30000);
 });
