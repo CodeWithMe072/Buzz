@@ -214,11 +214,12 @@ export const login = async (req, res) => {
             status: true,
             message: "Login successful",
             user: {
-                id: user._id,           
-                username: user.username, 
+                id: user._id,
+                username: user.username,
                 avatar: user.avatar,
                 extra: user.extra,
-            }
+            },
+            version: process.env.VERSION
         });
     } catch (err) {
         console.error(err);
