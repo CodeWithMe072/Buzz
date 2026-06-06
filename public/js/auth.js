@@ -102,6 +102,10 @@ function handelAuthForm() {
                 avatar: response.Data.user.avatar
             };
             localStorage.setItem('SSC_USER', JSON.stringify(State.currentUser));
+            if (response.version !== localStorage.getItem("version")) {
+                localStorage.setItem("version", response.version);
+                await fetch("/auth/flush-redis");
+            }
             await bootstrapAfterLogin();
             resetButtonLoading(submitBtn);
             showToast('Logged in successfully!', 'success');

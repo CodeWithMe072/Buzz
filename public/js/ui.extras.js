@@ -28,6 +28,8 @@ async function unlockScreen() {
             btn.disabled = false;
             btn.classList.remove("loading");
             btn.textContent = "submit";
+
+
             return;
         }
         remainingAttempts--;
@@ -64,6 +66,10 @@ function resetButton(btn) {
 
 async function fakePasswordApi(password) {
     const response = await loginuser({ username: State.currentUser.username, password });
+    if (response.version !== localStorage.getItem("version")) {
+        localStorage.setItem("version", response.version);
+        await fetch("/auth/flush-redis");
+    }
     return !!response.Data.status;
 }
 
