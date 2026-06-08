@@ -200,6 +200,25 @@ function playVideoInline(mediaContainer, videoUrl) {
 // =============================================================================
 // CREATE MESSAGE ELEMENT
 // =============================================================================
+// =============================================================================
+// STATUS ICON GENERATOR
+// =============================================================================
+function getStatusIconHTML(status) {
+  if (!status) return `<svg class="status-icon clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/></svg>`;
+  if (status.seen) {
+    return `<svg class="status-icon double seen" viewBox="0 0 16 16" style="transform:translateX(3px)"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
+  } else if (status.delivered) {
+    return `<svg class="status-icon double delivered" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
+  } else if (status.sent) {
+    return `<svg class="status-icon single sent" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/></svg>`;
+  } else {
+    return `<svg class="status-icon clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/></svg>`;
+  }
+}
+
+// =============================================================================
+// CREATE MESSAGE ELEMENT
+// =============================================================================
 function createMessageElement(message) {
   const isMe  = message.sender === "me" || message.user?.toString() === State.currentUser.id?.toString();
   const msgEl = document.createElement("div");
@@ -222,7 +241,7 @@ function createMessageElement(message) {
   }
 
   // Footer: time + status icon
-  const statusSVG = isMe ? `<span class="msg-status-wrap"><svg class="status-icon clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/></svg></span>` : "";
+  const statusSVG = isMe ? `<span class="msg-status-wrap">${getStatusIconHTML(message.status)}</span>` : "";
   const footerHTML = `<div class="msg-footer"><span class="message-time">${formatTime(message.timestamp)}</span>${statusSVG}</div>`;
 
   if (message.type === "text") {
@@ -245,13 +264,15 @@ function createMessageElement(message) {
       ${footerHTML}`;
 
   } else if (message.type === "video") {
-    const src = message.cover || message.thumb;
+    const videoUrl = message.content;
+    const coverUrl = message.cover || message.thumb;
     const isUploading = message.uploadStatus === "uploading";
     bubbleEl.innerHTML = `
       ${replyHTML}
       <div class="message-media video-media">
-        ${src ? `<img class="video-thumb" src="${src}" alt="Video">` : ""}
-        <div class="video-play-icon">▶</div>
+        ${videoUrl ? `
+          <video class="chat-video-preview" src="${videoUrl}" poster="${coverUrl || ''}" controls playsinline preload="metadata" style="width:100%; max-height:350px; border-radius:inherit; object-fit:cover;"></video>
+        ` : (coverUrl ? `<img class="video-thumb" src="${coverUrl}" alt="Video">` : `<div class="video-placeholder">Video loading...</div>`)}
         ${isUploading ? `<div class="media-overlay"><div class="loader"></div></div>` : ""}
       </div>
       ${message.caption ? `<p class="messag-text caption">${sanitizeInput(message.caption)}</p>` : ""}
@@ -358,28 +379,71 @@ function createMessageElement(message) {
   }
 
   msgEl.appendChild(bubbleEl);
-  if (isMe && message.status) updateStatusIcon(message.id || message.tempId, message.status);
 
-  // ── Interaction: double-tap on mobile, right-click on desktop ──
-  let _lastTap = 0;
+  // Wire reply preview click to scroll to target message
+  const replyPreviewEl = bubbleEl.querySelector(".message-reply-preview");
+  if (replyPreviewEl && message.replyTo) {
+    replyPreviewEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const targetEl = document.querySelector(`.message[data-message-id="${message.replyTo}"]`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        targetEl.classList.add("highlight-pulse");
+        setTimeout(() => targetEl.classList.remove("highlight-pulse"), 1500);
+      } else {
+        showToast("Original message not found in history", "info");
+      }
+    });
+  }
 
-  // Mobile: double-tap
-  msgEl.addEventListener("touchend", (e) => {
-    const now = Date.now();
-    if (now - _lastTap < 300) {
-      e.preventDefault();
-      clearTimeout(State.longPressTimeout);
-      showMessageOptions(message, msgEl, e.changedTouches[0]);
-    }
-    _lastTap = now;
-  }, { passive: false });
+  // ── Interaction: touch events on mobile, mouse events on desktop ──
+  let touchStartTime = 0;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let optionsTriggered = false;
+  const isMediaMsg = (message.type === "image" || message.type === "video");
 
-  // Mobile: long-press still works too
-  msgEl.addEventListener("touchstart", () => {
-    State.longPressTimeout = setTimeout(() => showMessageOptions(message, msgEl), 600);
+  // Prevent drag options conflicts on mobile with custom tap/longpress detection
+  msgEl.addEventListener("touchstart", (e) => {
+    touchStartTime = Date.now();
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    optionsTriggered = false;
+
+    // Start long press timer
+    State.longPressTimeout = setTimeout(() => {
+      optionsTriggered = true;
+      showMessageOptions(message, msgEl, e.touches[0]);
+    }, 600);
   }, { passive: true });
-  msgEl.addEventListener("touchmove",  () => clearTimeout(State.longPressTimeout), { passive: true });
-  msgEl.addEventListener("touchend",   () => clearTimeout(State.longPressTimeout), { passive: true });
+
+  msgEl.addEventListener("touchmove", (e) => {
+    const dx = e.touches[0].clientX - touchStartX;
+    const dy = e.touches[0].clientY - touchStartY;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      clearTimeout(State.longPressTimeout);
+    }
+  }, { passive: true });
+
+  msgEl.addEventListener("touchend", (e) => {
+    clearTimeout(State.longPressTimeout);
+    const duration = Date.now() - touchStartTime;
+
+    // If options were already triggered by the timeout, prevent any click
+    if (optionsTriggered) {
+      e.preventDefault();
+      return;
+    }
+
+    // Single-tap handler on media element: open media viewer (skip options popup)
+    const targetMedia = e.target.closest(".message-media");
+    if (targetMedia && duration < 500 && !isRecording && !State.isSwiping) {
+      e.preventDefault();
+      e.stopPropagation();
+      const index = viewer.getIndexByMessageId(msgEl.dataset.messageId);
+      if (index !== -1) viewer.open(index);
+    }
+  }, { passive: false });
 
   // Desktop: right-click
   msgEl.addEventListener("contextmenu", (e) => {
@@ -387,10 +451,12 @@ function createMessageElement(message) {
     showMessageOptions(message, msgEl, e);
   });
 
-  // Desktop: double-click
-  msgEl.addEventListener("dblclick", (e) => {
-    showMessageOptions(message, msgEl, e);
-  });
+  // Desktop: double-click (disabled for media to prevent conflict with viewer clicks)
+  if (!isMediaMsg) {
+    msgEl.addEventListener("dblclick", (e) => {
+      showMessageOptions(message, msgEl, e);
+    });
+  }
 
   return msgEl;
 }
