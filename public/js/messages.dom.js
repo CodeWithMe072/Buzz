@@ -147,11 +147,12 @@ function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus, fil
         mediaContainer.innerHTML = "";
         const video = document.createElement("video");
         video.src = content;
+        video.poster = cover || thumb || "";
         video.className = "chat-video-preview";
-        video.controls = false;
-        video.muted = true;
+        video.controls = true;
         video.playsInline = true;
         video.preload = "metadata";
+        video.style.cssText = "width:100%; max-height:350px; border-radius:inherit; object-fit:cover;";
         mediaContainer.appendChild(video);
     }
 
@@ -232,14 +233,15 @@ function updateReceivedMediaDOM(tempId, { content, cover, thumb, type }) {
         }
 
         if (type === "video") {
-            const img = document.createElement("img");
-            img.className = "video-thumb";
-            if (previewSrc) img.src = previewSrc;
-            const playIcon = document.createElement("div");
-            playIcon.className = "video-play-icon";
-            playIcon.innerHTML = "▶";
-            mediaContainer.appendChild(img);
-            mediaContainer.appendChild(playIcon);
+            const video = document.createElement("video");
+            video.className = "chat-video-preview";
+            video.src = content;
+            video.poster = cover || thumb || "";
+            video.controls = true;
+            video.playsInline = true;
+            video.preload = "metadata";
+            video.style.cssText = "width:100%; max-height:350px; border-radius:inherit; object-fit:cover;";
+            mediaContainer.appendChild(video);
         }
 
         attactEventOnMedia();

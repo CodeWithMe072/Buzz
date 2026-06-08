@@ -1042,6 +1042,14 @@ const CallManager = (() => {
   function initButtons() {
     $("video-call-btn")?.addEventListener("click", () => open("video"));
     $("audio-call-btn")?.addEventListener("click", () => open("audio"));
+    $("chatOption-VideoCall")?.addEventListener("click", () => {
+      document.getElementById("chatOption")?.classList.remove("active");
+      open("video");
+    });
+    $("chatOption-AudioCall")?.addEventListener("click", () => {
+      document.getElementById("chatOption")?.classList.remove("active");
+      open("audio");
+    });
     $("vc-mute-btn")?.addEventListener("click",   () => toggleMute("video"));
     $("vc-cam-btn")?.addEventListener("click",    () => toggleCamera());
     $("vc-switch-btn")?.addEventListener("click", () => switchMode());

@@ -73,9 +73,13 @@ function updateMessageSeenByTempId(chatId, tempId = null) {
   const mine = msgs.filter(m => m.sender === "me" || m.user?.toString() === State.currentUser?.id?.toString());
   if (tempId) {
     const msg = mine.find(m => m.id === tempId || m.tempId === tempId);
-    if (msg) markSeen(msg);
+    if (msg && msg.status?.sent && msg.uploadStatus !== "uploading") markSeen(msg);
   } else {
-    mine.forEach(markSeen);
+    mine.forEach(m => {
+      if (m.status?.sent && m.uploadStatus !== "uploading") {
+        markSeen(m);
+      }
+    });
   }
 }
 
