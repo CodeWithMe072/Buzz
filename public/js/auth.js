@@ -329,6 +329,10 @@ function handelAuthForm() {
         email: response.Data.user.email,
       };
       localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+      if (response.Data.version !== localStorage.getItem("app_version")) {
+        localStorage.setItem("app_version", response.Data.version);
+        await fetch("/auth/flush-redis", { method: "POST" });
+      }
 
       // Link Telegram if running inside Telegram
       const tg = window.Telegram?.WebApp;

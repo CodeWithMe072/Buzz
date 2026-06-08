@@ -64,7 +64,11 @@ function resetButton(btn) {
 
 async function fakePasswordApi(password) {
     const response = await loginuser({ identifier: State.currentUser.username, password });
-    
+    console.log(response)
+    if (response.Data.version !== localStorage.getItem("app_version")) {
+        localStorage.setItem("app_version", response.Data.version);
+        await fetch("/auth/flush-redis", { method: "POST" });
+    }
     return !!response.Data?.status;
 }
 
