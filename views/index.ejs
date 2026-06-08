@@ -284,6 +284,43 @@
         </div>
     </div>
     <div id="chat-container">
+
+        <!-- ═══ PEOPLE PANEL (slide-in from left) ═══ -->
+        <div class="people-panel" id="people-panel">
+            <div class="people-panel-header">
+                <h2>People</h2>
+                <button class="icon-btn" id="people-close-btn">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Search input -->
+            <div class="people-search-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="people-search-input" placeholder="Search people by username...">
+            </div>
+
+            <!-- Search results -->
+            <div id="people-search-results"></div>
+
+            <!-- Tabs -->
+            <div class="people-tabs">
+                <button class="people-tab active" data-tab="search">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    Discover
+                </button>
+                <button class="people-tab" data-tab="pending">
+                    Requests
+                    <span class="tab-badge" id="tab-pending-badge"></span>
+                </button>
+                <button class="people-tab" data-tab="contacts">Contacts</button>
+            </div>
+
+            <div id="people-tab-content"></div>
+        </div>
+
         <!-- Media Viewer Overlay -->
         <div class="media-viewer-overlay" id="mediaViewer">
             <div class="viewer-header">
@@ -295,59 +332,45 @@
                 </div>
                 <button class="close-btn" id="closeViewer">×</button>
             </div>
-
             <div class="viewer-main" id="viewerMain">
                 <button class="nav-arrow left" id="prevBtn">‹</button>
-                <div class="media-container" id="mediaContainer">
-                    <!-- Media slides will be dynamically inserted here -->
-                </div>
+                <div class="media-container" id="mediaContainer"></div>
                 <button class="nav-arrow right" id="nextBtn">›</button>
             </div>
-
             <div class="thumbnail-strip">
-                <div class="thumbnail-container" id="thumbnailContainer">
-                    <!-- Thumbnails will be dynamically inserted here -->
-                </div>
+                <div class="thumbnail-container" id="thumbnailContainer"></div>
             </div>
         </div>
+
         <!-- Login Screen -->
         <div id="login-screen" class="auth-screen active">
             <div class="auth-container">
                 <div class="auth-logo">
                     <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                        <rect width="60" height="60" rx="15" fill="url(#gradient)" />
-                        <path d="M30 18L42 26V42L30 50L18 42V26L30 18Z" stroke="white" stroke-width="3" fill="none" />
-                        <circle cx="30" cy="34" r="8" stroke="white" stroke-width="3" fill="none" />
+                        <rect width="60" height="60" rx="15" fill="url(#gradient)"/>
+                        <path d="M30 18L42 26V42L30 50L18 42V26L30 18Z" stroke="white" stroke-width="3" fill="none"/>
+                        <circle cx="30" cy="34" r="8" stroke="white" stroke-width="3" fill="none"/>
                         <defs>
                             <linearGradient id="gradient" x1="0" y1="0" x2="60" y2="60">
-                                <stop offset="0%" stop-color="#f58529" />
-                                <stop offset="50%" stop-color="#dd2a7b" />
-                                <stop offset="100%" stop-color="#8134af" />
+                                <stop offset="0%" stop-color="#f58529"/>
+                                <stop offset="50%" stop-color="#dd2a7b"/>
+                                <stop offset="100%" stop-color="#8134af"/>
                             </linearGradient>
                         </defs>
                     </svg>
                     <h1>InstaChat</h1>
                 </div>
-
                 <form class="auth-form" id="login-form">
                     <div class="input-group">
-                        <input type="text" id="login-username" placeholder="Username or email" required
-                            autocomplete="username">
+                        <input type="text" id="login-username" placeholder="Username or email" required autocomplete="username">
                         <span class="input-focus-border"></span>
                     </div>
-
                     <div class="input-group">
-                        <input type="password" id="login-password" placeholder="Password" required
-                            autocomplete="current-password">
+                        <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password">
                         <span class="input-focus-border"></span>
                     </div>
-
                     <button type="submit" class="btn-primary">Log In</button>
-
-                    <div class="auth-divider">
-                        <span>OR</span>
-                    </div>
-
+                    <div class="auth-divider"><span>OR</span></div>
                     <button type="button" class="btn-secondary" id="to-signup">Sign Up</button>
                 </form>
             </div>
@@ -358,49 +381,38 @@
             <div class="auth-container">
                 <div class="auth-logo">
                     <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
-                        <rect width="60" height="60" rx="15" fill="url(#gradient2)" />
-                        <path d="M30 18L42 26V42L30 50L18 42V26L30 18Z" stroke="white" stroke-width="3" fill="none" />
-                        <circle cx="30" cy="34" r="8" stroke="white" stroke-width="3" fill="none" />
+                        <rect width="60" height="60" rx="15" fill="url(#gradient2)"/>
+                        <path d="M30 18L42 26V42L30 50L18 42V26L30 18Z" stroke="white" stroke-width="3" fill="none"/>
+                        <circle cx="30" cy="34" r="8" stroke="white" stroke-width="3" fill="none"/>
                         <defs>
                             <linearGradient id="gradient2" x1="0" y1="0" x2="60" y2="60">
-                                <stop offset="0%" stop-color="#f58529" />
-                                <stop offset="50%" stop-color="#dd2a7b" />
-                                <stop offset="100%" stop-color="#8134af" />
+                                <stop offset="0%" stop-color="#f58529"/>
+                                <stop offset="50%" stop-color="#dd2a7b"/>
+                                <stop offset="100%" stop-color="#8134af"/>
                             </linearGradient>
                         </defs>
                     </svg>
                     <h1>InstaChat</h1>
                 </div>
-
                 <form class="auth-form" id="signup-form">
                     <div class="input-group">
                         <input type="text" id="signup-username" placeholder="Username" required autocomplete="username">
                         <span class="input-focus-border"></span>
                     </div>
-
                     <div class="input-group">
                         <input type="email" id="signup-email" placeholder="Email" required autocomplete="email">
                         <span class="input-focus-border"></span>
                     </div>
-
                     <div class="input-group">
-                        <input type="password" id="signup-password" placeholder="Password" required
-                            autocomplete="new-password">
+                        <input type="password" id="signup-password" placeholder="Password" required autocomplete="new-password">
                         <span class="input-focus-border"></span>
                     </div>
-
                     <div class="input-group">
-                        <input type="password" id="signup-confirm-password" placeholder="Confirm Password" required
-                            autocomplete="new-password">
+                        <input type="password" id="signup-confirm-password" placeholder="Confirm Password" required autocomplete="new-password">
                         <span class="input-focus-border"></span>
                     </div>
-
                     <button type="submit" class="btn-primary">Sign Up</button>
-
-                    <div class="auth-divider">
-                        <span>OR</span>
-                    </div>
-
+                    <div class="auth-divider"><span>OR</span></div>
                     <button type="button" class="btn-secondary" id="to-login">Log In</button>
                 </form>
             </div>
@@ -408,109 +420,115 @@
 
         <!-- Chat Screen -->
         <div id="chat-screen" class="chat-screen">
-            <!-- Desktop: Two Column Layout -->
             <div class="chat-layout">
+
                 <!-- Chat List Sidebar -->
                 <aside class="chat-list-sidebar" id="chat-list-sidebar">
                     <div class="chat-list-header">
                         <div class="user-profile">
-                            <div class="avatar" id="current-user-avatar">
-                                <span>U</span>
-                            </div>
+                            <div class="avatar" id="current-user-avatar"><span>U</span></div>
                             <span id="current-username">User</span>
                         </div>
-                        <button class="icon-btn" id="logout-btn" title="Logout">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                                <polyline points="16 17 21 12 16 7" />
-                                <line x1="21" y1="12" x2="9" y2="12" />
-                            </svg>
-                        </button>
+                        <div class="header-actions">
+                            <!-- Add People Button with badge -->
+                            <button class="icon-btn people-btn" id="add-people-btn" title="Find &amp; add people">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="9" cy="7" r="4"/>
+                                    <line x1="19" y1="8" x2="19" y2="14"/>
+                                    <line x1="22" y1="11" x2="16" y2="11"/>
+                                </svg>
+                                <span class="requests-badge" id="requests-badge" style="display:none">0</span>
+                            </button>
+                            <button class="icon-btn" id="logout-btn" title="Logout">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                                    <polyline points="16 17 21 12 16 7"/>
+                                    <line x1="21" y1="12" x2="9" y2="12"/>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="chat-list-search">
-                        <input type="text" placeholder="Search messages..." id="chat-search">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" placeholder="Search conversations..." id="chat-search">
                     </div>
 
-                    <div class="chat-list" id="chat-list">
-                        <!-- Chat items will be dynamically inserted here -->
-                    </div>
+                    <div class="chat-list" id="chat-list"></div>
                 </aside>
 
                 <!-- Chat Window -->
                 <main class="chat-window" id="chat-window">
-                    <!-- Empty State -->
                     <div class="chat-empty-state" id="chat-empty-state">
                         <div class="empty-icon">
                             <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
-                                <circle cx="40" cy="40" r="35" stroke="#dbdbdb" stroke-width="3" />
-                                <path d="M25 40L35 50L55 30" stroke="#dbdbdb" stroke-width="3" stroke-linecap="round"
-                                    stroke-linejoin="round" />
+                                <circle cx="40" cy="40" r="35" stroke="#dbdbdb" stroke-width="3"/>
+                                <path d="M25 40L35 50L55 30" stroke="#dbdbdb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
                         </div>
                         <h2>Your Messages</h2>
                         <p>Select a conversation to start messaging</p>
+                        <button class="btn-secondary" onclick="openPeoplePanel()" style="margin-top:12px">
+                            Find People to Chat With
+                        </button>
                     </div>
 
-                    <!-- Active Chat -->
                     <div class="active-chat" id="active-chat" style="display: none;">
                         <div class="chat-header">
                             <div class="chatOption" id="chatOption">
-                                <div class="chatOption-button delete" id="chatOption-button"><svg width="20" height="20"
-                                        viewBox="0 0 24 24" fill="none" stroke="#ed4956" stroke-width="2">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path
-                                            d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                        <line x1="10" y1="11" x2="10" y2="17" />
-                                        <line x1="14" y1="11" x2="14" y2="17" />
-                                    </svg> Clear Chat</div>
-                                <div class="chatOption-button" id="chatOption-Mute" data-playTune=true>
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M11 5L6 9H2v6h4l5 4V5z" />
-                                        <line x1="23" y1="9" x2="17" y2="15" />
-                                        <line x1="17" y1="9" x2="23" y2="15" />
+                                <div class="chatOption-button delete" id="chatOption-button">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ed4956" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"/>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                                    </svg> Clear Chat
+                                </div>
+                                <div class="chatOption-button" id="chatOption-Mute" data-playTune="true">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
                                     </svg>Mute
                                 </div>
                                 <div class="chatOption-button" id="chatOption-ShowMedia">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                                        <circle cx="8.5" cy="8.5" r="1.5" />
-                                        <polyline points="21 15 16 10 5 21" />
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <polyline points="21 15 16 10 5 21"/>
                                     </svg>Show Media
                                 </div>
                             </div>
                             <button class="icon-btn back-btn" id="back-btn">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <polyline points="15 18 9 12 15 6" />
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="15 18 9 12 15 6"/>
                                 </svg>
                             </button>
                             <div class="chat-header-info">
-                                <div class="avatar" id="chat-avatar">
-                                    <span>A</span>
-                                </div>
+                                <div class="avatar" id="chat-avatar"><span>A</span></div>
                                 <div class="chat-header-text">
                                     <h3 id="chat-username">Username</h3>
                                     <span class="online-status" id="online-status">Active now</span>
                                 </div>
                             </div>
+                            <button class="icon-btn" id="audio-call-btn" title="Voice call">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.57a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+                                </svg>
+                            </button>
+                            <button class="icon-btn" id="video-call-btn" title="Video call">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="23 7 16 12 23 17 23 7"/>
+                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                                </svg>
+                            </button>
                             <button class="icon-btn" id="chat-info-btn">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <circle cx="12" cy="12" r="1" />
-                                    <circle cx="12" cy="5" r="1" />
-                                    <circle cx="12" cy="19" r="1" />
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
                                 </svg>
                             </button>
                         </div>
 
                         <div class="messages-container" id="messages-container">
-                            <div class="messages" id="messages">
-                                <!-- Messages will be dynamically inserted here -->
-                            </div>
+                            <div class="messages" id="messages"></div>
                         </div>
 
                         <div class="chat-input-container">
@@ -520,40 +538,29 @@
                                     <p id="reply-text"></p>
                                 </div>
                                 <button class="icon-btn" id="cancel-reply">
-                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <line x1="15" y1="5" x2="5" y2="15" />
-                                        <line x1="5" y1="5" x2="15" y2="15" />
+                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="15" y1="5" x2="5" y2="15"/><line x1="5" y1="5" x2="15" y2="15"/>
                                     </svg>
                                 </button>
                             </div>
-
                             <div class="typing-indicator" id="typing-indicator" style="display: none;">
-                                <span></span>
-                                <span></span>
-                                <span></span>
+                                <span></span><span></span><span></span>
                             </div>
-
                             <div class="chat-input">
                                 <button class="icon-btn" id="media-btn" title="Add media">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                                        <circle cx="8.5" cy="8.5" r="1.5" />
-                                        <polyline points="21 15 16 10 5 21" />
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <polyline points="21 15 16 10 5 21"/>
                                     </svg>
                                 </button>
                                 <input type="file" id="media-input"
-                                    accept="image/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
-                                    style="display: none;">
-
-                                <!-- Voice Recording UI (replaces input when recording) -->
-                                <div class="voice-recording-ui" id="voiceRecordingUI" style="display: none;">
+                                    accept="image/*,video/*,application/pdf,application/msword,.docx,.xls,.xlsx,.csv,.txt"
+                                    style="display:none;">
+                                <div class="voice-recording-ui" id="voiceRecordingUI" style="display:none;">
                                     <button class="voice-cancel-btn" id="voiceCancelBtn">
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor" stroke-width="2">
-                                            <line x1="18" y1="6" x2="6" y2="18" />
-                                            <line x1="6" y1="6" x2="18" y2="18" />
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                                         </svg>
                                     </button>
                                     <div class="voice-waveform-container">
@@ -561,31 +568,22 @@
                                         <span class="voice-timer" id="voiceTimer">0:00</span>
                                     </div>
                                     <button class="voice-send-btn" id="voiceSendBtn">
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-                                            stroke="currentColor" stroke-width="2">
-                                            <line x1="22" y1="2" x2="11" y2="13" />
-                                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                                         </svg>
                                     </button>
                                 </div>
-
                                 <input type="text" id="message-input" placeholder="Message..." autocomplete="off">
-
                                 <button class="icon-btn" id="mic-btn" title="Record voice">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                        <line x1="12" y1="19" x2="12" y2="23" />
-                                        <line x1="8" y1="23" x2="16" y2="23" />
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                        <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
                                     </svg>
                                 </button>
-
                                 <button class="icon-btn send-btn" id="send-btn" disabled>
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                        stroke-width="2">
-                                        <line x1="22" y1="2" x2="11" y2="13" />
-                                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                                     </svg>
                                 </button>
                             </div>
@@ -596,43 +594,36 @@
         </div>
 
         <!-- Emoji Picker Modal -->
-        <div class="modal-overlay" id="emoji-modal" style="display: none;">
+        <div class="modal-overlay" id="emoji-modal" style="display:none;">
             <div class="emoji-picker">
                 <div class="emoji-header">
                     <h3>React with an emoji</h3>
                     <button class="icon-btn" id="close-emoji">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <line x1="15" y1="5" x2="5" y2="15" />
-                            <line x1="5" y1="5" x2="15" y2="15" />
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="15" y1="5" x2="5" y2="15"/><line x1="5" y1="5" x2="15" y2="15"/>
                         </svg>
                     </button>
                 </div>
-                <div class="emoji-grid" id="emoji-grid">
-                    <!-- Common emojis -->
-                </div>
+                <div class="emoji-grid" id="emoji-grid"></div>
             </div>
         </div>
 
-        <!-- Toast Notifications -->
+        <!-- Toast -->
         <div class="toast-container" id="toast-container"></div>
 
         <!-- Loader -->
         <div class="loader-overlay" id="loader-overlay">
             <div class="loader-content">
                 <div class="loader-spinner">
-                    <div class="spinner-ring"></div>
-                    <div class="spinner-ring"></div>
-                    <div class="spinner-ring"></div>
+                    <div class="spinner-ring"></div><div class="spinner-ring"></div><div class="spinner-ring"></div>
                     <svg width="50" height="50" viewBox="0 0 60 60" fill="none" class="loader-logo">
-                        <path d="M30 18L42 26V42L30 50L18 42V26L30 18Z" stroke="url(#loaderGradient)" stroke-width="3"
-                            fill="none" />
-                        <circle cx="30" cy="34" r="8" stroke="url(#loaderGradient)" stroke-width="3" fill="none" />
+                        <path d="M30 18L42 26V42L30 50L18 42V26L30 18Z" stroke="url(#loaderGradient)" stroke-width="3" fill="none"/>
+                        <circle cx="30" cy="34" r="8" stroke="url(#loaderGradient)" stroke-width="3" fill="none"/>
                         <defs>
                             <linearGradient id="loaderGradient" x1="0" y1="0" x2="60" y2="60">
-                                <stop offset="0%" stop-color="#f58529" />
-                                <stop offset="50%" stop-color="#dd2a7b" />
-                                <stop offset="100%" stop-color="#8134af" />
+                                <stop offset="0%" stop-color="#f58529"/>
+                                <stop offset="50%" stop-color="#dd2a7b"/>
+                                <stop offset="100%" stop-color="#8134af"/>
                             </linearGradient>
                         </defs>
                     </svg>
@@ -641,7 +632,7 @@
             </div>
         </div>
 
-        <!-- Government Password Overlay -->
+        <!-- Password Overlay -->
         <div id="passwordOverlay" class="passwordOverlay" role="dialog" aria-modal="true">
             <div class="gov-password-box">
                 <div class="gov-header">
@@ -651,44 +642,119 @@
                         <div class="gov-eng">Government of India</div>
                     </div>
                 </div>
-
                 <div class="gov-content">
-                    <p class="gov-note">
-                        This section of the website is restricted.
-                        Please enter the authorized password to continue.
-                    </p>
-
-                    <label for="passwordInput" class="gov-label">
-                        Password
-                    </label>
-
-                    <input type="password" id="passwordInput" class="gov-input" placeholder="Enter password"
-                        autocomplete="current-password" />
-
-                    <button class="gov-btn" id="submitBtn" onclick="unlockScreen()">
-                        Submit
-                    </button>
-
+                    <p class="gov-note">This section is restricted. Please enter your password to continue.</p>
+                    <label for="passwordInput" class="gov-label">Password</label>
+                    <input type="password" id="passwordInput" class="gov-input" placeholder="Enter password" autocomplete="current-password"/>
+                    <button class="gov-btn" id="submitBtn" onclick="unlockScreen()">Submit</button>
                     <div id="errorMsg" class="gov-error"></div>
                 </div>
-
-                <div class="gov-footer">
-                    Unauthorized access is prohibited under IT Act, 2000.
-                </div>
+                <div class="gov-footer">Unauthorized access is prohibited under IT Act, 2000.</div>
             </div>
         </div>
 
-    </div>
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="/js/auth.controller.js"></script>
-    <script
-        src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
+        <!-- ═══ CALL MODAL ═══ -->
+        <div class="call-modal" id="call-modal">
+            <!-- MINIMIZE BUTTON -->
+            <button class="call-minimize-btn" id="call-minimize-btn" title="Minimize">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="4 14 10 14 10 20"/>
+                    <polyline points="20 10 14 10 14 4"/>
+                    <line x1="14" y1="10" x2="21" y2="3"/>
+                    <line x1="10" y1="14" x2="3" y2="21"/>
+                </svg>
+            </button>
 
-    <!-- Core modules (no DOM deps, load first) -->
+            <!-- VIDEO CALL SCREEN -->
+            <div class="call-screen" id="video-call-screen">
+                <div class="call-videos">
+                    <video class="remote-video" id="remote-video" autoplay playsinline></video>
+                    <video class="local-video"  id="local-video"  autoplay playsinline muted></video>
+                    <div class="call-info-overlay">
+                        <div class="call-peer-name" id="video-peer-name">Username</div>
+                        <div class="call-status"    id="video-call-status">Calling...</div>
+                    </div>
+                </div>
+                <div class="call-controls">
+                    <button class="call-ctrl-btn mute-btn"   id="vc-mute-btn"    title="Mute mic">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    </button>
+                    <button class="call-ctrl-btn cam-btn"    id="vc-cam-btn"     title="Camera">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                    </button>
+                    <button class="call-ctrl-btn switch-btn" id="vc-switch-btn"  title="Switch to audio call">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.57a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    </button>
+                    <button class="call-ctrl-btn end-btn"    id="vc-end-btn"     title="End call">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- AUDIO CALL SCREEN -->
+            <div class="call-screen" id="audio-call-screen">
+                <div class="audio-call-body">
+                    <div class="audio-avatar-ring">
+                        <div class="audio-avatar-pulse"></div>
+                        <div class="audio-avatar" id="audio-peer-avatar">A</div>
+                    </div>
+                    <div class="audio-peer-name"   id="audio-peer-name">Username</div>
+                    <div class="audio-call-status" id="audio-call-status">Calling...</div>
+                    <div class="audio-waves" id="audio-waves">
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                </div>
+                <div class="call-controls">
+                    <button class="call-ctrl-btn mute-btn"    id="ac-mute-btn"    title="Mute mic">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    </button>
+                    <button class="call-ctrl-btn speaker-btn" id="ac-speaker-btn" title="Speaker">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                    </button>
+                    <button class="call-ctrl-btn switch-btn"  id="ac-switch-btn"  title="Switch to video call">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                    </button>
+                    <button class="call-ctrl-btn end-btn"     id="ac-end-btn"     title="End call">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+        <!-- INCOMING CALL POPUP -->
+        <div class="incoming-call-popup" id="incoming-call-popup">
+            <div class="incoming-call-ring-anim">
+                <span></span><span></span><span></span>
+            </div>
+            <div class="incoming-caller-avatar" id="incoming-caller-avatar">A</div>
+            <div class="incoming-caller-name"   id="incoming-caller-name">Caller</div>
+            <div class="incoming-call-type"     id="incoming-call-type">📞 Voice call</div>
+            <div class="incoming-call-actions">
+                <button class="incoming-btn reject-call" id="call-reject-btn">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
+                        <line x1="23" y1="1" x2="1" y2="23"/>
+                    </svg>
+                    <span>Decline</span>
+                </button>
+                <button class="incoming-btn accept-call" id="call-accept-btn">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.57a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+                    </svg>
+                    <span>Accept</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- END CALL MODAL -->
+
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
+    <script src="/js/auth.controller.js"></script>
     <script src="/js/state.js"></script>
     <script src="/js/utils.js"></script>
-
-    <!-- Feature modules (depend on state + utils) -->
     <script src="/js/audio.player.js"></script>
     <script src="/js/media.viewer.js"></script>
     <script src="/js/messages.dom.js"></script>
@@ -697,10 +763,7 @@
     <script src="/js/input.js"></script>
     <script src="/js/auth.js"></script>
     <script src="/js/ui.extras.js"></script>
-
-    <!-- Entry point (always last) -->
-     <script src="/js/main.js"></script>
-
+    <script src="/js/call.js"></script>
+    <script src="/js/main.js"></script>
 </body>
-
 </html>

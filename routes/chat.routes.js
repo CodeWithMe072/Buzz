@@ -1,10 +1,13 @@
 import express from "express";
-import { getallMessage,deleteChat,getmedia } from "../controller/chat.controller.js";
+import { getMessages, deleteChat, getMedia } from "../controllers/chat.controller.js";
+import { protect } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/api/chats/media/:chat_key", getmedia);
-router.post("/allmessages", getallMessage);
-router.post("/api/deletechat", deleteChat);
+router.use(protect);
+
+router.post("/api/messages", getMessages);
+router.delete("/api/chat/:userId", deleteChat);
+router.get("/api/chat/:userId/media", getMedia);
 
 export default router;

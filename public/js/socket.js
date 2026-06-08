@@ -1,421 +1,377 @@
 /**
- * socket.js — Socket.io connection, all socket event handlers,
- *             connection banner, outbox/upload flush, and status helpers.
+ * socket.js — Socket.io handlers. JWT auth is passed on connect in auth.js.
+ * This file wires all event handlers after socket is created.
  */
 
 // =============================================================================
 // CONNECTION BANNER
 // =============================================================================
 function updateConnectionBanner(customMsg = null) {
-    let banner = document.getElementById("connection-banner");
-    if (!banner) {
-        banner = document.createElement("div");
-        banner.id = "connection-banner";
-        banner.style.cssText = `
-            position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
-            padding: 8px 16px; font-size: 13px; text-align: center;
-            font-weight: 500; transition: all 0.3s ease; display: none;
-        `;
-        document.body.prepend(banner);
-    }
-
-    if (NetworkMonitor.canSend) {
-        banner.style.display = "none";
-    } else if (!NetworkMonitor.isOnline) {
-        banner.textContent = "You are offline. Messages will send when you reconnect.";
-        banner.style.background = "#e53e3e";
-        banner.style.color = "#fff";
-        banner.style.display = "block";
-    } else {
-        banner.textContent = customMsg || "Reconnecting to server...";
-        banner.style.background = "#d69e2e";
-        banner.style.color = "#fff";
-        banner.style.display = "block";
-    }
+  let banner = document.getElementById("connection-banner");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "connection-banner";
+    banner.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:9999;
+      padding:8px 16px;font-size:13px;text-align:center;font-weight:500;
+      transition:all 0.3s ease;display:none;`;
+    document.body.prepend(banner);
+  }
+  if (NetworkMonitor.canSend) {
+    banner.style.display = "none";
+  } else if (!NetworkMonitor.isOnline) {
+    banner.textContent = "You are offline. Messages will send when you reconnect.";
+    banner.style.cssText += "background:#e53e3e;color:#fff;display:block;";
+  } else {
+    banner.textContent = customMsg || "Reconnecting to server...";
+    banner.style.cssText += "background:#d69e2e;color:#fff;display:block;";
+  }
 }
 
 // =============================================================================
 // STATUS ICON HELPER
 // =============================================================================
 function updateStatusIcon(tempId, status) {
-    const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
-    if (!msgEl) return;
-    const statusEl = msgEl.querySelector(".message-status");
-    if (!statusEl) return;
-
-    if (status.seen) {
-        statusEl.innerHTML = `<svg class="status-icon double seen" viewBox="0 0 16 16" style="transform:translateX(3px)">
-            <polyline points="2 8 6 12 14 4"/>
-            <polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/>
-        </svg>`;
-    } else if (status.delivered) {
-        statusEl.innerHTML = `<svg class="status-icon double delivered" viewBox="0 0 16 16">
-            <polyline points="2 8 6 12 14 4"/>
-            <polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/>
-        </svg>`;
-    } else if (status.sent) {
-        statusEl.innerHTML = `<svg class="status-icon single sent" viewBox="0 0 16 16">
-            <polyline points="2 8 6 12 14 4"/>
-        </svg>`;
-    } else {
-        statusEl.innerHTML = `<svg class="status-icon clock" viewBox="0 0 16 16">
-            <circle cx="8" cy="8" r="6.5"/>
-            <polyline points="8 4 8 8 11 10"/>
-        </svg>`;
-    }
+  const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
+  if (!msgEl) return;
+  const wrap = msgEl.querySelector(".msg-status-wrap");
+  if (!wrap) return;
+  if (status.seen) {
+    wrap.innerHTML = `<svg class="status-icon double seen" viewBox="0 0 16 16" style="transform:translateX(3px)"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
+  } else if (status.delivered) {
+    wrap.innerHTML = `<svg class="status-icon double delivered" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
+  } else if (status.sent) {
+    wrap.innerHTML = `<svg class="status-icon single sent" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/></svg>`;
+  } else {
+    wrap.innerHTML = `<svg class="status-icon clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/></svg>`;
+  }
 }
 
 // =============================================================================
 // SEEN HELPERS
 // =============================================================================
 function markSeen(message) {
-    if (!message?.status?.delivered || message.status.seen) return;
-    message.status.seen = true;
-    const id = message.id || message.tempId;
-    const msgEl = document.querySelector(`.message[data-message-id="${id}"] .message-bubble`);
-    if (!msgEl) return;
-    const statusEl = msgEl.querySelector(".message-status");
-    if (!statusEl) return;
-    statusEl.innerHTML = `
-        <svg class="status-icon double seen" viewBox="0 0 16 16">
-            <polyline points="2 8 6 12 14 4"/>
-            <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0px);"/>
-        </svg>`;
+  if (!message) return;
+  // Mark even if not yet "delivered" — seen implies delivered
+  if (message.status?.seen) return;
+  if (message.status) {
+    message.status.seen      = true;
+    message.status.delivered = true;
+  }
+  const id = message.id || message.tempId;
+  const msgEl = document.querySelector(`.message[data-message-id="${id}"] .message-bubble`);
+  if (!msgEl) return;
+  const wrap = msgEl.querySelector(".msg-status-wrap");
+  if (!wrap) return;
+  wrap.innerHTML = `<svg class="status-icon double seen" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0px);"/></svg>`;
 }
 
+// chatId = the conversation partner's userId
+// tempId = optional specific message id
 function updateMessageSeenByTempId(chatId, tempId = null) {
-    const msgs = State.messages[chatId] || [];
-    if (tempId) {
-        const msg = msgs.find(m => m.id == tempId || m.tempId == tempId);
-        if (msg) markSeen(msg);
-    } else {
-        msgs.forEach(markSeen);
-    }
+  const msgs = State.messages[chatId] || [];
+  // only update messages WE sent (sender = "me")
+  const mine = msgs.filter(m => m.sender === "me" || m.user?.toString() === State.currentUser?.id?.toString());
+  if (tempId) {
+    const msg = mine.find(m => m.id === tempId || m.tempId === tempId);
+    if (msg) markSeen(msg);
+  } else {
+    mine.forEach(markSeen);
+  }
 }
 
 // =============================================================================
-// FLUSH OUTBOX — retry queued text messages after reconnect
+// FLUSH OUTBOX
 // =============================================================================
 function flushOutbox() {
-    const pending = OutboxQueue.getAll();
-    if (!pending.length) return;
-
-    pending.forEach(item => {
-        if (item.retries >= MAX_RETRIES) {
-            updateMessageByTempId(item.tempId, { uploadStatus: "failed" });
-            OutboxQueue.remove(item.tempId);
-            showToast("A message could not be sent after multiple retries.", "error");
-            return;
-        }
-        item.retries++;
-        socket.emit("private_message", {
-            message: {
-                tempId: item.tempId,
-                to: item.to,
-                type: item.type,
-                content: item.content,
-                caption: item.caption,
-                fileName: item?.fileName || null,
-                fileSize: item?.fileSize || null,
-                replyTo: item.replyTo,
-                clientTime: item.clientTime
-            }
-        });
+  OutboxQueue.getAll().forEach(item => {
+    if (item.retries >= MAX_RETRIES) {
+      updateMessageByTempId(item.tempId, { uploadStatus: "failed" });
+      OutboxQueue.remove(item.tempId);
+      showToast("A message could not be sent after multiple retries.", "error");
+      return;
+    }
+    item.retries++;
+    socket.emit("private_message", {
+      message: {
+        tempId: item.tempId, to: item.to, type: item.type,
+        content: item.content, caption: item.caption,
+        fileName: item.fileName || null, fileSize: item.fileSize || null,
+        replyTo: item.replyTo, clientTime: item.clientTime
+      }
     });
+  });
 }
 
 // =============================================================================
-// FLUSH UPLOAD QUEUE — retry failed media uploads after reconnect
+// FLUSH UPLOAD QUEUE
 // =============================================================================
 function flushUploadQueue() {
-    const pending = UploadQueue.getAll();
-    if (!pending.length) return;
-
-    pending.forEach(item => {
-        if (item.retries >= MAX_RETRIES) {
-            updateMessageByTempId(item.msgId, { uploadStatus: "failed" });
-            UploadQueue.remove(item.msgId);
-            showToast("A media upload failed after multiple retries.", "error");
-            return;
-        }
-        item.retries++;
-        if (item.type === "audio") {
-            uploadAudio(item.msgId, item.receiver, item.blob).catch(() => { });
-        } else {
-            uploadMedia(item.msgId, item.receiver, item.file).catch(() => { });
-        }
-    });
+  UploadQueue.getAll().forEach(item => {
+    if (item.retries >= MAX_RETRIES) {
+      updateMessageByTempId(item.msgId, { uploadStatus: "failed" });
+      UploadQueue.remove(item.msgId);
+      showToast("A media upload failed after multiple retries.", "error");
+      return;
+    }
+    item.retries++;
+    if (item.type === "audio") uploadAudio(item.msgId, item.receiver, item.blob).catch(() => {});
+    else uploadMedia(item.msgId, item.receiver, item.file).catch(() => {});
+  });
 }
 
 // =============================================================================
-// INIT SOCKET — registers all socket event handlers
+// INIT SOCKET — all event handlers
 // =============================================================================
 function initSocket() {
-    const tone = new Audio("/tone/notices.mp3");
+  const tone = new Audio("/tone/notices.mp3");
 
-    /* ─── INCOMING PRIVATE MESSAGE ─── */
-    socket.on("private_message", (msg) => {
-        if (State.playTune && msg.from !== State.activeChat) {
-            tone.currentTime = 0;
-            tone.play().catch(() => { });
-        }
+  // ── Connection error (token expired/invalid) ──────────────
+  socket.on("connect_error", (err) => {
+    console.error("[Socket] connect_error:", err.message);
+    if (err.message.includes("UNAUTHORIZED") || err.message.includes("TOKEN_EXPIRED")) {
+      showToast("Session expired. Please log in again.", "error");
+      // setTimeout(logout, 1500);
+    }
+    NetworkMonitor.isSocketConnected = false;
+    updateConnectionBanner();
+  });
 
-        const message = {
-            id: msg.id,
-            type: msg.type,
-            content: msg.content,
-            cover: msg.cover || null,
-            thumb: msg.thumb || null,
-            fileName: msg.fileName || null,
-            fileSize: msg.fileSize || null,
-            caption: msg.caption,
-            sender: "other",
-            timestamp: msg.timestamp,
-            user: msg.from,
-            replyTo: msg.replyTo,
-            reactions: {},
-            status: { sent: true, delivered: true, seen: false }
-        };
+  // ── Connected ─────────────────────────────────────────────
+  socket.on("connect", () => {
+    NetworkMonitor.isSocketConnected = true;
+    updateConnectionBanner();
+    // Only flush queues on reconnect (not first connect — nothing is queued yet)
+    if (State.apiMessagesLoaded) {
+      socket.emit("sync:delivered");
+      flushOutbox();
+      flushUploadQueue();
+    }
+  });
 
-        if (!State.messages[message.user]) State.messages[message.user] = [];
+  socket.on("disconnect", () => {
+    NetworkMonitor.isSocketConnected = false;
+    updateConnectionBanner();
+  });
 
-        // Duplicate check — skip if already loaded from API
-        const alreadyExists = State.messages[message.user].some(
-            m => m.id === message.id || m.tempId === message.id
-        );
-        if (alreadyExists) {
-            socket.emit("message:received", { tempId: msg.id });
-            return;
-        }
+  socket.on("reconnect", () => {
+    NetworkMonitor.isSocketConnected = true;
+    updateConnectionBanner();
+    flushOutbox();
+    flushUploadQueue();
+  });
 
-        State.messages[message.user].unshift(message);
-        State.messageIndex[message.id] = message.user;
-        socket.emit("message:received", { tempId: msg.id });
-
-        if (message.user === State.activeChat) {
-            const messagesContainer = document.getElementById('messages');
-            messagesContainer.appendChild(createMessageElement(message));
-            document.getElementById('messages-container').scrollTop = 99999;
-
-            if (message.type === "image" || message.type === "video") {
-                attactEventOnMedia();
-                if (viewer && message.content) viewer.addItem(message);
-            }
-            socket.emit("chat:seen", { from: State.activeChat });
-        }
-
-        const conv = State.conversations.find(c => c.id === message.user);
-        if (conv) {
-            conv.lastMessage = message.type === 'text' ? message.content : `📷 ${message.type}`;
-            conv.timestamp = message.timestamp;
-            conv.unread = (State.activeChat === message.user) ? 0 : (conv.unread ? conv.unread + 1 : 1);
-        }
-        renderChatList();
+  // ── Online list ───────────────────────────────────────────
+  socket.on("online:list", ({ users }) => {
+    State.conversations.forEach(conv => {
+      conv.online = users.includes(conv.id);
     });
+    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+  });
 
-    /* ─── SYNC: message sent from another device ─── */
-    socket.on("private_message_sync", (msg) => {
-        if (!State.messages[msg.to]) State.messages[msg.to] = [];
+  socket.on("user:online", ({ userId }) => {
+    const conv = State.conversations.find(c => c.id === userId);
+    if (conv) {
+      conv.online = true;
+      renderChatList();
+    }
+    if (State.activeChat === userId) {
+      const statusEl = document.getElementById("online-status");
+      if (statusEl) { statusEl.textContent = "Active now"; statusEl.className = "online-status online"; }
+    }
+  });
 
-        const exists = State.messages[msg.to].find(m => (m.tempId || m.id) === msg.tempId);
-        if (exists) return;
+  socket.on("user:offline", ({ userId }) => {
+    const conv = State.conversations.find(c => c.id === userId);
+    if (conv) {
+      conv.online  = false;
+      conv.lastSeen = new Date();
+      renderChatList();
+    }
+    if (State.activeChat === userId) {
+      const statusEl = document.getElementById("online-status");
+      if (statusEl) { statusEl.textContent = "Just now"; statusEl.className = "online-status"; }
+    }
+  });
 
-        const message = {
-            tempId: msg.tempId,
-            type: msg.type,
-            content: msg.content,
-            cover: msg.cover || null,
-            thumb: msg.thumb || null,
-            caption: msg.caption,
-            timestamp: msg.timestamp,
-            user: State.currentUser.id,
-            replyTo: null,
-            reactions: {},
-            status: { sent: true, delivered: false, seen: false }
-        };
+  // ── Incoming private message ──────────────────────────────
+  socket.on("private_message", (msg) => {
+    // Normalize all IDs to strings
+    const fromId = msg.from?.toString();
+    const myId   = State.currentUser.id?.toString();
 
-        State.messages[msg.to].unshift(message);
-        State.messageIndex[msg.tempId] = msg.to;
-
-        if (State.activeChat === msg.to) {
-            const messagesContainer = document.getElementById('messages');
-            messagesContainer.appendChild(createMessageElement(message));
-            document.getElementById('messages-container').scrollTop = 99999;
-        }
-
-        const conv = State.conversations.find(c => c.id === msg.to);
-        if (conv) {
-            conv.lastMessage = msg.type === 'text' ? msg.content : `📷 ${msg.type}`;
-            conv.timestamp = msg.timestamp;
-        }
-        renderChatList();
-    });
-
-    /* ─── MESSAGE ACK ─── */
-    socket.on("message_ack", ({ tempId, status }) => {
-        if (status === "sent") {
-            OutboxQueue.remove(tempId);
-            const chatId = State.messageIndex[tempId];
-            if (!chatId) return;
-            const msg = (State.messages[chatId] || []).find(m => (m.tempId || m.id) === tempId);
-            if (msg) {
-                msg.status = { ...msg.status, sent: true };
-                updateStatusIcon(tempId, msg.status);
-            }
-        }
-    });
-
-    /* ─── MESSAGE SAVE FAILED ─── */
-    socket.on("message_save_failed", ({ tempId }) => {
-        updateMessageByTempId(tempId, { uploadStatus: "failed" });
-        showToast("Message failed to save. Will retry automatically.", "error");
-    });
-
-    /* ─── DELIVERY CONFIRMED ─── */
-    socket.on("message:delivered", ({ tempId }) => {
-        updateMessageByTempId(tempId, { status: { sent: true, delivered: true, seen: false } });
-    });
-
-    /* ─── SEEN ─── */
-    socket.on("message:seen", ({ by }) => {
-        updateMessageSeenByTempId(by);
-    });
-
-    /* ─── TYPING ─── */
-    socket.on("typing:start", ({ user }) => {
-        if (user === State.activeChat) showTypingIndicator(true);
-    });
-    socket.on("typing:stop", ({ user }) => {
-        if (user === State.activeChat) showTypingIndicator(false);
-    });
-
-    /* ─── ONLINE STATUS ─── */
-    socket.on("online:list", ({ users }) => {
-        State.conversations.forEach(conv => { conv.online = users.includes(conv.id); });
-        renderChatList();
-    });
-
-    socket.on("user:online", ({ userId }) => {
-        const conv = State.conversations.find(c => c.id === userId);
-        if (!conv) return;
-        conv.online = true;
-        if (conv.id === State.activeChat) {
-            const statusEl = document.getElementById('online-status');
-            statusEl.textContent = 'Active now';
-            statusEl.className = 'online-status online';
-        }
-        renderChatList();
-    });
-
-    socket.on("user:offline", ({ userId }) => {
-        const conv = State.conversations.find(c => c.id === userId);
-        if (!conv) return;
-        conv.online = false;
-        conv.lastSeen = Date.now();
-        if (conv.id === State.activeChat) {
-            const statusEl = document.getElementById('online-status');
-            const lastseen = formatTime(conv.lastSeen);
-            statusEl.textContent = lastseen === "Just now" ? "Just now" : `Last seen ${lastseen} ago`;
-            statusEl.className = 'online-status';
-        }
-        renderChatList();
-    });
-
-    /* ─── MEDIA UPLOADED ─── */
-    socket.on("media:uploaded", ({ tempId, url, cover, thumb, mediaType }) => {
-        const chatId = State.messageIndex[tempId];
-        if (!chatId) return;
-
-        const msgs = State.messages[chatId] || [];
-        const msg = msgs.find(m => (m.tempId || m.id) === tempId);
-        if (!msg) return;
-
-        msg.content = url;
-        msg.cover = cover ?? null;
-        msg.thumb = thumb ?? null;
-        msg.type = mediaType;
-        msg.uploadStatus = "uploaded";
-
-        if (State.activeChat === chatId) {
-            if (msg.user === State.currentUser.id || msg.user === State.currentUser.username) {
-                updateMediaDOM(tempId, { content: url, cover, thumb, type: mediaType, uploadStatus: "uploaded" });
-            } else {
-                updateReceivedMediaDOM(tempId, { content: url, cover, thumb, type: mediaType });
-            }
-        }
-    });
-
-    /* ─── CONNECT ─── */
-    socket.on("connect", () => {
-        NetworkMonitor.isSocketConnected = true;
-        updateConnectionBanner();
-        setTimeout(() => {
-            if (!State.apiMessagesLoaded) {
-                socket.emit("sync:delivered");
-            } else {
-                State.apiMessagesLoaded = false;
-            }
-            flushOutbox();
-            flushUploadQueue();
-        }, 500);
-    });
-
-    /* ─── DISCONNECT ─── */
-    socket.on("disconnect", (reason) => {
-        NetworkMonitor.isSocketConnected = false;
-        const hardDisconnect = reason === "io client disconnect" || reason === "io server disconnect";
-        if (hardDisconnect) {
-            updateConnectionBanner();
-            return;
-        }
-        updateConnectionBanner();
-    });
-
-    socket.on("reconnect_attempt", (attempt) => {
-        updateConnectionBanner(`Reconnecting... (attempt ${attempt})`);
-    });
-
-    socket.on("reconnect_failed", () => {
-        updateConnectionBanner("Connection failed. Check your network.");
-    });
-
-    /* ─── PAGE VISIBILITY ─── */
-    document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible" && socket && !socket.connected) {
-            socket.connect();
-        }
-    });
-
-    /* ─── BROWSER ONLINE/OFFLINE ─── */
-    window.addEventListener("online", () => {
-        if (socket && !socket.connected) socket.connect();
-    });
-    window.addEventListener("offline", () => { /* socket.io handles via ping timeout */ });
-}
-
-// Direct socket emit helper (kept for compatibility)
-function sendsocketMessage(message) {
-    socket.emit("private_message", { message });
-}
-
-function handleTyping() {
-    const to = State.activeChat;
-    if (!to) return;
-
-    if (!State.typingTimeouts[to]) {
-        State.typingTimeouts[to] = { isTyping: false, stopTimeout: null };
+    if (State.playTune && fromId !== State.activeChat) {
+      tone.currentTime = 0;
+      tone.play().catch(() => {});
     }
 
-    const typingState = State.typingTimeouts[to];
+    const message = {
+      id:        msg.id?.toString(),
+      type:      msg.type,
+      content:   msg.content,
+      cover:     msg.cover   || null,
+      thumb:     msg.thumb   || null,
+      fileName:  msg.fileName || null,
+      fileSize:  msg.fileSize || null,
+      caption:   msg.caption || null,
+      sender:    fromId === myId ? "me" : "other",
+      timestamp: msg.timestamp,
+      user:      fromId,
+      replyTo:   msg.replyTo || null,
+      reactions: {},
+      status:    { sent: true, delivered: true, seen: false },
+      callType:  msg.callType,
+      callStatus: msg.callStatus,
+      callRoomId: msg.callRoomId,
+      callExpiresAt: msg.callExpiresAt,
+      callDuration: msg.callDuration
+    };
 
-    if (!typingState.isTyping) {
-        socket.emit("typing:start", { to });
-        typingState.isTyping = true;
+    if (!State.messages[message.user]) State.messages[message.user] = [];
+
+    const exists = State.messages[message.user].some(m =>
+      m.id?.toString() === message.id || m.tempId?.toString() === message.id
+    );
+    if (exists) {
+      socket.emit("message:received", { tempId: msg.id });
+      return;
     }
 
-    clearTimeout(typingState.stopTimeout);
-    typingState.stopTimeout = setTimeout(() => {
-        socket.emit("typing:stop", { to });
-        typingState.isTyping = false;
-    }, 1000);
+    State.messages[message.user].unshift(message);
+    State.messageIndex[message.id] = message.user;
+    socket.emit("message:received", { tempId: msg.id });
+
+    if (message.user === State.activeChat) {
+      const mc = document.getElementById("messages");
+      mc.appendChild(createMessageElement(message));
+      document.getElementById("messages-container").scrollTop = 99999;
+      if (message.type === "image" || message.type === "video") attactEventOnMedia();
+      socket.emit("chat:seen", { from: message.user });
+    }
+
+    // Update chat list last message
+    const conv = State.conversations.find(c => c.id === message.user);
+    if (conv) {
+      conv.lastMessage = message.type === "text" ? message.content : `📷 ${message.type}`;
+      conv.timestamp   = message.timestamp;
+      conv.unread = message.user !== State.activeChat ? (conv.unread || 0) + 1 : 0;
+    }
+    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+  });
+
+  // ── Message ack / delivery / seen ────────────────────────
+  socket.on("message_ack", ({ tempId, status }) => {
+    OutboxQueue.remove(tempId);
+    updateMessageByTempId(tempId, { status: { sent: true } });
+    updateStatusIcon(tempId, { sent: true });
+  });
+
+  socket.on("message:delivered", ({ tempId }) => {
+    // Find message in state and update it
+    const chatId = State.messageIndex[tempId];
+    if (chatId) {
+      const msgs = State.messages[chatId] || [];
+      const msg = msgs.find(m => m.id === tempId || m.tempId === tempId);
+      if (msg && msg.status) msg.status.delivered = true;
+    }
+    updateStatusIcon(tempId, { delivered: true });
+  });
+
+  socket.on("message:seen", ({ by }) => {
+    // "by" = the userId of the person who saw our messages
+    updateMessageSeenByTempId(by);
+  });
+
+  socket.on("chat:seen_sync", ({ from }) => {
+    // Our own other device tells us messages FROM "from" were seen
+    updateMessageSeenByTempId(from);
+  });
+
+  // ── Media uploaded ────────────────────────────────────────
+  socket.on("media:uploaded", ({ tempId, url, mediaType, cover, thumb }) => {
+    updateMessageByTempId(tempId, { content: url, type: mediaType, cover, thumb, uploadStatus: "done" });
+    updateReceivedMediaDOM(tempId, { content: url, cover, thumb, type: mediaType });
+  });
+
+  // ── Typing ────────────────────────────────────────────────
+  socket.on("typing:start", ({ user }) => {
+    if (user !== State.activeChat) return;
+    const t = document.getElementById("typing-indicator");
+    if (t) t.style.display = "flex";
+    document.getElementById("messages-container").scrollTop = 99999;
+    clearTimeout(State.typingTimeouts[user]);
+    State.typingTimeouts[user] = setTimeout(() => { if (t) t.style.display = "none"; }, 3000);
+  });
+
+  socket.on("typing:stop", ({ user }) => {
+    if (user !== State.activeChat) return;
+    const t = document.getElementById("typing-indicator");
+    if (t) t.style.display = "none";
+  });
+
+  // ── Reactions ─────────────────────────────────────────────
+  socket.on("reaction", ({ messageId, userId, emoji }) => {
+    const chatId = State.messageIndex[messageId];
+    if (!chatId) return;
+    const msg = (State.messages[chatId] || []).find(m => (m.id || m.tempId) === messageId);
+    if (!msg) return;
+    if (!msg.reactions) msg.reactions = {};
+    msg.reactions[userId] = emoji;
+    const msgEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
+    if (!msgEl) return;
+    let reactionsEl = msgEl.querySelector(".message-reactions");
+    if (!reactionsEl) {
+      reactionsEl = document.createElement("div");
+      reactionsEl.className = "message-reactions";
+      msgEl.querySelector(".message-bubble")?.appendChild(reactionsEl);
+    }
+    const counts = {};
+    Object.values(msg.reactions).forEach(e => { counts[e] = (counts[e] || 0) + 1; });
+    reactionsEl.innerHTML = Object.entries(counts)
+      .map(([e, n]) => `<span class="reaction-badge">${e}${n > 1 ? " " + n : ""}</span>`)
+      .join("");
+  });
+
+  // ── Connection request notifications ─────────────────────
+  socket.on("connection:new_request", async ({ from }) => {
+    // Refresh from API to get the real connectionId (socket payload doesn't have it)
+    await refreshPendingRequests();
+    showToast(`${from.username} wants to connect with you!`, "info");
+    // Update the tab badge inside people panel if open
+    const tabBadge = document.getElementById("tab-pending-badge");
+    if (tabBadge) tabBadge.textContent = State.pendingRequests.length || "";
+  });
+
+  socket.on("connection:accepted", async ({ by }) => {
+    showToast(`${by.username} accepted your request!`, "success");
+    // Refresh contacts list without recreating socket
+    const connRes = await getMyConnections();
+    if (connRes.code === 200) {
+      State.contacts = connRes.Data.contacts || [];
+      State.conversations = State.contacts.map(c => ({
+        id: c.user.id,
+        connectionId: c.connectionId,
+        username: c.user.username,
+        avatar: (c.user.avatar && c.user.avatar.length > 2)
+          ? c.user.avatar
+          : c.user.username.charAt(0).toUpperCase(),
+        lastSeen: c.user.lastSeen,
+        timestamp: 0,
+        lastMessage: "",
+        unread: 0,
+        online: false,
+      }));
+      renderChatList();
+    }
+  });
+
+  // ── Undelivered sync ──────────────────────────────────────
+  socket.on("private_message_sync", (msg) => {
+    // Sync from other devices — same handling as private_message
+    const conv = State.conversations.find(c => c.id === msg.to);
+    if (conv) {
+      conv.lastMessage = msg.type === "text" ? msg.content : `📷 ${msg.type}`;
+      conv.timestamp = msg.timestamp;
+    }
+    renderChatList();
+  });
 }
