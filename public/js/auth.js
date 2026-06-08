@@ -56,7 +56,7 @@ async function bootstrapAfterLogin() {
         callRoomId: m.callRoomId,
         callExpiresAt: m.callExpiresAt,
         callDuration: m.callDuration
-      }));
+      })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
       for (const msg of State.messages[conv.id]) {
         if (msg.id) State.messageIndex[msg.id] = conv.id;
