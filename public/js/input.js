@@ -85,8 +85,8 @@ async function handelMedia(file) {
     const localUrl = URL.createObjectURL(file);
     const mediaType = file.type.startsWith("image/") ? "image"
         : file.type.startsWith("video/") ? "video"
-        : file.type.startsWith("audio/") ? "audio"
-        : "document";
+            : file.type.startsWith("audio/") ? "audio"
+                : "document";
 
     const to = State.activeChat;
     const message = {
@@ -99,7 +99,7 @@ async function handelMedia(file) {
         caption: null,
         clientTime: Date.now(),
         replyTo: State.replyingTo,
-        user: State.currentUser.username,
+        user: State.currentUser.id,
         status: { sent: false, delivered: false, seen: false },
         timestamp: Date.now()
     };
