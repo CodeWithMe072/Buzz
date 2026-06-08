@@ -4,18 +4,20 @@ const messageSchema = new mongoose.Schema(
   {
     /* ---------- Identity ---------- */
     tempId: {
-      type: String,                 // client-generated id
+      type: String,
       index: true,
     },
 
     from: {
-      type: String,                 // userId
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       required: true,
       index: true,
     },
 
     to: {
-      type: String,                 // userId
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       required: true,
       index: true,
     },
@@ -23,92 +25,109 @@ const messageSchema = new mongoose.Schema(
     /* ---------- Content ---------- */
     type: {
       type: String,
-      enum: ["text", "image", "video", "audio", "document"],
+      enum: ["text", "image", "video", "audio", "document", "call"],
       required: true,
     },
 
     content: {
-      type: String,                 // text OR media URL
-      required: true,
+      type: String,
+      default: null,           // text OR media URL
     },
 
-    /* ---------- Media Derivatives (NEW) ---------- */
+    /* ---------- Media Derivatives ---------- */
     cover: {
-      type: String,                 // 270x270 image / video frame
-      default: null,
+      type: String,
+      default: null,           // 270x270 image preview / video frame
     },
 
     thumb: {
-      type: String,                 // 50x50 image
-      default: null,
+      type: String,
+      default: null,           // 50x50 tiny preview
     },
+
     caption: {
       type: String,
       default: null,
     },
 
     replyTo: {
-      type: String,                 // tempId
-      default: null,
-    },
-    fileName: {
-      type: String,                 // tempId
-      default: null,
-    },
-    fileSize: {
-      type: String,                 // tempId
+      type: String,            // tempId of replied-to message
       default: null,
     },
 
-    /* ---------- Status (SERVER CONTROLLED) ---------- */
+    // ── Call message fields ──
+    callType: {
+      type: String,
+      enum: ["audio", "video"],
+      default: null,
+    },
+    callStatus: {
+      type: String,
+      enum: ["missed", "declined", "ended", "active"],
+      default: null,
+    },
+    callDuration: {
+      type: Number,            // seconds
+      default: 0,
+    },
+    callRoomId: {
+      type: String,            // unique room ID — receiver uses to rejoin
+      default: null,
+    },
+    callExpiresAt: {
+      type: Date,              // 3 mins after call started
+      default: null,
+    },
+
+    fileName: {
+      type: String,
+      default: null,
+    },
+
+    fileSize: {
+      type: String,
+      default: null,
+    },
+
+    /* ---------- Status ---------- */
     status: {
-      sent: {
-        type: Boolean,
-        default: true,
-      },
-      delivered: {
-        type: Boolean,
-        default: false,
-      },
-      seen: {
-        type: Boolean,
-        default: false,
-      },
+      sent: { type: Boolean, default: true },
+      delivered: { type: Boolean, default: false },
+      seen: { type: Boolean, default: false },
+      mediaReady: { type: Boolean, default: false },
     },
 
     /* ---------- Reactions ---------- */
     reactions: {
       type: Map,
-      of: String,                   // { userId: "👍" }
+      of: String,              // { userId: "👍" }
       default: {},
     },
 
-    /* ---------- Delete For Me (KEY FEATURE) ---------- */
+    /* ---------- Soft Delete ---------- */
     deletedFor: {
-      type: [String],               // userIds who hid this message
+      type: [mongoose.Schema.Types.ObjectId],
       default: [],
     },
+
     autoDeleted: {
       type: Boolean,
       default: false,
-      index: true
+      index: true,
     },
-
 
     /* ---------- Timing ---------- */
     clientTime: {
-      type: Number,                 // Date.now() from client
+      type: Number,
     },
 
     deliveredAt: Date,
     seenAt: Date,
   },
-  {
-    timestamps: true,               // createdAt, updatedAt
-  }
+  { timestamps: true }
 );
 
-/* ---------- Indexes (performance-critical) ---------- */
+/* ---------- Compound indexes ---------- */
 messageSchema.index({ from: 1, to: 1, createdAt: -1 });
 messageSchema.index({ to: 1, createdAt: -1 });
 messageSchema.index({ deletedFor: 1 });

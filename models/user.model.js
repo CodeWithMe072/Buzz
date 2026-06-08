@@ -6,52 +6,56 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      index: true
+      trim: true,
+      index: true,
     },
 
     email: {
       type: String,
       required: true,
       unique: true,
-      index: true
+      lowercase: true,
+      trim: true,
+      index: true,
     },
 
     password: {
       type: String,
       required: true,
-      select: false
-    },
-
-    phoneNumber: {
-      type: String,
-      default: null
+      select: false,           // never returned in queries unless .select("+password")
     },
 
     avatar: {
       type: String,
-      default: null
+      default: null,           // null = use first letter of username on frontend
     },
+
+    phoneNumber: {
+      type: String,
+      default: null,
+    },
+
+    // Telegram notifications
     telegramChatId: {
       type: String,
-      default: null
+      default: null,
     },
     notificationsEnabled: {
       type: Boolean,
-      default: true
-    },
-    // ONE client id per user, globally unique
-    extra: {
-      type: String,
-      default: null,
-      unique: true,
-      sparse: true,
-      index: true
+      default: true,
     },
 
+    // Last seen timestamp — updated on disconnect
     lastSeen: {
       type: Date,
-      default: null
-    }
+      default: null,
+    },
+
+    // Soft-ban / deactivate (for future admin use)
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

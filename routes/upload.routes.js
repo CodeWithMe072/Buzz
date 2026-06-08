@@ -1,13 +1,12 @@
 import express from "express";
 import multer from "multer";
-
-import { S3Client, PutObjectCommand, } from "@aws-sdk/client-s3";
-
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
 import fse from "fs-extra";
 import path from "path";
 import os from "os";
 import crypto from "crypto";
+import { protect } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
@@ -127,7 +126,7 @@ const diskUpload = multer({
 // Upload Small File
 // =============================================================================
 
-router.post("/api/upload", diskUpload.single("file"), async (req, res) => {
+router.post("/api/upload", protect, diskUpload.single("file"), async (req, res) => {
 
     if (!req.file) {
         return res.status(400).json({ error: "No file uploaded", });
@@ -183,6 +182,7 @@ router.post("/api/upload", diskUpload.single("file"), async (req, res) => {
 // =============================================================================
 
 router.post("/api/upload-chunk",
+    protect,
     chunkUpload.single("chunk"),
     async (req, res) => {
         try {
@@ -207,7 +207,7 @@ router.post("/api/upload-chunk",
 // Complete Upload
 // =============================================================================
 
-router.post("/api/complete-upload", express.json(),
+router.post("/api/complete-upload", protect, express.json(),
     async (req, res) => {
         const { fileId, fileName, mimeType, } = req.body;
         const chunkDir = path.join(os.tmpdir(), "chunks", fileId);

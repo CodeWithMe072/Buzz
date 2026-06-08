@@ -1,603 +1,563 @@
 /**
  * chat.js — Chat list, chat window, message rendering, sending,
- *            reactions, replies, typing, and mobile navigation.
+ *            reactions, replies, typing, mobile nav, and search.
  */
 
 // =============================================================================
 // CHAT SCREEN
 // =============================================================================
 function showChatScreen() {
-    document.getElementById('login-screen').classList.remove('active');
-    document.getElementById('signup-screen').classList.remove('active');
-    document.getElementById('chat-screen').classList.add('active');
-
-    document.getElementById('current-username').textContent = State.currentUser.username;
-    document.getElementById('current-user-avatar').innerHTML = `<span>${State.currentUser.avatar}</span>`;
-
-    initChatWindow();
-    initMobileNavigation();
+  document.getElementById("login-screen").classList.remove("active");
+  document.getElementById("signup-screen").classList.remove("active");
+  document.getElementById("chat-screen").classList.add("active");
+  document.getElementById("current-username").textContent = State.currentUser.username;
+  document.getElementById("current-user-avatar").innerHTML = `<span>${State.currentUser.avatar || State.currentUser.username.charAt(0).toUpperCase()}</span>`;
+  initChatWindow();
+  initMobileNavigation();
 }
 
 // =============================================================================
-// CHAT LIST
+// CHAT LIST — only accepted connections
 // =============================================================================
 function initChatList() {
-    State.conversations = State.allusers.map(user => ({
-        id: user.extra,
-        username: user.username,
-        avatar: user.username.charAt(0).toUpperCase(),
-        lastSeen: user.lastSeen,
-        timestamp: user.timestamp ? user.timestamp : 0
-    }));
+  // Conversations are already built from contacts in auth.js bootstrapAfterLogin
+  renderChatList();
+  document.getElementById("logout-btn").addEventListener("click", logout);
 
-    renderChatList();
-    document.getElementById('logout-btn').addEventListener('click', logout);
+  // Search bar filter
+  const searchInput = document.getElementById("chat-search");
+  searchInput.addEventListener("input", () => {
+    renderChatList(searchInput.value.trim().toLowerCase());
+  });
 }
 
-function renderChatList() {
-    const chatList = document.getElementById('chat-list');
-    chatList.innerHTML = '';
+function renderChatList(filter = "") {
+  const chatList = document.getElementById("chat-list");
+  chatList.innerHTML = "";
 
-    State.conversations.sort((a, b) => b.timestamp - a.timestamp);
-    State.conversations.forEach(conv => {
-        const item = document.createElement('div');
-        item.className = `chat-item ${State.activeChat === conv.id ? 'active' : ''}`;
-        item.dataset.convId = conv.id;
+  let convs = [...State.conversations];
+  convs.sort((a, b) => b.timestamp - a.timestamp);
 
-        item.innerHTML = `
-            <div class="avatar ${conv.online ? 'online' : ''}">
-                <span>${conv.avatar}</span>
-            </div>
-            <div class="chat-item-content">
-                <div class="chat-item-header">
-                    <span class="chat-item-username">${conv.username}</span>
-                    <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) : ""}</span>
-                </div>
-                <div class="chat-item-preview ${conv.unread > 0 ? 'unread' : ''}">
-                    <span>${conv.lastMessage ? conv.lastMessage : ""}</span>
-                </div>
-            </div>
-            ${conv.unread > 0 ? `<span class="unread-badge">${conv.unread}</span>` : ''}
-        `;
+  // Apply filter
+  if (filter) {
+    convs = convs.filter(c => c.username.toLowerCase().includes(filter));
+  }
 
-        item.addEventListener('click', () => openChat(conv.id));
-        chatList.appendChild(item);
-    });
+  if (!convs.length) {
+    chatList.innerHTML = filter
+      ? `<div class="chat-list-empty">No results for "<strong>${sanitizeInput(filter)}</strong>"</div>`
+      : `<div class="chat-list-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <p>No connections yet</p>
+          <small>Search for people to add</small>
+        </div>`;
+    return;
+  }
+
+  convs.forEach(conv => {
+    const item = document.createElement("div");
+    item.className = `chat-item ${State.activeChat === conv.id ? "active" : ""}`;
+    item.dataset.convId = conv.id;
+    item.innerHTML = `
+      <div class="avatar ${conv.online ? "online" : ""}">
+        <span>${conv.avatar}</span>
+      </div>
+      <div class="chat-item-content">
+        <div class="chat-item-header">
+          <span class="chat-item-username">${sanitizeInput(conv.username)}</span>
+          <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) : ""}</span>
+        </div>
+        <div class="chat-item-preview ${conv.unread > 0 ? "unread" : ""}">
+          <span>${conv.lastMessage ? sanitizeInput(conv.lastMessage) : ""}</span>
+        </div>
+      </div>
+      ${conv.unread > 0 ? `<span class="unread-badge">${conv.unread}</span>` : ""}`;
+    item.addEventListener("click", () => openChat(conv.id));
+    chatList.appendChild(item);
+  });
 }
 
 // =============================================================================
 // OPEN CHAT
 // =============================================================================
 function openChat(chatId) {
-    State.activeChat = chatId;
-    const conv = State.conversations.find(c => c.id === chatId);
-    const messageInput = document.getElementById('message-input');
-    if (!conv) return;
+  State.activeChat = chatId;
+  const conv = State.conversations.find(c => c.id === chatId);
+  if (!conv) return;
 
-    conv.unread = 0;
+  conv.unread = 0;
+  renderChatList(document.getElementById("chat-search").value.trim().toLowerCase());
+  socket.emit("chat:seen", { from: chatId });
+
+  document.getElementById("chat-empty-state").style.display = "none";
+  document.getElementById("active-chat").style.display = "flex";
+  const messageInput = document.getElementById("message-input");
+  messageInput.value = "";
+  messageInput.focus();
+
+  document.getElementById("chat-avatar").innerHTML = `<span>${conv.avatar}</span>`;
+  document.getElementById("chat-username").textContent = conv.username;
+
+  const statusEl  = document.getElementById("online-status");
+  const lastseen  = formatTime(new Date(conv.lastSeen).getTime());
+  statusEl.textContent = conv.online
+    ? "Active now"
+    : `${lastseen === "Just now" ? "Just now" : "Last seen " + lastseen + " ago"}`;
+  statusEl.className = `online-status ${conv.online ? "online" : ""}`;
+
+  renderMessages(chatId);
+
+  if (window.innerWidth < 768) {
+    document.getElementById("chat-list-sidebar").classList.add("hidden");
+    document.getElementById("chat-window").classList.add("active");
+  }
+
+  // Chat options panel
+  document.getElementById("chatOption").classList.remove("active");
+  document.getElementById("chat-info-btn").onclick = () => {
+    document.getElementById("chatOption").classList.add("active");
+  };
+
+  // Delete chat
+  document.getElementById("chatOption-button").onclick = async () => {
+    State.messages[State.activeChat] = [];
+    renderMessages(State.activeChat);
+    const c = State.conversations.find(cv => cv.id === State.activeChat);
+    if (c) { c.lastMessage = ""; c.unread = 0; c.timestamp = 0; }
     renderChatList();
-    socket.emit("chat:seen", { from: chatId });
-
-    document.getElementById('chat-empty-state').style.display = 'none';
-    document.getElementById('active-chat').style.display = 'flex';
-    messageInput.value = "";
-    messageInput.focus();
-
-    document.getElementById('chat-avatar').innerHTML = `<span>${conv.avatar}</span>`;
-    document.getElementById('chat-username').textContent = conv.username;
-
-    const statusEl = document.getElementById('online-status');
-    const lastseen = formatTime(new Date(conv.lastSeen).getTime());
-    statusEl.textContent = conv.online
-        ? 'Active now'
-        : `${lastseen === "Just now" ? "Just now" : "Last seen " + lastseen + " Ago"}`;
-    statusEl.className = `online-status ${conv.online ? 'online' : ''}`;
-
-    renderMessages(chatId);
-
-    if (window.innerWidth < 768) {
-        document.getElementById('chat-list-sidebar').classList.add('hidden');
-        document.getElementById('chat-window').classList.add('active');
-    }
-
-    // Chat options panel
     document.getElementById("chatOption").classList.remove("active");
+    await deleteChat(State.activeChat);
+  };
 
-    document.getElementById("chat-info-btn").addEventListener("click", () => {
-        document.getElementById("chatOption").classList.add("active");
-    });
-
-    document.getElementById("chatOption-button").addEventListener("click", async () => {
-        State.messages[State.activeChat] = [];
-        renderMessages(State.activeChat);
-        const conv = State.conversations.find(c => c.id === State.activeChat);
-        conv.lastMessage = "";
-        conv.unread = 0;
-        conv.timestamp = 0;
-        renderChatList();
-        document.getElementById("chatOption").classList.remove("active");
-        await fetch("/api/deletechat", {
-            method: "POST",
-            headers: { "Content-type": "application/json" },
-            body: JSON.stringify({ activeUser: State.currentUser.id, to: State.activeChat })
-        });
-    });
-
-    const muteBtn = document.getElementById("chatOption-Mute");
-    muteBtn.addEventListener("click", (e) => {
-        document.getElementById("chatOption").classList.remove("active");
-        const btn = e.currentTarget;
-        const isplayTune = btn.getAttribute("data-playTune") === "true";
-
-        if (isplayTune) {
-            btn.setAttribute("data-playTune", "false");
-            localStorage.setItem("playTune", true);
-            State.playTune = false;
-            showToast("Chat Muted", "success");
-            btn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-                </svg> Unmute`;
-        } else {
-            btn.setAttribute("data-playTune", "true");
-            localStorage.setItem("playTune", false);
-            State.playTune = true;
-            showToast("Chat Unmuted", "success");
-            btn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-                </svg> Mute`;
-        }
-    });
+  // Mute toggle
+  const muteBtn = document.getElementById("chatOption-Mute");
+  const newMuteBtn = muteBtn.cloneNode(true);
+  muteBtn.parentNode.replaceChild(newMuteBtn, muteBtn);
+  newMuteBtn.addEventListener("click", (e) => {
+    document.getElementById("chatOption").classList.remove("active");
+    const btn = e.currentTarget;
+    const playing = btn.getAttribute("data-playTune") === "true";
+    if (playing) {
+      btn.setAttribute("data-playTune", "false");
+      localStorage.setItem("playTune", "false");
+      State.playTune = false;
+      showToast("Chat Muted", "success");
+      btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>Unmute`;
+    } else {
+      btn.setAttribute("data-playTune", "true");
+      localStorage.setItem("playTune", "true");
+      State.playTune = true;
+      showToast("Chat Unmuted", "success");
+      btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>Mute`;
+    }
+  });
 }
 
 // =============================================================================
-// MESSAGES — RENDER
+// RENDER MESSAGES
 // =============================================================================
 function renderMessages(chatId) {
-    const messagesContainer = document.getElementById('messages');
-    messagesContainer.innerHTML = '';
+  const messagesContainer = document.getElementById("messages");
+  messagesContainer.innerHTML = "";
 
-    const messages = State.messages[chatId] || [];
-    for (let i = messages.length - 1; i >= 0; i--) {
-        messagesContainer.appendChild(createMessageElement(messages[i]));
-    }
+  const messages = State.messages[chatId] || [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    messagesContainer.appendChild(createMessageElement(messages[i]));
+  }
 
-    document.getElementById('messages-container').scrollTop = 99999;
-    viewer = new MediaViewer(chatId);
-    attactEventOnMedia();
+  document.getElementById("messages-container").scrollTop = 99999;
+  viewer = new MediaViewer(chatId);
+  attactEventOnMedia();
 }
 
 function attactEventOnMedia() {
-    document.querySelectorAll(".message-media").forEach(media => {
-        const clean = media.cloneNode(true);
-        media.replaceWith(clean);
-        clean.addEventListener("click", () => {
-            const msgEl = clean.closest('.message');
-            if (!msgEl) return;
-            const index = viewer.getIndexByMessageId(msgEl.dataset.messageId);
-            if (index !== -1) viewer.open(index);
-        });
+  document.querySelectorAll(".message-media").forEach(media => {
+    const clean = media.cloneNode(true);
+    media.replaceWith(clean);
+    clean.addEventListener("click", () => {
+      const msgEl = clean.closest(".message");
+      if (!msgEl) return;
+      const index = viewer.getIndexByMessageId(msgEl.dataset.messageId);
+      if (index !== -1) viewer.open(index);
     });
+  });
 }
 
 function playVideoInline(mediaContainer, videoUrl) {
-    if (!videoUrl) return;
-    mediaContainer.innerHTML = "";
-    const video = document.createElement("video");
-    video.src = videoUrl;
-    video.controls = true;
-    video.autoplay = true;
-    video.playsInline = true;
-    video.style.cssText = "width:100%;height:100%;border-radius:inherit;";
-    mediaContainer.appendChild(video);
-    mediaContainer.onclick = null;
-    video.play().catch(() => { });
+  if (!videoUrl) return;
+  mediaContainer.innerHTML = "";
+  const video = document.createElement("video");
+  video.src = videoUrl;
+  video.controls = true;
+  video.autoplay = true;
+  video.playsInline = true;
+  video.style.cssText = "width:100%;height:100%;border-radius:inherit;";
+  mediaContainer.appendChild(video);
+  mediaContainer.onclick = null;
+  video.play().catch(() => {});
 }
 
 // =============================================================================
 // CREATE MESSAGE ELEMENT
 // =============================================================================
-function createMessageElement(msg) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${
-        msg.user == State.currentUser.username || msg.user == State.currentUser.id ? "self" : "other"
-    }`;
-    messageDiv.dataset.messageId = msg.id ? msg.id : msg.tempId;
+function createMessageElement(message) {
+  const isMe  = message.sender === "me" || message.user?.toString() === State.currentUser.id?.toString();
+  const msgEl = document.createElement("div");
+  msgEl.className         = `message ${isMe ? "self" : "other"}`;
+  msgEl.dataset.messageId = message.id || message.tempId;
 
-    const bubbleDiv = document.createElement('div');
-    bubbleDiv.className = 'message-bubble';
+  const bubbleEl = document.createElement("div");
+  bubbleEl.className = "message-bubble";
 
-    // Reply preview
-    if (msg.replyTo) {
-        const replyMsg = findMessageById(msg.replyTo);
-        if (replyMsg) {
-            const replyPreview = document.createElement('div');
-            replyPreview.className = 'message-reply-preview';
-            const replyUser = (replyMsg.user === State.currentUser.id || replyMsg.user === State.currentUser.username)
-                ? 'You'
-                : State.conversations.find(c => c.id === State.activeChat)?.username;
-
-            if (replyMsg.type === "text") {
-                replyPreview.innerHTML = `
-                    <div class="reply-username">${replyUser}</div>
-                    <div class="reply-text">${replyMsg.content}</div>
-                `;
-            } else {
-                replyPreview.innerHTML = `
-                    <div class="reply-username">${replyUser}</div>
-                    <div class="reply-image"><img src="${replyMsg.content}"></div>
-                `;
-            }
-            replyPreview.addEventListener('click', (e) => {
-                e.stopPropagation();
-                scrollToMessage(msg.replyTo);
-            });
-            bubbleDiv.appendChild(replyPreview);
-        }
-    }
-
-    // Media: image or video (with content)
-    if ((msg.type === 'image' || msg.type === 'video') && msg.content != null) {
-        const mediaDiv = document.createElement('div');
-        mediaDiv.className = 'message-media';
-
-        const overlay = document.createElement('div');
-        overlay.className = 'media-overlay';
-
-        if (msg.uploadStatus === "uploading") {
-            overlay.innerHTML = `<div class="loader"></div><button class="media-cancel">✕</button>`;
-            mediaDiv.appendChild(overlay);
-        } else if (msg.uploadStatus === "failed") {
-            overlay.innerHTML = `<button class="media-retry">Retry</button>`;
-            mediaDiv.appendChild(overlay);
-        }
-
-        if (msg.type === 'image') {
-            const img = document.createElement('img');
-            img.src = msg.cover ?? msg.content;
-            img.alt = "Image message";
-            mediaDiv.appendChild(img);
-        }
-
-        if (msg.type === 'video') {
-            const video = document.createElement('video');
-            video.src = msg.content;
-            video.className = "chat-video-preview";
-            video.controls = false;
-            video.muted = true;
-            video.playsInline = true;
-            video.preload = "metadata";
-            video.autoplay = false;
-            video.loop = false;
-            mediaDiv.appendChild(video);
-            video.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const msgEl = video.closest('.message');
-                if (!msgEl) return;
-                const index = viewer.getIndexByMessageId(msgEl.dataset.messageId);
-                if (index !== -1) viewer.open(index);
-            });
-        }
-        bubbleDiv.appendChild(mediaDiv);
-    }
-
-    // Media placeholder (content null — still uploading on sender side)
-    if ((msg.type === 'image' || msg.type === 'video') && msg.content == null) {
-        const mediaDiv = document.createElement('div');
-        mediaDiv.className = 'message-media';
-        mediaDiv.textContent = msg.type + "  loading..";
-        bubbleDiv.appendChild(mediaDiv);
-    }
-
-    // Audio
-    if (msg.type === "audio" && msg.content != null) {
-        bubbleDiv.appendChild(createAudioPlayer(msg.content, msg.id || msg.tempId));
-    }
-    if (msg.type === "audio" && msg.content == null) {
-        const audioDiv = document.createElement("div");
-        audioDiv.className = "message-audio";
-        audioDiv.textContent = "Loading voice message...";
-        bubbleDiv.appendChild(audioDiv);
-    }
-
-    // Document
-    if (msg.type === "document") {
-        const fileInfo = getFileIcon(msg.fileName || msg.content || "");
-        const docDiv = document.createElement("div");
-        docDiv.className = "message-document";
-        const isUploading = msg.uploadStatus === "uploading";
-        docDiv.innerHTML = `
-            <div class="doc-icon-wrap" style="color:${fileInfo.color}">
-                <i class="ti ${fileInfo.icon}" style="font-size:32px"></i>
-            </div>
-            <div class="doc-info">
-                <div class="doc-filename">${msg.fileName || "Document"}</div>
-                <div class="doc-meta">${msg.fileSize ? formatFileSize(msg.fileSize) : ""}${isUploading ? " · Uploading..." : ""}</div>
-            </div>
-            ${!isUploading && msg.content ? `
-            <div class="doc-actions">
-                <a href="${msg.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a>
-                <button class="doc-btn doc-save" onclick="forceDownload('${msg.content}', '${msg.fileName || 'document'}')">Save as</button>
-            </div>` : `<div class="doc-actions"><span class="doc-uploading">⏳</span></div>`}
-        `;
-        bubbleDiv.appendChild(docDiv);
-    }
-
-    // Text / caption
-    if (msg.type === 'text' || msg.caption) {
-        const textDiv = document.createElement('div');
-        textDiv.classList.add("messag-text");
-        textDiv.innerHTML = makeLinksClickable(msg.caption || msg.content);
-        bubbleDiv.appendChild(textDiv);
-    }
-
-    // Reactions
-    if (msg.reactions && Object.keys(msg.reactions).length > 0) {
-        const reactionsDiv = document.createElement('div');
-        reactionsDiv.className = 'message-reactions';
-        Object.entries(msg.reactions).forEach(([emoji, users]) => {
-            const reactionBtn = document.createElement('button');
-            reactionBtn.className = `reaction ${users.includes(State.currentUser.id) ? 'active' : ''}`;
-            reactionBtn.innerHTML = `<span>${emoji}</span><span>${users.length}</span>`;
-            reactionBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                toggleReaction(msg.id, emoji);
-            });
-            reactionsDiv.appendChild(reactionBtn);
-        });
-        bubbleDiv.appendChild(reactionsDiv);
-    }
-
-    // Status ticks (sender only)
-    if (msg.user === State.currentUser.username || msg.user === State.currentUser.id) {
-        const statusDiv = document.createElement('div');
-        statusDiv.className = 'message-status';
-
-        let statusIcon = "";
-        if (msg.uploadStatus === "uploading" || msg.uploadStatus === "failed") {
-            statusIcon = `<svg class="status-icon clock" viewBox="0 0 16 16">
-                <circle cx="8" cy="8" r="6.5"/>
-                <polyline points="8 4 8 8 11 10"/>
-            </svg>`;
-        } else if (msg.status.seen) {
-            statusIcon = `<svg class="status-icon double seen" viewBox="0 0 16 16" style="transform: translateX(3px);">
-                <polyline points="2 8 6 12 14 4"/>
-                <polyline points="5 8 9 12 17 4" style="transform: translate(-9px,0);"/>
-            </svg>`;
-        } else if (msg.status.delivered) {
-            statusIcon = `<svg class="status-icon double delivered" viewBox="0 0 16 16">
-                <polyline points="2 8 6 12 14 4"/>
-                <polyline points="5 8 9 12 17 4" style="transform: translate(-9px, 0px);"/>
-            </svg>`;
-        } else {
-            statusIcon = `<svg class="status-icon single sent" viewBox="0 0 16 16">
-                <polyline points="2 8 6 12 14 4"/>
-            </svg>`;
-        }
-        statusDiv.innerHTML = statusIcon;
-        bubbleDiv.appendChild(statusDiv);
-    }
-
-    messageDiv.appendChild(bubbleDiv);
-
-    const timeDiv = document.createElement('div');
-    timeDiv.className = 'message-time';
-    timeDiv.textContent = formatTime(msg.timestamp);
-    messageDiv.appendChild(timeDiv);
-
-    addMessageGestures(messageDiv, msg);
-    return messageDiv;
-}
-
-// =============================================================================
-// MESSAGE GESTURES — touch swipe-to-reply + long-press reactions
-// =============================================================================
-let longPressTimer;
-
-function addMessageGestures(messageEl, msg) {
-    let touchStartTime, touchStartX, touchStartY;
-
-    messageEl.addEventListener('touchstart', (e) => {
-        touchStartTime = Date.now();
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        longPressTimer = setTimeout(() => {
-            navigator.vibrate && navigator.vibrate(50);
-            messageEl.querySelector('.message-bubble').classList.add('long-press');
-            showEmojiPicker(msg.id);
-        }, 500);
-    });
-
-    messageEl.addEventListener('touchmove', (e) => {
-        const deltaX = e.touches[0].clientX - touchStartX;
-        const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
-        if (deltaY > 10) clearTimeout(longPressTimer);
-        if (Math.abs(deltaX) > 30 && deltaY < 20) {
-            clearTimeout(longPressTimer);
-            messageEl.classList.add('swiping');
-            messageEl.style.setProperty('--swipe-x', `${Math.min(deltaX, 60)}px`);
-        }
-    });
-
-    messageEl.addEventListener('touchend', (e) => {
-        clearTimeout(longPressTimer);
-        messageEl.querySelector('.message-bubble').classList.remove('long-press');
-        const deltaX = e.changedTouches[0].clientX - touchStartX;
-        if (Math.abs(deltaX) > 60 && (Date.now() - touchStartTime) < 500) {
-            replyToMessage(msg);
-        }
-        messageEl.classList.remove('swiping');
-        messageEl.style.setProperty('--swipe-x', '0');
-    });
-
-    messageEl.addEventListener("dblclick", () => showEmojiPicker(msg.id));
-}
-
-function findMessageById(messageId) {
-    if (!State.activeChat) return null;
-    return (State.messages[State.activeChat] || []).find(
-        m => m.id === messageId || m.tempId == messageId
+  // Reply preview
+  let replyHTML = "";
+  if (message.replyTo) {
+    const replyMsg = Object.values(State.messages).flat().find(
+      m => (m.id || m.tempId) === message.replyTo
     );
+    const replyText = replyMsg
+      ? (replyMsg.type === "text" ? replyMsg.content : "📷 " + replyMsg.type)
+      : "Original message";
+    replyHTML = `<div class="message-reply-preview"><div class="reply-text">${sanitizeInput(replyText)}</div></div>`;
+  }
+
+  // Footer: time + status icon
+  const statusSVG = isMe ? `<span class="msg-status-wrap"><svg class="status-icon clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/></svg></span>` : "";
+  const footerHTML = `<div class="msg-footer"><span class="message-time">${formatTime(message.timestamp)}</span>${statusSVG}</div>`;
+
+  if (message.type === "text") {
+    bubbleEl.innerHTML = `
+      ${replyHTML}
+      <p class="messag-text">${makeLinksClickable(sanitizeInput(message.content || ""))}</p>
+      ${footerHTML}
+      ${message.uploadStatus === "failed" ? `<div class="upload-fail-badge">Failed to send</div>` : ""}`;
+
+  } else if (message.type === "image") {
+    const src = message.cover || message.thumb || message.content;
+    const isUploading = message.uploadStatus === "uploading";
+    bubbleEl.innerHTML = `
+      ${replyHTML}
+      <div class="message-media">
+        ${src ? `<img src="${src}" alt="Image" loading="lazy">` : ""}
+        ${isUploading ? `<div class="media-overlay"><div class="loader"></div></div>` : ""}
+      </div>
+      ${message.caption ? `<p class="messag-text caption">${sanitizeInput(message.caption)}</p>` : ""}
+      ${footerHTML}`;
+
+  } else if (message.type === "video") {
+    const src = message.cover || message.thumb;
+    const isUploading = message.uploadStatus === "uploading";
+    bubbleEl.innerHTML = `
+      ${replyHTML}
+      <div class="message-media video-media">
+        ${src ? `<img class="video-thumb" src="${src}" alt="Video">` : ""}
+        <div class="video-play-icon">▶</div>
+        ${isUploading ? `<div class="media-overlay"><div class="loader"></div></div>` : ""}
+      </div>
+      ${message.caption ? `<p class="messag-text caption">${sanitizeInput(message.caption)}</p>` : ""}
+      ${footerHTML}`;
+
+  } else if (message.type === "audio") {
+    const audioEl = message.content
+      ? createAudioPlayer(message.content, message.id || message.tempId)
+      : (() => { const d = document.createElement("div"); d.className = "message-audio loading"; d.textContent = "Loading..."; return d; })();
+    bubbleEl.appendChild(audioEl);
+    const footer = document.createElement("div");
+    footer.className = "msg-footer";
+    footer.innerHTML = `<span class="message-time">${formatTime(message.timestamp)}</span>${statusSVG}`;
+    bubbleEl.appendChild(footer);
+
+  } else if (message.type === "call") {
+    const callType   = message.callType  || "audio";
+    const callStatus = message.callStatus || "missed";
+    const icon       = callType === "video" ? "📹" : "📞";
+    const expiresAt  = message.callExpiresAt ? new Date(message.callExpiresAt) : null;
+    const isExpired  = expiresAt && expiresAt < new Date();
+    const isActive   = callStatus === "active" && !isExpired;
+    const isMe       = message.sender === "me" || message.user?.toString() === State.currentUser?.id?.toString();
+
+    let statusLabel = "";
+    if (callStatus === "missed")   statusLabel = "Missed call";
+    if (callStatus === "declined") statusLabel = "Declined";
+    if (callStatus === "ended")    statusLabel = message.callDuration > 0 ? `${String(Math.floor(message.callDuration/60)).padStart(2,"0")}:${String(message.callDuration%60).padStart(2,"0")}` : "Call ended";
+    if (callStatus === "active" && !isExpired) statusLabel = "Tap to join";
+    if (callStatus === "active" && isExpired)  statusLabel = isMe ? "No answer" : "Missed call";
+
+    bubbleEl.innerHTML = `
+      <div class="call-message ${isActive && !isMe ? "joinable" : ""}" 
+           data-room-id="${message.callRoomId || ""}"
+           data-peer-id="${isMe ? (message.callPeerId || "") : (message.user || "")}"
+           data-call-type="${callType}">
+        <span class="call-msg-icon">${icon}</span>
+        <div class="call-msg-info">
+          <span class="call-msg-label">${callType === "video" ? "Video call" : "Voice call"}</span>
+          <span class="call-msg-status ${callStatus === "missed" && !isMe ? "missed" : ""}">${statusLabel}</span>
+        </div>
+        ${isActive && !isMe ? `<button class="call-msg-join-btn">Join</button>` : ""}
+      </div>
+      ${footerHTML}`;
+
+    // Wire join button & restore click
+    setTimeout(() => {
+      const msgDiv = bubbleEl.querySelector(".call-message");
+      if (!msgDiv) return;
+
+      msgDiv.addEventListener("click", (e) => {
+        if (typeof CallManager !== "undefined" && CallManager.getCallState() !== "idle") {
+          CallManager.restore();
+          return;
+        }
+
+        // If not already in the call, allow joining if it's active
+        if (isActive && !isMe) {
+          const roomId  = msgDiv.dataset.roomId;
+          const peerId  = msgDiv.dataset.peerId || message.user;
+          const cType   = msgDiv.dataset.callType;
+          CallManager.rejoin(roomId, peerId, cType);
+        }
+      });
+
+      const joinBtn = bubbleEl.querySelector(".call-msg-join-btn");
+      joinBtn?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const roomId  = msgDiv.dataset.roomId;
+        const peerId  = msgDiv.dataset.peerId || message.user;
+        const cType   = msgDiv.dataset.callType;
+        CallManager.rejoin(roomId, peerId, cType);
+      });
+    }, 0);
+
+  } else if (message.type === "document") {
+    const { icon, color } = getFileIcon(message.fileName || "");
+    const isUploading = message.uploadStatus === "uploading";
+    bubbleEl.innerHTML = `
+      ${replyHTML}
+      <div class="message-document">
+        <div class="doc-icon-wrap"><i class="ti ${icon}" style="color:${color};font-size:28px;"></i></div>
+        <div class="doc-info">
+          <span class="doc-filename">${sanitizeInput(message.fileName || "Document")}</span>
+          <span class="doc-meta">${message.fileSize ? formatFileSize(message.fileSize) : ""}</span>
+        </div>
+        ${isUploading
+          ? `<div class="media-overlay"><div class="loader"></div></div>`
+          : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName||"document"}')">Save</button>` : ""}</div>`}
+      </div>
+      ${footerHTML}`;
+  }
+
+  // Reactions
+  if (message.reactions && Object.keys(message.reactions).length) {
+    const reactionsEl = document.createElement("div");
+    reactionsEl.className = "message-reactions";
+    const counts = {};
+    Object.values(message.reactions).forEach(e => { counts[e] = (counts[e] || 0) + 1; });
+    reactionsEl.innerHTML = Object.entries(counts)
+      .map(([e, n]) => `<span class="reaction-badge">${e}${n > 1 ? " " + n : ""}</span>`)
+      .join("");
+    bubbleEl.appendChild(reactionsEl);
+  }
+
+  msgEl.appendChild(bubbleEl);
+  if (isMe && message.status) updateStatusIcon(message.id || message.tempId, message.status);
+
+  // ── Interaction: double-tap on mobile, right-click on desktop ──
+  let _lastTap = 0;
+
+  // Mobile: double-tap
+  msgEl.addEventListener("touchend", (e) => {
+    const now = Date.now();
+    if (now - _lastTap < 300) {
+      e.preventDefault();
+      clearTimeout(State.longPressTimeout);
+      showMessageOptions(message, msgEl, e.changedTouches[0]);
+    }
+    _lastTap = now;
+  }, { passive: false });
+
+  // Mobile: long-press still works too
+  msgEl.addEventListener("touchstart", () => {
+    State.longPressTimeout = setTimeout(() => showMessageOptions(message, msgEl), 600);
+  }, { passive: true });
+  msgEl.addEventListener("touchmove",  () => clearTimeout(State.longPressTimeout), { passive: true });
+  msgEl.addEventListener("touchend",   () => clearTimeout(State.longPressTimeout), { passive: true });
+
+  // Desktop: right-click
+  msgEl.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    showMessageOptions(message, msgEl, e);
+  });
+
+  // Desktop: double-click
+  msgEl.addEventListener("dblclick", (e) => {
+    showMessageOptions(message, msgEl, e);
+  });
+
+  return msgEl;
 }
 
-function scrollToMessage(messageId) {
-    const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (messageEl) {
-        messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        messageEl.style.animation = 'none';
-        setTimeout(() => { messageEl.style.animation = 'messageSlide 0.3s ease'; }, 10);
-    }
+// =============================================================================
+// MESSAGE OPTIONS (reactions / reply)
+// =============================================================================
+function showMessageOptions(message, msgEl, event) {
+  // Remove any existing popup
+  document.querySelectorAll(".message-options-popup").forEach(p => p.remove());
+  navigator.vibrate && navigator.vibrate(20);
+
+  const isMe = msgEl.classList.contains("self");
+
+  const popup = document.createElement("div");
+  popup.className = `message-options-popup ${isMe ? "self-side" : "other-side"}`;
+  popup.innerHTML = `
+    <div class="reaction-row">
+      ${EMOJI_LIST.slice(0, 8).map(e => `<button class="emoji-quick-btn" data-emoji="${e}">${e}</button>`).join("")}
+    </div>
+    <div class="options-row">
+      <button class="option-btn reply-opt">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+        Reply
+      </button>
+    </div>`;
+
+  // Wire emoji buttons
+  popup.querySelectorAll(".emoji-quick-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const msgId = message.id || message.tempId;
+      socket.emit("react", { messageId: msgId, to: State.activeChat, emoji: btn.dataset.emoji });
+      popup.remove();
+    });
+  });
+
+  // Wire reply button
+  popup.querySelector(".reply-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    State.replyingTo = message.id || message.tempId;
+    const preview = message.type === "text" ? message.content : `📷 ${message.type}`;
+    document.getElementById("reply-text").textContent = preview;
+    document.getElementById("reply-preview").style.display = "flex";
+    document.getElementById("message-input").focus();
+    popup.remove();
+  });
+
+  // ── Smart positioning ──
+  // Append to messages-container (not msgEl) to avoid clipping
+  const container = document.getElementById("messages-container");
+  container.appendChild(popup);
+
+  // Measure after append
+  const popupRect = popup.getBoundingClientRect();
+  const msgRect   = msgEl.getBoundingClientRect();
+  const contRect  = container.getBoundingClientRect();
+  const popW = popupRect.width  || 240;
+  const popH = popupRect.height || 90;
+
+  // Vertical: prefer above the message, flip below if not enough space
+  let top = msgRect.top - contRect.top + container.scrollTop - popH - 8;
+  if (top < container.scrollTop + 4) {
+    top = msgRect.bottom - contRect.top + container.scrollTop + 8;
+  }
+
+  // Horizontal: align to message side
+  let left = isMe
+    ? msgRect.right  - contRect.left - popW        // right-align for sent
+    : msgRect.left   - contRect.left;               // left-align for received
+  left = Math.max(4, Math.min(left, contRect.width - popW - 4));
+
+  popup.style.position = "absolute";
+  popup.style.top  = `${top}px`;
+  popup.style.left = `${left}px`;
+
+  // ── Close on outside click — use setTimeout to skip current event ──
+  setTimeout(() => {
+    const close = (e) => {
+      if (!popup.contains(e.target)) {
+        popup.remove();
+        document.removeEventListener("click",      close, true);
+        document.removeEventListener("touchstart", close, true);
+      }
+    };
+    document.addEventListener("click",      close, true);
+    document.addEventListener("touchstart", close, true);
+  }, 150);
 }
 
 // =============================================================================
 // SEND MESSAGE
 // =============================================================================
 function sendMessage() {
-    if (!State.activeChat) return;
+  const input = document.getElementById("message-input");
+  const content = input.value.trim();
+  if (!content || !State.activeChat) return;
 
-    const messageInput = document.getElementById('message-input');
-    const textContent = messageInput.value.trim();
-    if (!textContent) return;
+  const tempId = generateId();
+  const message = {
+    tempId,
+    id:        tempId,
+    type:      "text",
+    content,
+    sender:    "me",
+    user:      State.currentUser.id,
+    timestamp: Date.now(),
+    replyTo:   State.replyingTo || null,
+    reactions: {},
+    status:    { sent: false, delivered: false, seen: false },
+  };
 
-    const to = State.activeChat;
+  if (!State.messages[State.activeChat]) State.messages[State.activeChat] = [];
+  State.messages[State.activeChat].unshift(message);
+  State.messageIndex[tempId] = State.activeChat;
 
-    // Stop typing indicator
-    const typingState = State.typingTimeouts[to];
-    if (typingState?.isTyping) {
-        socket.emit("typing:stop", { to });
-        clearTimeout(typingState.stopTimeout);
-        typingState.isTyping = false;
+  const conv = State.conversations.find(c => c.id === State.activeChat);
+  if (conv) { conv.lastMessage = content; conv.timestamp = Date.now(); }
+  renderChatList(document.getElementById("chat-search").value.trim().toLowerCase());
+
+  document.getElementById("messages").appendChild(createMessageElement(message));
+  document.getElementById("messages-container").scrollTop = 99999;
+
+  OutboxQueue.add({
+    tempId, to: State.activeChat, type: "text", content,
+    replyTo: State.replyingTo || null, clientTime: Date.now()
+  });
+
+  socket.emit("private_message", {
+    message: {
+      tempId, to: State.activeChat, type: "text", content,
+      replyTo: State.replyingTo || null, clientTime: Date.now()
     }
+  });
 
-    const isSending = NetworkMonitor.canSend;
-    const message = {
-        tempId: generateId(),
-        type: "text",
-        content: sanitizeInput(textContent),
-        caption: null,
-        clientTime: Date.now(),
-        replyTo: State.replyingTo,
-        user: State.currentUser.username,
-        status: { sent: isSending, delivered: false, seen: false },
-        timestamp: Date.now()
-    };
-
-    if (!State.messages[to]) State.messages[to] = [];
-    State.messages[to].unshift(message);
-    State.messageIndex[message.tempId] = to;
-
-    const payload = {
-        tempId: message.tempId, to,
-        type: "text", content: message.content,
-        caption: null, replyTo: message.replyTo,
-        clientTime: message.clientTime
-    };
-
-    if (isSending) {
-        socket.emit("private_message", { message: payload });
-        OutboxQueue.add(payload);
-    } else {
-        OutboxQueue.add(payload);
-        showToast("You're offline. Message queued and will send when reconnected.", "info");
-    }
-
-    const conv = State.conversations.find(c => c.id === to);
-    if (conv) {
-        conv.lastMessage = textContent;
-        conv.timestamp = message.timestamp;
-    }
-
-    document.getElementById('messages').appendChild(createMessageElement(message));
-    document.getElementById('messages-container').scrollTop = 99999;
-    messageInput.value = '';
-    document.getElementById('send-btn').disabled = true;
-    State.replyingTo = null;
-    document.getElementById('reply-preview').style.display = 'none';
-    renderChatList();
-}
-
-function showTypingIndicator(show) {
-    document.getElementById('typing-indicator').style.display = show ? 'flex' : 'none';
+  input.value = "";
+  document.getElementById("send-btn").disabled = true;
+  State.replyingTo = null;
+  document.getElementById("reply-preview").style.display = "none";
 }
 
 // =============================================================================
-// REACTIONS
+// TYPING
 // =============================================================================
-function showEmojiPicker(messageId) {
-    const modal = document.getElementById('emoji-modal');
-    const grid = document.getElementById('emoji-grid');
-    grid.innerHTML = '';
-    EMOJI_LIST.forEach(emoji => {
-        const btn = document.createElement('button');
-        btn.className = 'emoji-btn';
-        btn.textContent = emoji;
-        btn.addEventListener('click', () => {
-            addReaction(messageId, emoji);
-            modal.style.display = 'none';
-        });
-        grid.appendChild(btn);
-    });
-    modal.style.display = 'flex';
-    modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
-    document.getElementById('close-emoji').addEventListener('click', () => { modal.style.display = 'none'; });
-}
-
-function addReaction(messageId, emoji) {
-    const message = findMessageById(messageId);
-    if (!message) return;
-    if (!message.reactions) message.reactions = {};
-    if (!message.reactions[emoji]) message.reactions[emoji] = [];
-    const userId = State.currentUser.id;
-    const index = message.reactions[emoji].indexOf(userId);
-    if (index > -1) {
-        message.reactions[emoji].splice(index, 1);
-        if (message.reactions[emoji].length === 0) delete message.reactions[emoji];
-    } else {
-        message.reactions[emoji].push(userId);
-    }
-}
-
-function toggleReaction(messageId, emoji) {
-    addReaction(messageId, emoji);
+let typingTimer = null;
+function handleTyping() {
+  socket.emit("typing:start", { to: State.activeChat });
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    socket.emit("typing:stop", { to: State.activeChat });
+  }, 2000);
 }
 
 // =============================================================================
-// REPLY
-// =============================================================================
-function replyToMessage(message) {
-    State.replyingTo = message.id;
-    const replyText = document.getElementById('reply-text');
-    if (message.type === "text") {
-        replyText.textContent = message.content;
-    } else {
-        replyText.innerHTML = `<div class="reply-image"><img src="${message.content}"></div>`;
-    }
-    document.getElementById('reply-preview').style.display = 'flex';
-    document.getElementById('message-input').focus();
-}
-
-// =============================================================================
-// MOBILE NAVIGATION
+// MOBILE NAV
 // =============================================================================
 function initMobileNavigation() {
-    window.addEventListener('resize', () => {
-        if (window.innerWidth >= 768) {
-            document.getElementById('chat-list-sidebar').classList.remove('hidden');
-            document.getElementById('chat-window').classList.remove('active');
-            if (State.activeChat) document.getElementById('chat-window').classList.add('active');
-        } else {
-            if (State.activeChat) {
-                document.getElementById('chat-list-sidebar').classList.add('hidden');
-                document.getElementById('chat-window').classList.add('active');
-            } else {
-                document.getElementById('chat-list-sidebar').classList.remove('hidden');
-                document.getElementById('chat-window').classList.remove('active');
-            }
-        }
-    });
+  if (window.innerWidth >= 768) return;
+  const chatWindow   = document.getElementById("chat-window");
+  let startX = 0;
+  chatWindow.addEventListener("touchstart", e => { startX = e.changedTouches[0].screenX; }, { passive: true });
+  chatWindow.addEventListener("touchend", e => {
+    const dx = e.changedTouches[0].screenX - startX;
+    if (dx > 80 && !State.isSwiping) {
+      document.getElementById("chat-list-sidebar").classList.remove("hidden");
+      chatWindow.classList.remove("active");
+      State.activeChat = null;
+    }
+  }, { passive: true });
 }

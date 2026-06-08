@@ -1,19 +1,26 @@
 import express from "express";
-import * as auth from "../controller/user.controller.js";
+import {
+  register,
+  login,
+  me,
+  updateProfile,
+  changePassword,
+  linkTelegram,
+  toggleNotifications,
+} from "../controllers/auth.controller.js";
+import { protect } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.post("/auth/register", auth.add);
-router.post("/auth/login", auth.login);
-router.get("/auth/users", auth.get);
-router.post("/auth/del/user", auth.del);
-router.post("/auth/user/lastseen", auth.updateLastSeen);
+/* --- Public --- */
+router.post("/auth/register", register);
+router.post("/auth/login", login);
 
-// routes/auth.routes.js
-router.post('/auth/link-telegram', auth.telegramLink);
-
-router.post('/auth/toggle-notifications', auth.toggleNoti);
-
-
+/* --- Protected --- */
+router.get("/auth/me", protect, me);
+router.put("/auth/profile", protect, updateProfile);
+router.put("/auth/password", protect, changePassword);
+router.post("/auth/telegram/link", protect, linkTelegram);
+router.post("/auth/notifications/toggle", protect, toggleNotifications);
 
 export default router;

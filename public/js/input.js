@@ -215,7 +215,12 @@ async function uploadFileInChunks(file, msgId) {
                     formData.append("chunkIndex", chunkIndex);
                     formData.append("totalChunks", totalChunks);
                     formData.append("fileName", file.name);
-                    const res = await fetch("/api/upload-chunk", { method: "POST", body: formData });
+                    const token = TokenStore.getToken();
+                    const res = await fetch("/api/upload-chunk", {
+                        method: "POST",
+                        headers: token ? { "Authorization": "Bearer " + token } : {},
+                        body: formData
+                    });
                     if (!res.ok) throw new Error("failed");
                     break;
                 } catch {
@@ -229,9 +234,10 @@ async function uploadFileInChunks(file, msgId) {
         }));
     }
 
+    const token2 = TokenStore.getToken();
     const res = await fetch("/api/complete-upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: Object.assign({ "Content-Type": "application/json" }, token2 ? { "Authorization": "Bearer " + token2 } : {}),
         body: JSON.stringify({ fileId, fileName: file.name, mimeType: file.type })
     });
     if (!res.ok) throw new Error("Finalize failed");
@@ -457,8 +463,12 @@ async function uploadAudio(msgId, receiver, audioBlob) {
     try {
         const formData = new FormData();
         formData.append("file", audioBlob, "voice.webm");
+        const token3 = TokenStore.getToken();
         const res = await fetch("/api/upload", {
-            method: "POST", body: formData, signal: controller.signal
+            method: "POST",
+            headers: token3 ? { "Authorization": "Bearer " + token3 } : {},
+            body: formData,
+            signal: controller.signal
         });
         if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
         const data = await res.json();

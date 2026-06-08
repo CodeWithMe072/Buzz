@@ -1,18 +1,23 @@
 import express from "express";
 import path from "path";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
 import http from "http";
 import { Server } from "socket.io";
 import "dotenv/config";
 
 import { connectMongo } from "./config/mongo.js";
-import uploadRoutes from "./routes/upload.routes.js";
-import chatRoutes from "./routes/chat.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import connectionRoutes from "./routes/connection.routes.js";
+import chatRoutes from "./routes/chat.routes.js";
+import uploadRoutes from "./routes/upload.routes.js";
 import initSocket from "./sockets/chat.sockets.js";
 import { startAutoDeleteSeenMessagesJob } from "./jobs/autoDeleteSeenMessages.js";
 import { startMessageStatusSyncJob } from "./jobs/messageStatusSync.js";
+import webrtcRoutes from "./routes/webrtc.routes.js";
+import { protect } from "./middleware/auth.middleware.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,63 +25,84 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5500;
 
-/* ---------- Mongo ---------- */
+/* ---------- Database ---------- */
 await connectMongo();
 
 /* ---------- CORS ---------- */
 app.use(cors({
-  origin: "*",
+  origin: process.env.NODE_ENV === "PROD"
+    ? process.env.CLIENT_URL || "*"
+    : "*",
   methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
+  credentials: true,
 }));
 
-/* ---------- Express ---------- */
-app.set("view engine", "ejs");
-
+/* ---------- Body Parsing ---------- */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
+/* ---------- Static files ---------- */
 app.use(express.static(path.join(__dirname, "public")));
 
+/* ---------- View engine ---------- */
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
 
-
-/* ---------- Routes ---------- */
+/* ---------- Page routes ---------- */
+// All pages are served from index.ejs — client-side JS handles screens
 app.get("/", (req, res) => res.render("index"));
 
-app.use(chatRoutes);
+// Redirect any other page hit back to "/" so the SPA handles it
+app.get("/app", (req, res) => res.redirect("/"));
+app.get("/login", (req, res) => res.redirect("/"));
+/* ---------- API routes ---------- */
+app.use("/api/webrtc", webrtcRoutes);
 app.use(authRoutes);
+app.use(connectionRoutes);
+app.use(chatRoutes);
 app.use(uploadRoutes);
 
-/* ---------- Server ---------- */
+/* ---------- Version endpoint (for auto-reload) ---------- */
+const APP_VERSION = process.env.APP_VERSION;
+app.get("/api/version", protect, (req, res) => res.json({ data: APP_VERSION }));
+
+/* ---------- 404 handler ---------- */
+app.use((req, res) => {
+  if (
+    req.path.startsWith("/api") ||
+    req.path.startsWith("/auth") ||
+    req.path.startsWith("/connections")
+  ) {
+    return res.status(404).json({ status: false, message: "Route not found" });
+  }
+  res.redirect("/");
+});
+
+/* ---------- Socket.io ---------- */
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true
-  }
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
 });
 
-/* ---------- Socket ---------- */
 initSocket(io);
 
-// Background jobs (pass io so jobs can emit socket events)
+/* ---------- Background jobs ---------- */
 startAutoDeleteSeenMessagesJob();
 startMessageStatusSyncJob(io);
 
 /* ---------- Start ---------- */
-
-if (process.env.NODE_ENV == "PROD") {
+if (process.env.NODE_ENV === "PROD") {
   server.listen(process.env.PORT || 8080, "0.0.0.0", () => {
-    console.log(
-      `Server running at http://0.0.0.0:${PORT || 8080}`
-    );
+    console.log(`[Server] Running on port ${process.env.PORT || 8080}`);
   });
 } else {
   server.listen(PORT, () => {
-    console.log(
-      `Server running on http://127.0.0.1:${PORT}`
-    );
+    console.log(`[Server] Running on http://127.0.0.1:${PORT}`);
   });
 }

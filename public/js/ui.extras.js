@@ -63,8 +63,9 @@ function resetButton(btn) {
 }
 
 async function fakePasswordApi(password) {
-    const response = await loginuser({ username: State.currentUser.username, password });
-    return !!response.Data.status;
+    const response = await loginuser({ identifier: State.currentUser.username, password });
+    
+    return !!response.Data?.status;
 }
 
 document.getElementById("passwordInput").addEventListener("keydown", e => {

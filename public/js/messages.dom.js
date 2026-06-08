@@ -90,7 +90,7 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 
     /* ─── Status update ─── */
     if ((updates.status || updates.content || updates.cover) && chatId !== State.currentUser.id) {
-        const messageStatus = msgEl.querySelector(".message-status");
+        const messageStatus = msgEl.querySelector(".msg-status-wrap");
         if (!messageStatus) return;
 
         let statusIcon = "";
@@ -167,7 +167,7 @@ function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus, fil
         }
     }
 
-    const statusEl = msgEl.querySelector(".message-status");
+    const statusEl = msgEl.querySelector(".msg-status-wrap");
     if (statusEl) {
         statusEl.innerHTML = `<svg class="status-icon single sent" viewBox="0 0 16 16">
             <polyline points="2 8 6 12 14 4"/>
@@ -195,7 +195,7 @@ function updateAudioDOM(tempId, realUrl) {
     const newPlayer = createAudioPlayer(realUrl, tempId);
     audioContainer.replaceWith(newPlayer);
 
-    const statusEl = msgEl.querySelector(".message-status");
+    const statusEl = msgEl.querySelector(".msg-status-wrap");
     if (statusEl) {
         statusEl.innerHTML = `<svg class="status-icon single sent" viewBox="0 0 16 16">
             <polyline points="2 8 6 12 14 4"/>
