@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (data.data && data.data !== localStorage.getItem("app_version")) {
                 localStorage.setItem("app_version", data.data);
                 window.location.reload();
+                await fetch("/auth/flush-redis", { method: "POST" });
             }
         } catch {
             // Ignore — server may be temporarily unreachable

@@ -147,6 +147,7 @@ export const login = async (req, res) => {
         email: user.email,
         avatar: user.avatar,
       },
+      version:process.env.APP_VERSION
     });
 
   } catch (err) {
