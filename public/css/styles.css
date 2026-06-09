@@ -4611,21 +4611,17 @@ body {
 
 /* Search Bar */
 .emoji-search-container {
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: 4px 10px;
     border-bottom: 1px solid var(--border-color);
 }
 
-.emoji-search-input {
+#emoji-search-input {
+    color: white;
     width: 100%;
-    padding: 8px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    background: var(--surface-bg);
-    color: var(--text-primary);
-    font-size: 13px;
-    font-family: var(--font-primary);
-    outline: none;
-    transition: border-color var(--transition-fast);
+    background: transparent;
+    border: none;
+    outline: navajowhite;
+
 }
 
 .emoji-search-input:focus {
@@ -4640,11 +4636,13 @@ body {
     padding: 6px var(--spacing-md);
     border-bottom: 1px solid var(--border-color);
     overflow-x: auto;
-    scrollbar-width: none; /* Firefox */
+    scrollbar-width: none;
+    /* Firefox */
 }
 
 .emoji-categories-tabs::-webkit-scrollbar {
-    display: none; /* Safari & Chrome */
+    display: none;
+    /* Safari & Chrome */
 }
 
 .emoji-tab-btn {
@@ -4674,6 +4672,11 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: var(--spacing-sm) var(--spacing-md);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.emoji-grid-container::-webkit-scrollbar {
+   display: none;
 }
 
 .emoji-category-section {
@@ -4783,92 +4786,211 @@ body {
 
 /* Pulse (Heart Beat) */
 @keyframes emoji-pulse-kf {
-    0% { transform: scale(1); }
-    14% { transform: scale(1.15); }
-    28% { transform: scale(1); }
-    42% { transform: scale(1.15); }
-    70% { transform: scale(1); }
+    0% {
+        transform: scale(1);
+    }
+
+    14% {
+        transform: scale(1.15);
+    }
+
+    28% {
+        transform: scale(1);
+    }
+
+    42% {
+        transform: scale(1.15);
+    }
+
+    70% {
+        transform: scale(1);
+    }
 }
+
 .emoji-pulse {
     animation: emoji-pulse-kf 1.4s infinite ease-in-out;
 }
 
 /* Bounce Laugh */
 @keyframes emoji-bounce-laugh-kf {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    25% { transform: translateY(-15px) rotate(-8deg); }
-    50% { transform: translateY(0) rotate(0deg); }
-    75% { transform: translateY(-7px) rotate(8deg); }
+
+    0%,
+    100% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    25% {
+        transform: translateY(-15px) rotate(-8deg);
+    }
+
+    50% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    75% {
+        transform: translateY(-7px) rotate(8deg);
+    }
 }
+
 .emoji-bounce-laugh {
     animation: emoji-bounce-laugh-kf 1.2s infinite ease-in-out;
 }
 
 /* Flicker (Flame) */
 @keyframes emoji-flicker-kf {
-    0%, 100% { transform: scale(1) skewX(0deg); }
-    20% { transform: scale(1.04) skewX(-2deg); }
-    40% { transform: scale(0.97) skewX(2deg); }
-    60% { transform: scale(1.06) skewX(-1deg); }
-    80% { transform: scale(0.96) skewX(1deg); }
+
+    0%,
+    100% {
+        transform: scale(1) skewX(0deg);
+    }
+
+    20% {
+        transform: scale(1.04) skewX(-2deg);
+    }
+
+    40% {
+        transform: scale(0.97) skewX(2deg);
+    }
+
+    60% {
+        transform: scale(1.06) skewX(-1deg);
+    }
+
+    80% {
+        transform: scale(0.96) skewX(1deg);
+    }
 }
+
 .emoji-flicker {
     animation: emoji-flicker-kf 0.6s infinite ease-in-out;
 }
 
 /* Thumbs Up */
 @keyframes emoji-thumbs-up-kf {
-    0%, 100% { transform: scale(1) rotate(0deg); }
-    50% { transform: scale(1.15) rotate(8deg); }
+
+    0%,
+    100% {
+        transform: scale(1) rotate(0deg);
+    }
+
+    50% {
+        transform: scale(1.15) rotate(8deg);
+    }
 }
+
 .emoji-thumbs-up {
     animation: emoji-thumbs-up-kf 0.9s infinite ease-in-out;
 }
 
 /* Party (Spin & Pop) */
 @keyframes emoji-party-kf {
-    0% { transform: scale(1) rotate(0deg); }
-    50% { transform: scale(1.15) rotate(12deg); }
-    100% { transform: scale(1) rotate(0deg); }
+    0% {
+        transform: scale(1) rotate(0deg);
+    }
+
+    50% {
+        transform: scale(1.15) rotate(12deg);
+    }
+
+    100% {
+        transform: scale(1) rotate(0deg);
+    }
 }
+
 .emoji-party {
     animation: emoji-party-kf 1.4s infinite ease-in-out;
 }
 
 /* Cry (Breathing cry) */
 @keyframes emoji-cry-kf {
-    0%, 100% { transform: translateY(0) scaleY(1); }
-    50% { transform: translateY(6px) scaleY(0.94); }
+
+    0%,
+    100% {
+        transform: translateY(0) scaleY(1);
+    }
+
+    50% {
+        transform: translateY(6px) scaleY(0.94);
+    }
 }
+
 .emoji-cry {
     animation: emoji-cry-kf 1.5s infinite ease-in-out;
 }
 
 /* Shake (Angry) */
 @keyframes emoji-shake-kf {
-    0%, 100% { transform: translateX(0); }
-    10%, 30%, 50%, 70%, 90% { transform: translateX(-3px); }
-    20%, 40%, 60%, 80% { transform: translateX(3px); }
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-3px);
+    }
+
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(3px);
+    }
 }
+
 .emoji-shake {
     animation: emoji-shake-kf 0.45s infinite linear;
 }
 
 /* Float (Ghost) */
 @keyframes emoji-float-kf {
-    0%, 100% { transform: translateY(0) scale(1); }
-    50% { transform: translateY(-10px) scale(0.97); }
+
+    0%,
+    100% {
+        transform: translateY(0) scale(1);
+    }
+
+    50% {
+        transform: translateY(-10px) scale(0.97);
+    }
 }
+
 .emoji-float {
     animation: emoji-float-kf 2.4s infinite ease-in-out;
 }
 
 /* Entrance Pop (Default) */
 @keyframes emoji-bounce-kf {
-    0% { transform: scale(0.4); opacity: 0; }
-    70% { transform: scale(1.15); opacity: 1; }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(0.4);
+        opacity: 0;
+    }
+
+    70% {
+        transform: scale(1.15);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
+
+/* Gentle Infinite Sway/Float for default emojis at rest */
+@keyframes emoji-idle-sway-kf {
+    0%, 100% {
+        transform: translateY(0) scale(1) rotate(0deg);
+    }
+    50% {
+        transform: translateY(-5px) scale(1.03) rotate(2deg);
+    }
+}
+
 .emoji-bounce {
-    animation: emoji-bounce-kf 0.38s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    animation: emoji-bounce-kf 0.38s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards,
+               emoji-idle-sway-kf 3s infinite ease-in-out 0.38s;
 }
