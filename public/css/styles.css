@@ -1044,7 +1044,12 @@ body {
 .chat-input-container {
     border-top: 1px solid var(--border-color);
     background: var(--primary-bg);
-    padding: var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-md) calc(var(--spacing-md) + 12px) var(--spacing-md);
+    transition: padding-bottom 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-input-container.active-state {
+    padding-bottom: var(--spacing-md);
 }
 
 .reply-preview {
@@ -4578,35 +4583,36 @@ body {
 
 .chat-input-container {
     position: relative;
-}
-
-/* Glassmorphism Emoji Panel container */
-.custom-emoji-panel {
-    position: absolute;
-    bottom: 100%;
-    left: 16px;
-    width: 330px;
-    height: 380px;
-    background: var(--elevated-bg);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-xl);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     display: flex;
     flex-direction: column;
-    z-index: 1000;
-    margin-bottom: 8px;
-    transform: translateY(10px);
+}
+
+/* Inline Keyboard-Style Emoji Panel container */
+.custom-emoji-panel {
+    display: flex;
+    flex-direction: column;
+    width: calc(100% + (2 * var(--spacing-md)));
+    margin: 0 calc(-1 * var(--spacing-md)) calc(-1 * var(--spacing-md)) calc(-1 * var(--spacing-md));
+    height: 0;
     opacity: 0;
+    overflow: hidden;
+    background: var(--elevated-bg);
+    border-top: 0 solid transparent;
+    border-radius: 0;
+    box-shadow: none;
+    z-index: 1000;
     pointer-events: none;
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    transition: height 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, margin 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     backdrop-filter: blur(15px);
     -webkit-backdrop-filter: blur(15px);
 }
 
 .custom-emoji-panel.active {
-    transform: translateY(0);
+    height: 280px;
     opacity: 1;
+    border-top: 1px solid var(--border-color);
     pointer-events: auto;
+    margin-top: var(--spacing-md);
 }
 
 /* Search Bar */
@@ -4993,4 +4999,62 @@ body {
 .emoji-bounce {
     animation: emoji-bounce-kf 0.38s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards,
                emoji-idle-sway-kf 3s infinite ease-in-out 0.38s;
+}
+
+/* Chat Action popover menu styles */
+.chat-actions-popup {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: var(--spacing-md);
+    background: var(--elevated-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xs) 0;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    z-index: 1005;
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+    transform: translateY(10px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.22s ease;
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+}
+
+.chat-actions-popup.active {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.action-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: 10px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+    transition: background var(--transition-fast);
+}
+
+.action-menu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.action-menu-item svg {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    transition: color var(--transition-fast);
+}
+
+.action-menu-item:hover svg {
+    color: var(--accent-blue);
 }

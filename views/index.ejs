@@ -557,32 +557,43 @@
                             <div class="typing-indicator" id="typing-indicator" style="display: none;">
                                 <span></span><span></span><span></span>
                             </div>
-                            <div class="custom-emoji-panel" id="custom-emoji-panel">
-                                <div class="emoji-search-container">
-                                    <input type="text" id="emoji-search-input" placeholder="Search emojis..." autocomplete="off">
-                                </div>
-                                <div class="emoji-categories-tabs" id="emoji-categories-tabs"></div>
-                                <div class="emoji-grid-container" id="emoji-grid-container"></div>
-                            </div>
-                            <div class="chat-input">
-                                <button class="icon-btn" id="media-btn" title="Add media">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                                        <circle cx="8.5" cy="8.5" r="1.5"/>
-                                        <polyline points="21 15 16 10 5 21"/>
-                                    </svg>
-                                </button>
-                                <input type="file" id="media-input"
-                                    accept="image/*,video/*,application/pdf,application/msword,.docx,.xls,.xlsx,.csv,.txt"
-                                    style="display:none;">
-                                <button class="icon-btn" id="emoji-panel-btn" type="button" title="Emojis">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <div class="chat-actions-popup" id="chat-actions-popup">
+                                <button class="action-menu-item" id="emoji-panel-btn" type="button">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <circle cx="12" cy="12" r="10"/>
                                         <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
                                         <line x1="9" y1="9" x2="9.01" y2="9"/>
                                         <line x1="15" y1="9" x2="15.01" y2="9"/>
                                     </svg>
+                                    <span>Emojis</span>
                                 </button>
+                                <button class="action-menu-item" id="media-btn" type="button">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                                        <polyline points="21 15 16 10 5 21"/>
+                                    </svg>
+                                    <span>Photo & Document</span>
+                                </button>
+                                <button class="action-menu-item" id="mic-btn" type="button">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                        <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+                                    </svg>
+                                    <span>Voice Message</span>
+                                </button>
+                            </div>
+                            <div class="chat-input">
+                                <button class="icon-btn" id="chat-actions-btn" type="button" title="More options">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <line x1="12" y1="5" x2="12" y2="19"/>
+                                        <line x1="5" y1="12" x2="19" y2="12"/>
+                                    </svg>
+                                </button>
+                                <input type="file" id="media-input"
+                                    accept="image/*,video/*,application/pdf,application/msword,.docx,.xls,.xlsx,.csv,.txt"
+                                    style="display:none;">
                                 <div class="voice-recording-ui" id="voiceRecordingUI" style="display:none;">
                                     <button class="voice-cancel-btn" id="voiceCancelBtn">
                                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -600,18 +611,18 @@
                                     </button>
                                 </div>
                                 <input type="text" id="message-input" placeholder="Message..." autocomplete="off">
-                                <button class="icon-btn" id="mic-btn" title="Record voice">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                                        <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-                                    </svg>
-                                </button>
                                 <button class="icon-btn send-btn" id="send-btn" disabled>
                                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
                                     </svg>
                                 </button>
+                            </div>
+                            <div class="custom-emoji-panel" id="custom-emoji-panel">
+                                <div class="emoji-search-container">
+                                    <input type="text" id="emoji-search-input" placeholder="Search emojis..." autocomplete="off">
+                                </div>
+                                <div class="emoji-categories-tabs" id="emoji-categories-tabs"></div>
+                                <div class="emoji-grid-container" id="emoji-grid-container"></div>
                             </div>
                         </div>
                     </div>
