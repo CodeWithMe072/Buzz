@@ -36,7 +36,7 @@ function renderChatList(filter = "") {
   chatList.innerHTML = "";
 
   let convs = [...State.conversations];
-  convs.sort((a, b) => b.timestamp - a.timestamp);
+  // convs.sort((a, b) => b.timestamp - a.timestamp);
 
   // Apply filter
   if (filter) {
@@ -53,7 +53,7 @@ function renderChatList(filter = "") {
         </div>`;
     return;
   }
-
+  convs = convs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
   convs.forEach(conv => {
     const item = document.createElement("div");
     item.className = `chat-item ${State.activeChat === conv.id ? "active" : ""}`;
