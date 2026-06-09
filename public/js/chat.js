@@ -221,6 +221,53 @@ function getStatusIconHTML(status) {
 }
 
 // =============================================================================
+// EMOJI HELPERS FOR ANIMATED SINGLE EMOJIS
+// =============================================================================
+function getSingleEmoji(text) {
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    const segments = [...segmenter.segment(trimmed)];
+    if (segments.length === 1) {
+      const segment = segments[0].segment;
+      const isEmoji = /\p{Emoji_Presentation}/u.test(segment) || 
+                      ( /[\u2600-\u27BF]/u.test(segment) && !/[0-9#*]/u.test(segment) );
+      if (isEmoji) return segment;
+    }
+  } catch (e) {
+    const emojiRegex = /^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F3FB}-\u{1F3FF}]+$/u;
+    if (emojiRegex.test(trimmed) && trimmed.length <= 8) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+function getEmojiAnimationClass(emoji) {
+  const heartEmojis = ["❤️", "💖", "💕", "🖤", "💛", "💙", "💜", "💚", "🧡", "🤍", "🤎", "💔", "❣", "💕", "💞", "💓", "💗", "💖", "💝"];
+  const laughEmojis = ["😂", "🤣", "😆", "😅", "😄", "😃", "😀"];
+  const fireEmojis = ["🔥", "⚡", "✨", "💥"];
+  const thumbsEmojis = ["👍", "👎", "ok", "👌"];
+  const partyEmojis = ["🎉", "🥳", "🎊", "🎈"];
+  const cryEmojis = ["😭", "😢", "🥺", "😓", "😿", "💔"];
+  const angryEmojis = ["😡", "😠", "🤬", "👿", "👿"];
+  const ghostEmojis = ["👻", "👽", "🛸", "🎃"];
+
+  if (heartEmojis.includes(emoji)) return "emoji-pulse";
+  if (laughEmojis.includes(emoji)) return "emoji-bounce-laugh";
+  if (fireEmojis.includes(emoji)) return "emoji-flicker";
+  if (thumbsEmojis.some(t => emoji.includes(t))) return "emoji-thumbs-up";
+  if (partyEmojis.includes(emoji)) return "emoji-party";
+  if (cryEmojis.includes(emoji)) return "emoji-cry";
+  if (angryEmojis.includes(emoji)) return "emoji-shake";
+  if (ghostEmojis.includes(emoji)) return "emoji-float";
+
+  return "emoji-bounce";
+}
+
+// =============================================================================
 // CREATE MESSAGE ELEMENT
 // =============================================================================
 function createMessageElement(message) {
@@ -231,6 +278,18 @@ function createMessageElement(message) {
 
   const bubbleEl = document.createElement("div");
   bubbleEl.className = "message-bubble";
+
+  let isEmojiOnly = false;
+  let emojiChar = "";
+  let animationClass = "";
+  if (message.type === "text") {
+    emojiChar = getSingleEmoji(message.content);
+    if (emojiChar) {
+      isEmojiOnly = true;
+      animationClass = getEmojiAnimationClass(emojiChar);
+      bubbleEl.classList.add("emoji-only-bubble");
+    }
+  }
 
   // Reply preview
   let replyHTML = "";
@@ -256,11 +315,19 @@ function createMessageElement(message) {
   const footerHTML = `<div class="msg-footer"><span class="message-time">${formatTime(message.timestamp)}</span>${statusSVG}</div>`;
 
   if (message.type === "text") {
-    bubbleEl.innerHTML = `
-      ${replyHTML}
-      <p class="messag-text">${makeLinksClickable(sanitizeInput(message.content || ""))}</p>
-      ${footerHTML}
-      ${message.uploadStatus === "failed" ? `<div class="upload-fail-badge">Failed to send</div>` : ""}`;
+    if (isEmojiOnly) {
+      bubbleEl.innerHTML = `
+        ${replyHTML}
+        <div class="messag-text animated-emoji ${animationClass}">${emojiChar}</div>
+        ${footerHTML}
+        ${message.uploadStatus === "failed" ? `<div class="upload-fail-badge">Failed to send</div>` : ""}`;
+    } else {
+      bubbleEl.innerHTML = `
+        ${replyHTML}
+        <p class="messag-text">${makeLinksClickable(sanitizeInput(message.content || ""))}</p>
+        ${footerHTML}
+        ${message.uploadStatus === "failed" ? `<div class="upload-fail-badge">Failed to send</div>` : ""}`;
+    }
 
   } else if (message.type === "image") {
     const src = message.cover || message.thumb || message.content;

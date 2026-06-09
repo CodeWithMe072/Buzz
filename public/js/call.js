@@ -23,6 +23,36 @@ const CallManager = (() => {
   let _roomId        = null;
   let _callStartTime = null;
   let _iceServersPromise = null;
+  let _wakeLock      = null;
+
+  async function _requestWakeLock() {
+    try {
+      if ("wakeLock" in navigator) {
+        _wakeLock = await navigator.wakeLock.request("screen");
+        console.log("[WebRTC] Screen Wake Lock acquired");
+      }
+    } catch (err) {
+      console.warn("[WebRTC] Screen Wake Lock failed:", err.message);
+    }
+  }
+
+  async function _releaseWakeLock() {
+    if (_wakeLock) {
+      try {
+        await _wakeLock.release();
+        console.log("[WebRTC] Screen Wake Lock released");
+      } catch (err) {
+        console.warn("[WebRTC] Release Wake Lock failed:", err.message);
+      }
+      _wakeLock = null;
+    }
+  }
+
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState === "visible" && _callState === "connected") {
+      await _requestWakeLock();
+    }
+  });
 
   let _remoteStream    = null;
   let _audioCtx        = null;
@@ -293,6 +323,7 @@ const CallManager = (() => {
         $("audio-call-status").textContent = "00:00";
         _startTimer();
         if (_mode === "audio") $("audio-waves")?.classList.add("active");
+        _requestWakeLock();
       }
     };
 
@@ -567,7 +598,7 @@ const CallManager = (() => {
   function showIncoming(from, type, offerSdp, roomId, isRejoin) {
     // If we're already connected (ICE restart offer) — handle as renegotiation
     if (_callState === "connected" && _pc && _roomId === roomId) {
-      _handleRenegotiation(from, offerSdp);
+      _handleRenegotiation(from, offerSdp, type);
       return;
     }
 
@@ -632,17 +663,37 @@ const CallManager = (() => {
     }, 60000);
   }
 
-  // Handle ICE restart offer when already connected
-  async function _handleRenegotiation(from, offerSdp) {
+  // Handle ICE restart offer or mode switch when already connected
+  async function _handleRenegotiation(from, offerSdp, type) {
     if (!offerSdp || !_pc) return;
     try {
+      console.log("[WebRTC] Handling renegotiation/mode switch from peer. Target mode:", type);
+      
+      const newMode = type || _mode;
+      
+      if (newMode !== _mode) {
+        // Update UI
+        $("video-call-screen").style.display = newMode === "video" ? "flex" : "none";
+        $("audio-call-screen").style.display = newMode === "audio" ? "flex" : "none";
+        $("call-modal").classList.remove("video-mode", "audio-mode");
+        $("call-modal").classList.add(`${newMode}-mode`);
+        
+        if (newMode === "video") {
+          await _enableVideoTracks();
+        } else {
+          _disableVideoTracks();
+        }
+        _mode = newMode;
+      }
+
       _remoteDescSet = false;
       await _pc.setRemoteDescription(new RTCSessionDescription(offerSdp));
       _remoteDescSet = true;
       await _flushPendingIce();
       const answer = await _pc.createAnswer();
       await _pc.setLocalDescription(answer);
-      socket.emit("call:accept", { to: from.id || _activePeer.id, type: _mode, sdp: answer });
+      socket.emit("call:accept", { to: from.id || _activePeer.id, type: _mode, sdp: answer, roomId: _roomId });
+      showToast(_mode === "audio" ? "Switched to voice call" : "Switched to video call", "info");
     } catch (err) { console.error("[WebRTC] Renegotiation failed:", err); }
   }
 
@@ -725,6 +776,7 @@ const CallManager = (() => {
     _updateCallMessage(wasConnected ? "ended" : "missed", duration);
 
     _stopTimer(); _stopTones(); _stopLocalStream(); _closePeerConnection();
+    _releaseWakeLock();
     $("call-modal").classList.remove("active");
     $("call-modal").classList.remove("minimized");
     $("call-modal").classList.remove("video-mode", "audio-mode");
@@ -760,7 +812,88 @@ const CallManager = (() => {
     showToast(_camOff ? "Camera off" : "Camera on", "info");
   }
 
+  async function _enableVideoTracks() {
+    try {
+      console.log("[WebRTC] Enabling video track");
+      const vs = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
+      });
+      const vt = vs.getVideoTracks()[0];
+      if (!vt) return false;
+
+      if (!_localStream) {
+        _localStream = new MediaStream();
+      }
+
+      // Remove any existing video tracks first
+      _localStream.getVideoTracks().forEach(t => {
+        t.stop();
+        _localStream.removeTrack(t);
+      });
+
+      _localStream.addTrack(vt);
+
+      const lv = $("local-video");
+      if (lv) {
+        lv.srcObject = _localStream;
+        lv.style.opacity = "1";
+        lv.play().catch(() => {});
+      }
+
+      if (_pc) {
+        const senders = _pc.getSenders();
+        const videoSender = senders.find(s => s.track?.kind === "video");
+        if (videoSender) {
+          await videoSender.replaceTrack(vt);
+        } else {
+          _pc.addTrack(vt, _localStream);
+        }
+      }
+      return true;
+    } catch (err) {
+      console.error("[WebRTC] _enableVideoTracks failed:", err);
+      showToast("Could not open camera", "error");
+      return false;
+    }
+  }
+
+  function _disableVideoTracks() {
+    console.log("[WebRTC] Disabling video track");
+    if (_localStream) {
+      _localStream.getVideoTracks().forEach(t => {
+        t.stop();
+        _localStream.removeTrack(t);
+      });
+    }
+
+    if (_pc) {
+      const senders = _pc.getSenders();
+      const videoSender = senders.find(s => s.track?.kind === "video");
+      if (videoSender) {
+        try {
+          _pc.removeTrack(videoSender);
+        } catch (err) {
+          console.warn("[WebRTC] removeTrack failed:", err);
+        }
+      }
+    }
+
+    const lv = $("local-video");
+    if (lv) {
+      lv.srcObject = null;
+      lv.style.opacity = "0";
+    }
+  }
+
   function _applyAudioRouting() {
+    if (window.navigator.audioSession) {
+      try {
+        window.navigator.audioSession.type = "play-and-record";
+      } catch (err) {
+        console.warn("[WebRTC] audioSession.type set failed:", err.message);
+      }
+    }
+
     const ra = $("remote-audio") || document.createElement("audio");
     if (!ra.parentNode) {
       ra.id = "remote-audio"; ra.autoplay = true;
@@ -775,6 +908,17 @@ const CallManager = (() => {
 
     if (!_remoteStream) return;
 
+    // Background Playback Guard for earpiece element
+    if (!ra.dataset.pauseListenerWired) {
+      ra.dataset.pauseListenerWired = "true";
+      ra.addEventListener("pause", () => {
+        if (_callState === "connected" && !_speakerOn) {
+          console.log("[WebRTC] remote-audio paused by system — resuming");
+          ra.play().catch(e => console.warn("[WebRTC] Resuming remote-audio failed:", e.message));
+        }
+      });
+    }
+
     if (_speakerOn) {
       // Loudspeaker Mode (play through video tag)
       ra.srcObject = null; // Turn off earpiece
@@ -786,8 +930,21 @@ const CallManager = (() => {
         rvSpeaker.id = "remote-speaker-video";
         rvSpeaker.autoplay = true;
         rvSpeaker.playsInline = true;
-        rvSpeaker.style.cssText = "position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;";
+        rvSpeaker.style.cssText = "position:fixed; top:-100px; left:-100px; width:10px; height:10px; opacity:0.01; pointer-events:none; z-index:-9999;";
         document.body.appendChild(rvSpeaker);
+      } else {
+        rvSpeaker.style.cssText = "position:fixed; top:-100px; left:-100px; width:10px; height:10px; opacity:0.01; pointer-events:none; z-index:-9999;";
+      }
+
+      // Background Playback Guard for speaker element
+      if (!rvSpeaker.dataset.pauseListenerWired) {
+        rvSpeaker.dataset.pauseListenerWired = "true";
+        rvSpeaker.addEventListener("pause", () => {
+          if (_callState === "connected" && _speakerOn) {
+            console.log("[WebRTC] remote-speaker-video paused by system — resuming");
+            rvSpeaker.play().catch(e => console.warn("[WebRTC] Resuming remote-speaker-video failed:", e.message));
+          }
+        });
       }
 
       if (rvSpeaker.srcObject !== _remoteStream) {
@@ -808,6 +965,7 @@ const CallManager = (() => {
       if (ra.srcObject !== _remoteStream) {
         ra.srcObject = _remoteStream;
       }
+      ra.muted = false;
       ra.volume = 1.0;
       ra.play().catch(() => {});
       console.log("[WebRTC] Earpiece mode active (via audio element)");
@@ -825,42 +983,40 @@ const CallManager = (() => {
   async function switchMode() {
     if (!_pc || !_activePeer) return;
     const newMode = _mode === "video" ? "audio" : "video";
+    
+    if (newMode === "video") {
+      const ok = await _enableVideoTracks();
+      if (!ok) return;
+    } else {
+      _disableVideoTracks();
+    }
+
     _mode = newMode;
     $("video-call-screen").style.display = newMode === "video" ? "flex" : "none";
     $("audio-call-screen").style.display = newMode === "audio" ? "flex" : "none";
     $("call-modal").classList.remove("video-mode", "audio-mode");
     $("call-modal").classList.add(`${newMode}-mode`);
 
-    if (newMode === "audio") {
-      _localStream?.getVideoTracks().forEach(t => { t.stop(); _localStream.removeTrack(t); });
-      const lv = $("local-video"); if (lv) lv.srcObject = null;
-    } else {
-      try {
-        const vs = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
-        });
-        const vt = vs.getVideoTracks()[0];
-        _localStream?.addTrack(vt);
-        const lv = $("local-video");
-        if (lv) { lv.srcObject = _localStream; lv.style.opacity = "1"; lv.play().catch(() => {}); }
-      } catch (err) {
-        showToast("Could not open camera", "error");
-        _mode = "audio";
-        $("video-call-screen").style.display = "none";
-        $("audio-call-screen").style.display = "flex";
-        $("call-modal").classList.remove("video-mode", "audio-mode");
-        $("call-modal").classList.add("audio-mode");
-        return;
-      }
+    // Initiate renegotiation offer
+    try {
+      console.log("[WebRTC] Creating offer for mode switch to:", newMode);
+      const offer = await _pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: newMode === "video"
+      });
+      await _pc.setLocalDescription(offer);
+      socket.emit("call:offer", {
+        to: _activePeer.id,
+        type: newMode,
+        sdp: offer,
+        roomId: _roomId,
+        from: { id: State.currentUser.id, username: State.currentUser.username, avatar: State.currentUser.avatar }
+      });
+      showToast(newMode === "audio" ? "Switched to voice call" : "Switched to video call", "success");
+    } catch (err) {
+      console.error("[WebRTC] switchMode offer creation failed:", err);
+      showToast("Failed to switch call mode", "error");
     }
-
-    const senders = _pc.getSenders();
-    _localStream?.getTracks().forEach(t => {
-      const s = senders.find(x => x.track?.kind === t.kind);
-      if (s) s.replaceTrack(t); else _pc.addTrack(t, _localStream);
-    });
-
-    showToast(newMode === "audio" ? "Switched to voice call" : "Switched to video call", "success");
   }
 
   // ─── SOCKET EVENTS ───────────────────────────────────────
@@ -898,8 +1054,8 @@ const CallManager = (() => {
     });
 
     // Caller gets back the answer SDP from receiver
-    sock.on("call:accept", async ({ sdp }) => {
-      console.log("[WebRTC] call:accept received, _pc exists:", !!_pc, "sdp type:", sdp?.type);
+    sock.on("call:accept", async ({ sdp, type }) => {
+      console.log("[WebRTC] call:accept received, _pc exists:", !!_pc, "sdp type:", sdp?.type, "type:", type);
       _stopTones();
       clearInterval(_waitingTimer);
       if (!_pc) {
@@ -922,6 +1078,15 @@ const CallManager = (() => {
         _remoteDescSet = true;
         console.log("[WebRTC] setRemoteDescription(answer) OK — flushing", _pendingIce.length, "ICE candidates");
         await _flushPendingIce();
+
+        // Sync mode and UI if renegotiation changed it
+        if (type && type !== _mode) {
+          _mode = type;
+          $("video-call-screen").style.display = type === "video" ? "flex" : "none";
+          $("audio-call-screen").style.display = type === "audio" ? "flex" : "none";
+          $("call-modal").classList.remove("video-mode", "audio-mode");
+          $("call-modal").classList.add(`${type}-mode`);
+        }
       } catch (err) {
         console.error("[WebRTC] setRemoteDescription(answer) FAILED:", err);
       }
