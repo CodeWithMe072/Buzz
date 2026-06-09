@@ -113,7 +113,14 @@ class MediaViewer {
 
     /* ─── LIFECYCLE ─── */
 
-    open(index) {
+    open(indexOrId) {
+        this.collectMediaItems();
+        let index = -1;
+        if (typeof indexOrId === "number") {
+            index = indexOrId;
+        } else {
+            index = this.getIndexByMessageId(indexOrId);
+        }
         if (index < 0 || index >= this.mediaItems.length) return;
         this.currentIndex = index;
         this.overlay.classList.add('active');
@@ -276,10 +283,13 @@ class MediaViewer {
     addItem(msg) {
         if (!msg?.content) return;
         if (!(msg.type === "image" || msg.type === "video")) return;
+        const id = msg.id ?? msg.tempId;
+        if (this.mediaItems.some(item => String(item.id) === String(id))) return;
+
         const index = this.mediaItems.length;
         this.mediaItems.push({
             index,
-            id: msg.id ?? msg.tempId,
+            id,
             type: msg.type,
             src: msg.content,
             thumb: msg.thumb || null,

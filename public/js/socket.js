@@ -248,7 +248,10 @@ function initSocket() {
       const mc = document.getElementById("messages");
       mc.appendChild(createMessageElement(message));
       document.getElementById("messages-container").scrollTop = 99999;
-      if (message.type === "image" || message.type === "video") attactEventOnMedia();
+      if (message.type === "image" || message.type === "video") {
+        attactEventOnMedia();
+        if (viewer) viewer.addItem(message);
+      }
       socket.emit("chat:seen", { from: message.user });
     }
 

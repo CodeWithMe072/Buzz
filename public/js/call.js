@@ -24,6 +24,11 @@ const CallManager = (() => {
   let _callStartTime = null;
   let _iceServersPromise = null;
 
+  let _remoteStream    = null;
+  let _audioCtx        = null;
+  let _gainNode        = null;
+  let _sourceNode      = null;
+
   // timers
   let _timerHandle     = null;
   let _seconds         = 0;
@@ -34,7 +39,7 @@ const CallManager = (() => {
   // mute/cam/speaker
   let _muted     = false;
   let _camOff    = false;
-  let _speakerOn = true;
+  let _speakerOn = false;
 
   // tones
   let _ringCtx = null, _dialCtx = null;
@@ -143,7 +148,16 @@ const CallManager = (() => {
   async function _getLocalStream(video) {
     try {
       _localStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          googEchoCancellation: true,
+          googNoiseSuppression: true,
+          googAutoGainControl: true,
+          googHighpassFilter: true,
+          googAudioMirroring: false
+        },
         video: video
           ? { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
           : false,
@@ -241,8 +255,6 @@ const CallManager = (() => {
     // IMPORTANT: ontrack fires separately for audio and video tracks.
     // We collect them into one MediaStream and ensure we call play()
     // every time a track arrives so the media elements update rendering.
-    let _remoteStream = null;
-
     _pc.ontrack = ({ track, streams }) => {
       console.log("[WebRTC] ontrack:", track.kind, "readyState:", track.readyState);
 
@@ -262,16 +274,13 @@ const CallManager = (() => {
           rv.play().catch(e => console.warn("[WebRTC] remote-video play failed:", e.message));
         }
       } else {
-        let ra = $("remote-audio");
-        if (!ra) {
-          ra = document.createElement("audio");
-          ra.id = "remote-audio"; ra.autoplay = true; ra.playsInline = true;
-          document.body.appendChild(ra);
-        }
-        if (ra.srcObject !== stream) {
-          ra.srcObject = stream;
-        }
-        ra.play().catch(e => console.warn("[WebRTC] remote-audio play failed:", e.message));
+        _applyAudioRouting();
+        // Re-apply after 500ms stabilization delay to ensure mobile OS sets route to earpiece
+        setTimeout(() => {
+          if (_callState === "connected") {
+            _applyAudioRouting();
+          }
+        }, 500);
       }
 
       // ── Mark connected — ONLY here, not in accept() ──────
@@ -333,6 +342,10 @@ const CallManager = (() => {
     }
     const rv = $("remote-video"); if (rv) { rv.srcObject = null; rv.onloadedmetadata = null; }
     const ra = $("remote-audio"); if (ra) { ra.srcObject = null; ra.onloadedmetadata = null; }
+    const rsv = $("remote-speaker-video"); if (rsv) { rsv.srcObject = null; rsv.remove(); }
+    if (_sourceNode) { try { _sourceNode.disconnect(); } catch {} _sourceNode = null; }
+    if (_audioCtx) { try { _audioCtx.close(); } catch {} _audioCtx = null; _gainNode = null; }
+    _remoteStream = null;
   }
 
   // ─── CALL MESSAGE IN CHAT ─────────────────────────────────
@@ -446,7 +459,7 @@ const CallManager = (() => {
     const conv = State.conversations.find(c => c.id === State.activeChat);
     if (!conv) { showToast("Open a chat first", "error"); return; }
 
-    _mode = mode; _callState = "outgoing"; _muted = false; _camOff = false;
+    _mode = mode; _callState = "outgoing"; _muted = false; _camOff = false; _speakerOn = false;
     _roomId = _newRoomId();
     _iceServersPromise = null; // fresh creds each call
     _pendingIce = []; // Clear for new outgoing call
@@ -518,6 +531,8 @@ const CallManager = (() => {
     if (_callState !== "idle") { showToast("Already in a call", "error"); return; }
     // Store context and open call screen immediately
     _roomId = roomId; _mode = mode || "audio"; _callState = "answering";
+    _speakerOn = false;
+    $("ac-speaker-btn")?.classList.remove("ctrl-active");
     _activePeer = { id: peerId };
     _pendingIce = []; // Clear for rejoin call
 
@@ -645,6 +660,8 @@ const CallManager = (() => {
 
     // NOTE: _callState stays "answering" — only set to "connected" in ontrack
     _mode = type; _callState = "answering"; _muted = false; _camOff = false;
+    _speakerOn = false;
+    $("ac-speaker-btn")?.classList.remove("ctrl-active");
 
     $("video-call-screen").style.display = type === "video" ? "flex" : "none";
     $("audio-call-screen").style.display = type === "audio" ? "flex" : "none";
@@ -743,10 +760,65 @@ const CallManager = (() => {
     showToast(_camOff ? "Camera off" : "Camera on", "info");
   }
 
+  function _applyAudioRouting() {
+    const ra = $("remote-audio") || document.createElement("audio");
+    if (!ra.parentNode) {
+      ra.id = "remote-audio"; ra.autoplay = true;
+      document.body.appendChild(ra);
+    }
+    
+    // Stop any Web Audio nodes if active to prevent duplicates
+    if (_sourceNode) {
+      try { _sourceNode.disconnect(); } catch {}
+      _sourceNode = null;
+    }
+
+    if (!_remoteStream) return;
+
+    if (_speakerOn) {
+      // Loudspeaker Mode (play through video tag)
+      ra.srcObject = null; // Turn off earpiece
+
+      // Ensure speaker video element exists
+      let rvSpeaker = $("remote-speaker-video");
+      if (!rvSpeaker) {
+        rvSpeaker = document.createElement("video");
+        rvSpeaker.id = "remote-speaker-video";
+        rvSpeaker.autoplay = true;
+        rvSpeaker.playsInline = true;
+        rvSpeaker.style.cssText = "position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;";
+        document.body.appendChild(rvSpeaker);
+      }
+
+      if (rvSpeaker.srcObject !== _remoteStream) {
+        rvSpeaker.srcObject = _remoteStream;
+        rvSpeaker.muted = false;
+        rvSpeaker.volume = 1.0;
+        rvSpeaker.play().catch(() => {});
+      }
+      console.log("[WebRTC] Loudspeaker mode active (via video element)");
+    } else {
+      // Earpiece Mode (play through audio tag)
+      const rvSpeaker = $("remote-speaker-video");
+      if (rvSpeaker) {
+        rvSpeaker.srcObject = null;
+        rvSpeaker.remove(); // Remove completely to avoid defaulting to loudspeaker
+      }
+
+      if (ra.srcObject !== _remoteStream) {
+        ra.srcObject = _remoteStream;
+      }
+      ra.volume = 1.0;
+      ra.play().catch(() => {});
+      console.log("[WebRTC] Earpiece mode active (via audio element)");
+    }
+  }
+
   function toggleSpeaker() {
     _speakerOn = !_speakerOn;
-    $("ac-speaker-btn")?.classList.toggle("ctrl-active", !_speakerOn);
+    $("ac-speaker-btn")?.classList.toggle("ctrl-active", _speakerOn);
     showToast(_speakerOn ? "Speaker on" : "Earpiece mode", "info");
+    _applyAudioRouting();
   }
 
   // ─── SWITCH VIDEO ↔ AUDIO ────────────────────────────────
