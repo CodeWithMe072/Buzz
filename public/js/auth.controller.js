@@ -130,11 +130,11 @@ async function fetchMedia(activeChat) {
   return { Data: res?.data, code: res?.status };
 }
 async function getVersion() {
-  const res = await apiRequest("GET", `/ api / version`);
+  const res = await apiRequest("GET", `/api/version`);
   return { Data: res?.data, code: res?.status };
 }
 async function getICETurn() {
-  const res = await apiRequest("GET", `/ api / webrtc / ice - servers`);
+  const res = await apiRequest("GET", `/api/webrtc/ice-servers`);
   return { Data: res?.data, code: res?.status };
 }
 
