@@ -138,7 +138,7 @@ export const getMedia = async (req, res) => {
       .sort({ createdAt: -1 })
       .select("tempId type content cover thumb caption fileName fileSize createdAt from");
 
-    res.json({ status: true, count: media.length, media });
+    res.json({ status: true, count: media.length, data: media });
 
   } catch (err) {
     console.error("[GetMedia]", err);

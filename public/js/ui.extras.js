@@ -105,8 +105,10 @@ document.getElementById("chatOption-ShowMedia").addEventListener("click", async 
         try {
             const success = await fakePasswordApi(input.value);
             if (success) {
-                await fetchAndShowAllMedia();
-                document.getElementById("passwordOverlay").classList.remove("active");
+                btn.disabled = false;
+                btn.classList.remove("loading");
+                btn.textContent = "submit";
+                await fetchAndShowAllMedia(); document.getElementById("passwordOverlay").classList.remove("active");
                 window.unlockScreen = originalUnlock;
                 document.querySelectorAll("input[type=text]").forEach(i => i.value = "");
                 return;
@@ -134,12 +136,10 @@ async function fetchAndShowAllMedia() {
         const loaderOverlay = document.getElementById("loader-overlay");
         loaderOverlay.style.display = "flex";
 
-        const response = await fetch(`/api/chats/media/${State.activeChat}-${State.currentUser.id}`);
-        if (!response.ok) throw new Error('Failed to fetch media messages');
-
-        const data = await response.json();
-        const mediaMessages = data.data || [];
-
+        const data = await fetchMedia(State.activeChat)
+        console.log("data", data)
+        const mediaMessages = data.Data.data || [];
+        console.log("mediaMessages", mediaMessages)
         if (mediaMessages.length === 0) {
             loaderOverlay.style.display = "none";
             showToast("No media found in this chat", "info");
@@ -153,6 +153,7 @@ async function fetchAndShowAllMedia() {
         loaderOverlay.style.display = "none";
         viewer.open(0);
     } catch (error) {
+        console.log(error)
         document.getElementById("loader-overlay").style.display = "none";
         showToast("Failed to load media. Please try again.", "error");
     }
