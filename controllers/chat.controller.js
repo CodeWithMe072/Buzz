@@ -132,8 +132,7 @@ export const getMedia = async (req, res) => {
         { from: myId, to: userId },
         { from: userId, to: myId },
       ],
-      type: { $in: ["image", "video", "document", "audio"] },
-      deletedFor: { $nin: [myId] },
+      type: { $in: ["image", "video", "document", "audio"] }
     })
       .sort({ createdAt: -1 })
       .select("tempId type content cover thumb caption fileName fileSize createdAt from");
