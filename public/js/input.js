@@ -13,9 +13,48 @@ function initChatWindow() {
     const backBtn = document.getElementById('back-btn');
     const cancelReplyBtn = document.getElementById('cancel-reply');
 
+    // Chat actions popup menu handling
+    const actionsBtn = document.getElementById('chat-actions-btn');
+    const actionsPopup = document.getElementById('chat-actions-popup');
+    
+    if (actionsBtn && actionsPopup) {
+        actionsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            actionsPopup.classList.toggle('active');
+        });
+
+        // Close when clicking any option inside the popup menu
+        actionsPopup.querySelectorAll('.action-menu-item').forEach(item => {
+            item.addEventListener('click', () => {
+                actionsPopup.classList.remove('active');
+            });
+        });
+
+        // Close popup when user clicks outside
+        document.addEventListener('click', (e) => {
+            if (!actionsPopup.contains(e.target) && e.target !== actionsBtn && !actionsBtn.contains(e.target)) {
+                actionsPopup.classList.remove('active');
+            }
+        });
+    }
+
     messageInput.addEventListener('input', () => {
         sendBtn.disabled = !messageInput.value.trim();
         if (messageInput.value.trim() && State.activeChat) handleTyping();
+    });
+
+    messageInput.addEventListener('focus', () => {
+        if (typeof window.updateInputContainerState === "function") {
+            window.updateInputContainerState();
+        }
+    });
+
+    messageInput.addEventListener('blur', () => {
+        setTimeout(() => {
+            if (typeof window.updateInputContainerState === "function") {
+                window.updateInputContainerState();
+            }
+        }, 80);
     });
 
     document.addEventListener("paste", async (e) => {
@@ -311,6 +350,11 @@ function initVoiceRecording() {
         sendBtn.style.display = "none";
         micBtn.style.display = "none";
         mediaBtn.style.display = "none";
+        const actionsBtn = document.getElementById("chat-actions-btn");
+        if (actionsBtn) actionsBtn.style.display = "none";
+        if (typeof window.updateInputContainerState === "function") {
+            window.updateInputContainerState();
+        }
 
         setupAudioVisualization(stream);
         updateRecordingTimer();
@@ -339,6 +383,11 @@ function initVoiceRecording() {
         sendBtn.style.display = "flex";
         micBtn.style.display = "flex";
         mediaBtn.style.display = "flex";
+        const actionsBtn = document.getElementById("chat-actions-btn");
+        if (actionsBtn) actionsBtn.style.display = "flex";
+        if (typeof window.updateInputContainerState === "function") {
+            window.updateInputContainerState();
+        }
 
         if (!mediaRecorder || mediaRecorder.state === "inactive") return;
 
@@ -508,3 +557,24 @@ async function uploadAudio(msgId, receiver, audioBlob) {
         delete UploadControllers[msgId];
     }
 }
+
+// Dynamic Safe Area Bottom Spacing based on chat input state
+function updateInputContainerState() {
+    const container = document.querySelector(".chat-input-container");
+    if (!container) return;
+
+    const messageInput = document.getElementById("message-input");
+    const emojiPanel = document.getElementById("custom-emoji-panel");
+    const voiceUI = document.getElementById("voiceRecordingUI");
+
+    const isInputFocused = document.activeElement === messageInput;
+    const isEmojiOpen = emojiPanel && emojiPanel.classList.contains("active");
+    const isVoiceActive = voiceUI && voiceUI.style.display === "flex";
+
+    if (isInputFocused || isEmojiOpen || isVoiceActive) {
+        container.classList.add("active-state");
+    } else {
+        container.classList.remove("active-state");
+    }
+}
+window.updateInputContainerState = updateInputContainerState;

@@ -34,19 +34,54 @@ const EmojiPanel = (() => {
     buildTabs();
     buildGrid();
 
+    const scrollToBottom = () => {
+      const container = document.getElementById("messages-container");
+      if (container) {
+        setTimeout(() => {
+          container.scrollTop = 99999;
+        }, 150); // delay to let layout transition complete
+      }
+    };
+
     // Toggle panel
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      panel.classList.toggle("active");
-      if (panel.classList.contains("active")) {
-        $("emoji-search-input").focus();
+      const isActive = panel.classList.toggle("active");
+      scrollToBottom();
+      if (typeof window.updateInputContainerState === "function") window.updateInputContainerState();
+      if (isActive) {
+        // Dismiss the virtual keyboard
+        const activeInput = document.activeElement;
+        if (activeInput && (activeInput.tagName === "INPUT" || activeInput.tagName === "TEXTAREA")) {
+          activeInput.blur();
+        }
+      } else {
+        // Refocus message input to show keyboard
+        const input = $("message-input");
+        if (input) input.focus();
       }
     });
 
-    // Close on click outside
+    // Close panel when clicking the input field to type
+    const messageInput = $("message-input");
+    if (messageInput) {
+      messageInput.addEventListener("click", () => {
+        if (panel.classList.contains("active")) {
+          panel.classList.remove("active");
+          scrollToBottom();
+          if (typeof window.updateInputContainerState === "function") window.updateInputContainerState();
+        }
+      });
+    }
+
+    // Close on click outside (but not on input or panel elements)
     document.addEventListener("click", (e) => {
-      if (!panel.contains(e.target) && e.target !== btn && !e.target.closest("#emoji-panel-btn")) {
-        panel.classList.remove("active");
+      if (!panel.contains(e.target) && e.target !== btn && !e.target.closest("#emoji-panel-btn") && e.target !== messageInput) {
+        if (panel.classList.contains("active")) {
+          panel.classList.remove("active");
+          scrollToBottom();
+          if (typeof window.updateInputContainerState === "function") window.updateInputContainerState();
+        }
       }
     });
 
@@ -190,7 +225,12 @@ const EmojiPanel = (() => {
     const after = text.substring(end);
     input.value = before + emoji + after;
     input.selectionStart = input.selectionEnd = start + emoji.length;
-    input.focus();
+
+    // Do not focus on mobile/touch devices to avoid popping up the system keyboard
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    if (!isTouchDevice) {
+      input.focus();
+    }
 
     // Trigger input event to enable send button
     input.dispatchEvent(new Event('input', { bubbles: true }));
