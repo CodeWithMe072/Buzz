@@ -98,8 +98,8 @@ function openChat(chatId) {
   document.getElementById("chat-avatar").innerHTML = `<span>${conv.avatar}</span>`;
   document.getElementById("chat-username").textContent = conv.username;
 
-  const statusEl  = document.getElementById("online-status");
-  const lastseen  = formatTime(new Date(conv.lastSeen).getTime());
+  const statusEl = document.getElementById("online-status");
+  const lastseen = formatTime(new Date(conv.lastSeen).getTime());
   statusEl.textContent = conv.online
     ? "Active now"
     : `${lastseen === "Just now" ? "Just now" : "Last seen " + lastseen + " ago"}`;
@@ -172,13 +172,17 @@ function renderMessages(chatId) {
 
 function attactEventOnMedia() {
   document.querySelectorAll(".message-media").forEach(media => {
-    const clean = media.cloneNode(true);
-    media.replaceWith(clean);
-    clean.addEventListener("click", () => {
-      const msgEl = clean.closest(".message");
+    if (media.dataset.listenerAttached === "true") return;
+    media.dataset.listenerAttached = "true";
+    media.addEventListener("click", () => {
+      const msgEl = media.closest(".message");
       if (!msgEl) return;
-      const index = viewer.getIndexByMessageId(msgEl.dataset.messageId);
-      if (index !== -1) viewer.open(index);
+      if (!viewer && State.activeChat) {
+        viewer = new MediaViewer(State.activeChat);
+      }
+      if (viewer) {
+        viewer.open(msgEl.dataset.messageId);
+      }
     });
   });
 }
@@ -194,7 +198,7 @@ function playVideoInline(mediaContainer, videoUrl) {
   video.style.cssText = "width:100%;height:100%;border-radius:inherit;";
   mediaContainer.appendChild(video);
   mediaContainer.onclick = null;
-  video.play().catch(() => {});
+  video.play().catch(() => { });
 }
 
 // =============================================================================
@@ -220,9 +224,9 @@ function getStatusIconHTML(status) {
 // CREATE MESSAGE ELEMENT
 // =============================================================================
 function createMessageElement(message) {
-  const isMe  = message.sender === "me" || message.user?.toString() === State.currentUser.id?.toString();
+  const isMe = message.sender === "me" || message.user?.toString() === State.currentUser.id?.toString();
   const msgEl = document.createElement("div");
-  msgEl.className         = `message ${isMe ? "self" : "other"}`;
+  msgEl.className = `message ${isMe ? "self" : "other"}`;
   msgEl.dataset.messageId = message.id || message.tempId;
 
   const bubbleEl = document.createElement("div");
@@ -231,11 +235,18 @@ function createMessageElement(message) {
   // Reply preview
   let replyHTML = "";
   if (message.replyTo) {
-    const replyMsg = Object.values(State.messages).flat().find(
-      m => (m.id || m.tempId) === message.replyTo
+    const replyMsg = State.messages[State.activeChat].find(
+      m => m.id === message.replyTo || m.tempId === message.replyTo
     );
+    console.log(State.messages[State.activeChat])
+    console.log(message.replyTo)
+    console.log(replyMsg)
     const replyText = replyMsg
-      ? (replyMsg.type === "text" ? replyMsg.content : "📷 " + replyMsg.type)
+      ? (replyMsg.type === "text"
+        ? (replyMsg.content.length > 50
+          ? replyMsg.content.slice(0, 50) + "..."
+          : replyMsg.content)
+        : "📷 " + replyMsg.type)
       : "Original message";
     replyHTML = `<div class="message-reply-preview"><div class="reply-text">${sanitizeInput(replyText)}</div></div>`;
   }
@@ -289,20 +300,20 @@ function createMessageElement(message) {
     bubbleEl.appendChild(footer);
 
   } else if (message.type === "call") {
-    const callType   = message.callType  || "audio";
+    const callType = message.callType || "audio";
     const callStatus = message.callStatus || "missed";
-    const icon       = callType === "video" ? "📹" : "📞";
-    const expiresAt  = message.callExpiresAt ? new Date(message.callExpiresAt) : null;
-    const isExpired  = expiresAt && expiresAt < new Date();
-    const isActive   = callStatus === "active" && !isExpired;
-    const isMe       = message.sender === "me" || message.user?.toString() === State.currentUser?.id?.toString();
+    const icon = callType === "video" ? "📹" : "📞";
+    const expiresAt = message.callExpiresAt ? new Date(message.callExpiresAt) : null;
+    const isExpired = expiresAt && expiresAt < new Date();
+    const isActive = callStatus === "active" && !isExpired;
+    const isMe = message.sender === "me" || message.user?.toString() === State.currentUser?.id?.toString();
 
     let statusLabel = "";
-    if (callStatus === "missed")   statusLabel = "Missed call";
+    if (callStatus === "missed") statusLabel = "Missed call";
     if (callStatus === "declined") statusLabel = "Declined";
-    if (callStatus === "ended")    statusLabel = message.callDuration > 0 ? `${String(Math.floor(message.callDuration/60)).padStart(2,"0")}:${String(message.callDuration%60).padStart(2,"0")}` : "Call ended";
+    if (callStatus === "ended") statusLabel = message.callDuration > 0 ? `${String(Math.floor(message.callDuration / 60)).padStart(2, "0")}:${String(message.callDuration % 60).padStart(2, "0")}` : "Call ended";
     if (callStatus === "active" && !isExpired) statusLabel = "Tap to join";
-    if (callStatus === "active" && isExpired)  statusLabel = isMe ? "No answer" : "Missed call";
+    if (callStatus === "active" && isExpired) statusLabel = isMe ? "No answer" : "Missed call";
 
     bubbleEl.innerHTML = `
       <div class="call-message ${isActive && !isMe ? "joinable" : ""}" 
@@ -331,9 +342,9 @@ function createMessageElement(message) {
 
         // If not already in the call, allow joining if it's active
         if (isActive && !isMe) {
-          const roomId  = msgDiv.dataset.roomId;
-          const peerId  = msgDiv.dataset.peerId || message.user;
-          const cType   = msgDiv.dataset.callType;
+          const roomId = msgDiv.dataset.roomId;
+          const peerId = msgDiv.dataset.peerId || message.user;
+          const cType = msgDiv.dataset.callType;
           CallManager.rejoin(roomId, peerId, cType);
         }
       });
@@ -341,9 +352,9 @@ function createMessageElement(message) {
       const joinBtn = bubbleEl.querySelector(".call-msg-join-btn");
       joinBtn?.addEventListener("click", (e) => {
         e.stopPropagation();
-        const roomId  = msgDiv.dataset.roomId;
-        const peerId  = msgDiv.dataset.peerId || message.user;
-        const cType   = msgDiv.dataset.callType;
+        const roomId = msgDiv.dataset.roomId;
+        const peerId = msgDiv.dataset.peerId || message.user;
+        const cType = msgDiv.dataset.callType;
         CallManager.rejoin(roomId, peerId, cType);
       });
     }, 0);
@@ -360,8 +371,8 @@ function createMessageElement(message) {
           <span class="doc-meta">${message.fileSize ? formatFileSize(message.fileSize) : ""}</span>
         </div>
         ${isUploading
-          ? `<div class="media-overlay"><div class="loader"></div></div>`
-          : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName||"document"}')">Save</button>` : ""}</div>`}
+        ? `<div class="media-overlay"><div class="loader"></div></div>`
+        : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName || "document"}')">Save</button>` : ""}</div>`}
       </div>
       ${footerHTML}`;
   }
@@ -440,8 +451,10 @@ function createMessageElement(message) {
     if (targetMedia && duration < 500 && !isRecording && !State.isSwiping) {
       e.preventDefault();
       e.stopPropagation();
-      const index = viewer.getIndexByMessageId(msgEl.dataset.messageId);
-      if (index !== -1) viewer.open(index);
+      if (!viewer && State.activeChat) {
+        viewer = new MediaViewer(State.activeChat);
+      }
+      if (viewer) viewer.open(msgEl.dataset.messageId);
     }
   }, { passive: false });
 
@@ -512,9 +525,9 @@ function showMessageOptions(message, msgEl, event) {
 
   // Measure after append
   const popupRect = popup.getBoundingClientRect();
-  const msgRect   = msgEl.getBoundingClientRect();
-  const contRect  = container.getBoundingClientRect();
-  const popW = popupRect.width  || 240;
+  const msgRect = msgEl.getBoundingClientRect();
+  const contRect = container.getBoundingClientRect();
+  const popW = popupRect.width || 240;
   const popH = popupRect.height || 90;
 
   // Vertical: prefer above the message, flip below if not enough space
@@ -525,12 +538,12 @@ function showMessageOptions(message, msgEl, event) {
 
   // Horizontal: align to message side
   let left = isMe
-    ? msgRect.right  - contRect.left - popW        // right-align for sent
-    : msgRect.left   - contRect.left;               // left-align for received
+    ? msgRect.right - contRect.left - popW        // right-align for sent
+    : msgRect.left - contRect.left;               // left-align for received
   left = Math.max(4, Math.min(left, contRect.width - popW - 4));
 
   popup.style.position = "absolute";
-  popup.style.top  = `${top}px`;
+  popup.style.top = `${top}px`;
   popup.style.left = `${left}px`;
 
   // ── Close on outside click — use setTimeout to skip current event ──
@@ -538,11 +551,11 @@ function showMessageOptions(message, msgEl, event) {
     const close = (e) => {
       if (!popup.contains(e.target)) {
         popup.remove();
-        document.removeEventListener("click",      close, true);
+        document.removeEventListener("click", close, true);
         document.removeEventListener("touchstart", close, true);
       }
     };
-    document.addEventListener("click",      close, true);
+    document.addEventListener("click", close, true);
     document.addEventListener("touchstart", close, true);
   }, 150);
 }
@@ -558,15 +571,15 @@ function sendMessage() {
   const tempId = generateId();
   const message = {
     tempId,
-    id:        tempId,
-    type:      "text",
+    id: tempId,
+    type: "text",
     content,
-    sender:    "me",
-    user:      State.currentUser.id,
+    sender: "me",
+    user: State.currentUser.id,
     timestamp: Date.now(),
-    replyTo:   State.replyingTo || null,
+    replyTo: State.replyingTo || null,
     reactions: {},
-    status:    { sent: false, delivered: false, seen: false },
+    status: { sent: false, delivered: false, seen: false },
   };
 
   if (!State.messages[State.activeChat]) State.messages[State.activeChat] = [];
@@ -615,7 +628,7 @@ function handleTyping() {
 // =============================================================================
 function initMobileNavigation() {
   if (window.innerWidth >= 768) return;
-  const chatWindow   = document.getElementById("chat-window");
+  const chatWindow = document.getElementById("chat-window");
   let startX = 0;
   chatWindow.addEventListener("touchstart", e => { startX = e.changedTouches[0].screenX; }, { passive: true });
   chatWindow.addEventListener("touchend", e => {
