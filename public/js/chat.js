@@ -339,10 +339,16 @@ function createMessageElement(message) {
       ${footerHTML}`;
 
   } else if (message.type === "gif") {
+    const urlLower = (message.content || "").toLowerCase();
+    const isVideo = urlLower.endsWith(".mp4") || urlLower.endsWith(".m4v") || urlLower.endsWith(".m4bb");
+    const mediaHTML = isVideo
+      ? `<video src="${message.content}" muted autoplay loop playsinline style="width: 100%; height: 100%; border-radius: inherit; object-fit: cover; display: block;"></video>`
+      : `<img src="${message.content}" alt="GIF" loading="lazy">`;
+
     bubbleEl.innerHTML = `
       ${replyHTML}
       <div class="message-media gif-media">
-        <img src="${message.content}" alt="GIF" loading="lazy">
+        ${mediaHTML}
       </div>
       ${footerHTML}`;
 

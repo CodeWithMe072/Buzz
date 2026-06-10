@@ -1083,7 +1083,13 @@ const EmojiPanel = (() => {
       const btn = document.createElement("button");
       btn.className = "gif-item-btn";
       btn.type = "button";
-      btn.innerHTML = `<img src="${gif.url}" alt="GIF" loading="lazy">`;
+      const urlLower = (gif.url || "").toLowerCase();
+      const isVideo = urlLower.endsWith(".mp4") || urlLower.endsWith(".m4v") || urlLower.endsWith(".m4bb");
+      if (isVideo) {
+        btn.innerHTML = `<video src="${gif.url}" muted autoplay loop playsinline style="width: 100%; height: 100%; object-fit: cover; pointer-events: none;"></video>`;
+      } else {
+        btn.innerHTML = `<img src="${gif.url}" alt="GIF" loading="lazy">`;
+      }
       btn.addEventListener("click", () => sendSpecialTypeMessage("gif", gif.url));
       container.appendChild(btn);
     });

@@ -212,13 +212,17 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
                         const fullPath = path.join(dir, entry.name);
                         if (entry.isDirectory()) {
                             await findGifs(fullPath);
-                        } else if (entry.isFile() && (path.extname(entry.name).toLowerCase() === ".gif" || path.extname(entry.name).toLowerCase() === ".webp")) {
+                        } else if (entry.isFile() && [".gif", ".webp", ".m4v", ".m4bb", ".mp4"].includes(path.extname(entry.name).toLowerCase())) {
                             const safeSection = section.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase() || "user_gifs";
                             const safeFileName = entry.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
                             const key = `custom_gifs/${req.user._id}/${safeSection}/${Date.now()}-${crypto.randomUUID().substring(0, 8)}-${safeFileName}`;
 
                             const ext = path.extname(entry.name).toLowerCase();
-                            const mimeType = ext === ".webp" ? "image/webp" : "image/gif";
+                            let mimeType = "image/gif";
+                            if (ext === ".webp") mimeType = "image/webp";
+                            else if (ext === ".m4v") mimeType = "video/x-m4v";
+                            else if (ext === ".m4bb" || ext === ".mp4") mimeType = "video/mp4";
+
                             const url = await uploadToR2(fullPath, key, mimeType);
                             
                             const customGif = new CustomGif({
@@ -240,7 +244,7 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
                 await fse.remove(extractTempDir).catch(() => {});
 
                 if (uploadedGifs.length === 0) {
-                    return res.status(400).json({ error: "No GIF or WEBP files found inside the ZIP archive." });
+                    return res.status(400).json({ error: "No GIF, WEBP or Video files found inside the ZIP archive." });
                 }
 
                 return res.json({ status: true, isZip: true, count: uploadedGifs.length, data: uploadedGifs });
