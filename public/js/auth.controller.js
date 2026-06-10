@@ -137,6 +137,15 @@ async function getICETurn() {
   const res = await apiRequest("GET", `/api/webrtc/ice-servers`);
   return { Data: res?.data, code: res?.status };
 }
+async function getGifs() {
+  const res = await apiRequest("GET", `/api/gifs/trending`);
+  console.log(res)
+  return { Data: res?.data, code: res?.status };
+}
+async function getSearchGif(query) {
+  const res = await apiRequest("GET", `/api/gifs/search?q=${encodeURIComponent(query)}`);
+  return { Data: res?.data, code: res?.status };
+}
 
 // ─── Expose TokenStore globally for auth.js to use ───────────
 window.TokenStore = TokenStore;

@@ -92,6 +92,10 @@ async function bootstrapAfterLogin() {
   if (typeof CallManager !== "undefined") CallManager.wireSocket(socket);
   NetworkMonitor.isSocketConnected = socket.connected;
   renderChatList();
+
+  if (typeof EmojiPanel !== "undefined" && EmojiPanel.loadCustomGifsAndTrending) {
+    EmojiPanel.loadCustomGifsAndTrending();
+  }
 }
 
 // =============================================================================

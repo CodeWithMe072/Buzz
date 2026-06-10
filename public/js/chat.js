@@ -287,7 +287,7 @@ function createMessageElement(message) {
     if (emojiChar) {
       isEmojiOnly = true;
       animationClass = getEmojiAnimationClass(emojiChar);
-      bubbleEl.classList.add("emoji-only-bubble");
+      bubbleEl.classList.add("emoji-bubble");
     }
   }
 
@@ -328,6 +328,23 @@ function createMessageElement(message) {
         ${footerHTML}
         ${message.uploadStatus === "failed" ? `<div class="upload-fail-badge">Failed to send</div>` : ""}`;
     }
+
+  } else if (message.type === "sticker") {
+    bubbleEl.classList.add("sticker-bubble");
+    bubbleEl.innerHTML = `
+      ${replyHTML}
+      <div class="message-sticker">
+        <img src="${message.content}" alt="Sticker" loading="lazy">
+      </div>
+      ${footerHTML}`;
+
+  } else if (message.type === "gif") {
+    bubbleEl.innerHTML = `
+      ${replyHTML}
+      <div class="message-media gif-media">
+        <img src="${message.content}" alt="GIF" loading="lazy">
+      </div>
+      ${footerHTML}`;
 
   } else if (message.type === "image") {
     const src = message.cover || message.thumb || message.content;

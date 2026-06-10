@@ -618,11 +618,37 @@
                                 </button>
                             </div>
                             <div class="custom-emoji-panel" id="custom-emoji-panel">
-                                <div class="emoji-search-container">
+                                <!-- Top Navigation Tabs -->
+                                <div class="emoji-panel-nav" id="emoji-panel-nav">
+                                    <button type="button" class="panel-nav-btn active" data-panel-tab="emojis">😃 Emojis</button>
+                                    <button type="button" class="panel-nav-btn" data-panel-tab="stickers">🖼️ Stickers</button>
+                                    <button type="button" class="panel-nav-btn" data-panel-tab="gifs">🎬 GIFs</button>
+                                </div>
+
+                                <div class="emoji-search-container" id="emoji-search-container">
                                     <input type="text" id="emoji-search-input" placeholder="Search emojis..." autocomplete="off">
                                 </div>
-                                <div class="emoji-categories-tabs" id="emoji-categories-tabs"></div>
-                                <div class="emoji-grid-container" id="emoji-grid-container"></div>
+
+                                <!-- Emojis Container -->
+                                <div class="emoji-tab-content active" id="emoji-tab-content-emojis">
+                                    <div class="emoji-categories-tabs" id="emoji-categories-tabs"></div>
+                                    <div class="emoji-grid-container" id="emoji-grid-container"></div>
+                                </div>
+
+                                <!-- Stickers Container -->
+                                <div class="emoji-tab-content" id="emoji-tab-content-stickers" style="display: none;">
+                                    <div class="sticker-grid-container" id="sticker-grid-container"></div>
+                                </div>
+
+                                <!-- GIFs Container (Giphy) -->
+                                <div class="emoji-tab-content" id="emoji-tab-content-gifs" style="display: none;">
+                                    <div class="gif-grid-container" id="gif-grid-container"></div>
+                                </div>
+
+                                <!-- Custom Section Container -->
+                                <div class="emoji-tab-content" id="emoji-tab-content-custom-section" style="display: none;">
+                                    <div class="gif-grid-container" id="custom-section-grid-container"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -642,6 +668,39 @@
                     </button>
                 </div>
                 <div class="emoji-grid" id="emoji-grid"></div>
+            </div>
+        </div>
+
+        <!-- Custom GIF/ZIP Upload Modal -->
+        <div class="modal-overlay" id="custom-gif-upload-modal" style="display:none;">
+            <div class="emoji-picker" style="max-width: 400px; padding: 20px;">
+                <div class="emoji-header">
+                    <h3>Create Custom GIF Section</h3>
+                    <button class="icon-btn" id="close-gif-upload-modal">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="15" y1="5" x2="5" y2="15"/><line x1="5" y1="5" x2="15" y2="15"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="custom-gif-upload-panel" style="margin-top: 15px;">
+                    <div style="margin-bottom: 15px;">
+                        <label for="custom-gif-section-input" style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">Section Name</label>
+                        <input type="text" id="custom-gif-section-input" placeholder="e.g. Reactions" autocomplete="off" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); color: var(--text-primary);">
+                    </div>
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">Select GIF or ZIP containing GIFs</label>
+                        <div class="custom-gif-upload-row" style="display: flex; flex-direction: column; gap: 10px;">
+                            <input type="file" id="custom-gif-file-input" accept="image/gif,image/webp,application/zip,application/x-zip-compressed" style="display: none;">
+                            <button type="button" class="custom-gif-btn select-btn" id="custom-gif-select-btn" style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.1); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">
+                                Select File (.gif, .webp or .zip)
+                            </button>
+                            <span class="custom-gif-file-name" id="custom-gif-file-name" style="font-size: 12px; color: var(--text-secondary); text-align: center; display: block; word-break: break-all;">No file chosen</span>
+                        </div>
+                    </div>
+                    <button type="button" class="custom-gif-btn upload-btn" id="custom-gif-upload-btn" disabled style="width: 100%; padding: 12px; border-radius: 8px; background: var(--accent-blue); border: none; color: white; font-weight: bold; cursor: pointer;">
+                         Upload
+                    </button>
+                </div>
             </div>
         </div>
 

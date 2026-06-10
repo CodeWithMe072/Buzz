@@ -7,6 +7,8 @@ import path from "path";
 import os from "os";
 import crypto from "crypto";
 import { protect } from "../middleware/auth.middleware.js";
+import { CustomGif } from "../models/customGif.model.js";
+import AdmZip from "adm-zip";
 
 const router = express.Router();
 
@@ -176,6 +178,114 @@ router.post("/api/upload", protect, diskUpload.single("file"), async (req, res) 
     }
 }
 );
+
+// =============================================================================
+// Upload Custom GIF
+// =============================================================================
+router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: "No file uploaded" });
+        }
+        const section = req.body.section ? req.body.section.trim() : "My GIFs";
+        if (!section) {
+            return res.status(400).json({ error: "Section name is required" });
+        }
+
+        const isZip = req.file.mimetype === "application/zip" || 
+                      req.file.mimetype === "application/x-zip-compressed" || 
+                      path.extname(req.file.originalname).toLowerCase() === ".zip";
+
+        if (isZip) {
+            const zipPath = req.file.path;
+            const extractTempDir = path.join(os.tmpdir(), `extract_${Date.now()}_${crypto.randomUUID()}`);
+            await fse.ensureDir(extractTempDir);
+
+            try {
+                const zip = new AdmZip(zipPath);
+                zip.extractAllTo(extractTempDir, true);
+
+                const uploadedGifs = [];
+                const findGifs = async (dir) => {
+                    const entries = await fse.readdir(dir, { withFileTypes: true });
+                    for (const entry of entries) {
+                        const fullPath = path.join(dir, entry.name);
+                        if (entry.isDirectory()) {
+                            await findGifs(fullPath);
+                        } else if (entry.isFile() && (path.extname(entry.name).toLowerCase() === ".gif" || path.extname(entry.name).toLowerCase() === ".webp")) {
+                            const safeSection = section.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase() || "user_gifs";
+                            const safeFileName = entry.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+                            const key = `custom_gifs/${req.user._id}/${safeSection}/${Date.now()}-${crypto.randomUUID().substring(0, 8)}-${safeFileName}`;
+
+                            const ext = path.extname(entry.name).toLowerCase();
+                            const mimeType = ext === ".webp" ? "image/webp" : "image/gif";
+                            const url = await uploadToR2(fullPath, key, mimeType);
+                            
+                            const customGif = new CustomGif({
+                                user: req.user._id,
+                                section: section,
+                                url: url,
+                                fileName: entry.name
+                            });
+                            await customGif.save();
+                            uploadedGifs.push(customGif);
+                        }
+                    }
+                };
+
+                await findGifs(extractTempDir);
+
+                // Clean up temp extracted files and zip file
+                await fse.remove(zipPath).catch(() => {});
+                await fse.remove(extractTempDir).catch(() => {});
+
+                if (uploadedGifs.length === 0) {
+                    return res.status(400).json({ error: "No GIF or WEBP files found inside the ZIP archive." });
+                }
+
+                return res.json({ status: true, isZip: true, count: uploadedGifs.length, data: uploadedGifs });
+            } catch (zipErr) {
+                console.error("[gifs/upload] ZIP extraction error:", zipErr);
+                await fse.remove(zipPath).catch(() => {});
+                await fse.remove(extractTempDir).catch(() => {});
+                return res.status(500).json({ error: "Failed to extract or process ZIP archive." });
+            }
+        } else {
+            const safeSection = section.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase() || "user_gifs";
+            const safeFileName = path.basename(req.file.originalname).replace(/[^a-zA-Z0-9_.-]/g, "_");
+            const key = `custom_gifs/${req.user._id}/${safeSection}/${Date.now()}-${safeFileName}`;
+
+            const url = await uploadToR2(req.file.path, key, req.file.mimetype);
+            await fse.remove(req.file.path).catch(() => {});
+
+            const customGif = new CustomGif({
+                user: req.user._id,
+                section: section,
+                url: url,
+                fileName: req.file.originalname
+            });
+            await customGif.save();
+
+            res.json({ status: true, data: customGif });
+        }
+    } catch (err) {
+        console.error("[gifs/upload] error:", err);
+        if (req.file && req.file.path) {
+            await fse.remove(req.file.path).catch(() => {});
+        }
+        res.status(500).json({ error: "Failed to upload GIF" });
+    }
+});
+
+router.get("/api/gifs/custom", protect, async (req, res) => {
+    try {
+        const gifs = await CustomGif.find({ user: req.user._id }).sort({ createdAt: -1 });
+        res.json({ status: true, data: gifs });
+    } catch (err) {
+        console.error("[gifs/custom] error:", err);
+        res.status(500).json({ error: "Failed to fetch custom GIFs" });
+    }
+});
 
 // =============================================================================
 // Upload Chunk
