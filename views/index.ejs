@@ -285,55 +285,7 @@
     </div>
     <div id="chat-container">
 
-        <!-- ═══ PEOPLE PANEL (slide-in from left) ═══ -->
-        <div class="people-panel" id="people-panel">
-            <div class="people-panel-header">
-                <h2>People</h2>
-                <button class="icon-btn" id="people-close-btn">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Search input -->
-            <div class="people-search-box">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" id="people-search-input" placeholder="Search people by username...">
-            </div>
-
-            <!-- Search results -->
-            <div id="people-search-results"></div>
-
-            <!-- Tabs -->
-            <div class="people-tabs">
-                <button class="people-tab active" data-tab="search">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    Discover
-                </button>
-                <button class="people-tab" data-tab="pending">
-                    Requests
-                    <span class="tab-badge" id="tab-pending-badge"></span>
-                </button>
-                <button class="people-tab" data-tab="contacts">Contacts</button>
-                <button class="people-tab" data-tab="logs">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                        <circle cx="12" cy="13" r="4"/>
-                    </svg>
-                    Logs
-                </button>
-                <button class="people-tab" data-tab="profile">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                        <circle cx="12" cy="7" r="4"/>
-                    </svg>
-                    Profile
-                </button>
-            </div>
-
-            <div id="people-tab-content"></div>
-        </div>
+        <!-- Sidebar removed (now opens in modal) -->
 
         <!-- Media Viewer Overlay -->
         <div class="media-viewer-overlay" id="mediaViewer">
@@ -445,21 +397,12 @@
                         </div>
                         <div class="header-actions">
                             <!-- Add People Button with badge -->
-                            <button class="icon-btn people-btn" id="add-people-btn" title="Find &amp; add people">
+                            <button class="icon-btn people-btn" id="add-people-btn" title="Account & People Hub">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                                    <circle cx="9" cy="7" r="4"/>
-                                    <line x1="19" y1="8" x2="19" y2="14"/>
-                                    <line x1="22" y1="11" x2="16" y2="11"/>
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="12" cy="7" r="4"/>
                                 </svg>
                                 <span class="requests-badge" id="requests-badge" style="display:none">0</span>
-                            </button>
-                            <button class="icon-btn" id="logout-btn" title="Logout">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                                    <polyline points="16 17 21 12 16 7"/>
-                                    <line x1="21" y1="12" x2="9" y2="12"/>
-                                </svg>
                             </button>
                         </div>
                     </div>
@@ -720,6 +663,85 @@
 
         <!-- Toast -->
         <div class="toast-container" id="toast-container"></div>
+
+        <!-- Profile Modal (Account Hub) -->
+        <!-- Unified Account & People Modal -->
+        <div class="profile-modal-overlay" id="profile-modal" style="display: none;">
+            <div class="profile-modal-container animate-scale">
+                <button class="profile-modal-close-btn" id="profile-modal-close-btn">&times;</button>
+                <div class="profile-modal-layout">
+                    <!-- Left Sidebar Navigation -->
+                    <div class="profile-modal-sidebar">
+                        <div class="profile-modal-avatar-wrap">
+                            <div class="profile-modal-avatar-ring"></div>
+                            <div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter">U</div>
+                        </div>
+                        <h3 class="profile-modal-username" id="profile-modal-username">Username</h3>
+                        <p class="profile-modal-email" id="profile-modal-email">email@example.com</p>
+                        
+                        <div class="profile-modal-nav">
+                            <button class="profile-nav-btn active" data-section="search">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
+                                Discover
+                            </button>
+                            <button class="profile-nav-btn" data-section="pending">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                                </svg>
+                                Requests
+                                <span class="tab-badge" id="modal-pending-badge"></span>
+                            </button>
+                            <button class="profile-nav-btn" data-section="contacts">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                </svg>
+                                Contacts
+                            </button>
+                            <button class="profile-nav-btn" data-section="moments">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                                </svg>
+                                Moments
+                                <span class="tab-badge" id="modal-moments-badge"></span>
+                            </button>
+                            <button class="profile-nav-btn" data-section="account">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                                </svg>
+                                Account Settings
+                            </button>
+                            <button class="profile-nav-btn" data-section="whitelist">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                                </svg>
+                                Moments Whitelist
+                            </button>
+                            <button class="profile-nav-btn" data-section="logs">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+                                </svg>
+                                Security Logs
+                            </button>
+                        </div>
+
+                        <button class="profile-modal-logout-btn" id="profile-modal-logout-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+                            </svg>
+                            Logout
+                        </button>
+                    </div>
+
+                    <!-- Right Panel Content Area -->
+                    <div class="profile-modal-content-wrapper" id="people-tab-content">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Loader -->
         <div class="loader-overlay" id="loader-overlay">

@@ -154,3 +154,19 @@ async function getSearchGif(query) {
 
 // ─── Expose TokenStore globally for auth.js to use ───────────
 window.TokenStore = TokenStore;
+
+async function uploadMomentPhoto(image) {
+  const res = await apiRequest("POST", "/auth/profile/moments", { image });
+  return { Data: res?.data, code: res?.status };
+}
+
+async function getFriendMoments(friendId) {
+  const res = await apiRequest("GET", `/connections/moments/${friendId}`);
+  return { Data: res?.data, code: res?.status };
+}
+
+async function getAllFriendsMoments() {
+  const res = await apiRequest("GET", "/connections/moments");
+  return { Data: res?.data, code: res?.status };
+}
+

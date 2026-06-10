@@ -22,7 +22,10 @@ function showChatScreen() {
 function initChatList() {
   // Conversations are already built from contacts in auth.js bootstrapAfterLogin
   renderChatList();
-  document.getElementById("logout-btn").addEventListener("click", logout);
+  const logoutBtn = document.getElementById("logout-btn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", logout);
+  }
 
   // Search bar filter
   const searchInput = document.getElementById("chat-search");
@@ -95,7 +98,31 @@ function openChat(chatId) {
   messageInput.value = "";
   messageInput.focus();
 
-  document.getElementById("chat-avatar").innerHTML = `<span>${conv.avatar}</span>`;
+  const avatarEl = document.getElementById("chat-avatar");
+  avatarEl.innerHTML = `<span>${conv.avatar}</span>`;
+  avatarEl.className = "avatar"; // Reset classes
+  
+  // Clone element to reset previous click listeners
+  const newAvatarEl = avatarEl.cloneNode(true);
+  avatarEl.parentNode.replaceChild(newAvatarEl, avatarEl);
+
+  newAvatarEl.addEventListener("click", () => {
+    if (newAvatarEl.classList.contains("has-moments")) {
+      openMomentsCarousel(chatId);
+    }
+  });
+
+  // Query and cache friend's moments
+  if (typeof getFriendMoments === "function") {
+    getFriendMoments(chatId).then(res => {
+      if (res.code === 200 && res.Data?.moments?.length) {
+        if (!State.friendMoments) State.friendMoments = {};
+        State.friendMoments[chatId] = res.Data.moments;
+        newAvatarEl.classList.add("has-moments");
+      }
+    }).catch(() => {});
+  }
+
   document.getElementById("chat-username").textContent = conv.username;
 
   const statusEl = document.getElementById("online-status");
@@ -729,4 +756,84 @@ function initMobileNavigation() {
       State.activeChat = null;
     }
   }, { passive: true });
+}
+
+function openMomentsCarousel(friendId) {
+  const moments = State.friendMoments[friendId] || [];
+  if (!moments.length) return;
+
+  const lightbox = document.createElement("div");
+  lightbox.className = "moments-lightbox";
+  lightbox.innerHTML = `
+    <div class="moments-lightbox-close">&times;</div>
+    <div class="moments-carousel-container animate-scale">
+      <div class="moments-carousel-track">
+        <!-- Slides -->
+      </div>
+      <button class="carousel-btn prev-btn">&lt;</button>
+      <button class="carousel-btn next-btn">&gt;</button>
+    </div>
+    <div class="moments-carousel-dots"></div>
+  `;
+
+  const track = lightbox.querySelector(".moments-carousel-track");
+  const dotsContainer = lightbox.querySelector(".moments-carousel-dots");
+
+  moments.forEach((m, idx) => {
+    const slide = document.createElement("div");
+    slide.className = "moments-slide";
+    const dateStr = formatTime(new Date(m.createdAt).getTime());
+    slide.innerHTML = `
+      <img src="${m.url}" alt="Moment Snapshot" class="moment-carousel-img">
+      <div class="moment-slide-time">${dateStr}</div>
+    `;
+    track.appendChild(slide);
+
+    const dot = document.createElement("div");
+    dot.className = `carousel-dot ${idx === 0 ? "active" : ""}`;
+    dot.dataset.index = idx;
+    dotsContainer.appendChild(dot);
+  });
+
+  let currentIdx = 0;
+  const slides = moments.length;
+
+  const updateSlide = () => {
+    track.style.transform = `translateX(-${currentIdx * 100}%)`;
+    lightbox.querySelectorAll(".carousel-dot").forEach((d, idx) => {
+      d.classList.toggle("active", idx === currentIdx);
+    });
+  };
+
+  lightbox.querySelector(".prev-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    currentIdx = (currentIdx - 1 + slides) % slides;
+    updateSlide();
+  });
+
+  lightbox.querySelector(".next-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    currentIdx = (currentIdx + 1) % slides;
+    updateSlide();
+  });
+
+  lightbox.querySelectorAll(".carousel-dot").forEach(dot => {
+    dot.addEventListener("click", (e) => {
+      e.stopPropagation();
+      currentIdx = parseInt(e.target.dataset.index);
+      updateSlide();
+    });
+  });
+
+  const close = () => {
+    lightbox.classList.remove("active");
+    setTimeout(() => lightbox.remove(), 300);
+  };
+
+  lightbox.querySelector(".moments-lightbox-close").addEventListener("click", close);
+  lightbox.addEventListener("click", close);
+  lightbox.querySelector(".moments-carousel-container").addEventListener("click", e => e.stopPropagation());
+
+  document.body.appendChild(lightbox);
+  setTimeout(() => lightbox.classList.add("active"), 10);
 }

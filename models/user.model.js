@@ -68,6 +68,26 @@ const userSchema = new mongoose.Schema(
         createdAt: { type: Date, default: Date.now },
       }
     ],
+    randomSnapshotEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    randomSnapshotAllowedFriends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      }
+    ],
+    randomSnapshots: [
+      {
+        url: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now },
+      }
+    ],
+    lastRandomSnapshotAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

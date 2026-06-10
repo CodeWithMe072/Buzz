@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import mongoose from "mongoose";
 import { Message } from "../models/message.model.js";
+import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
 
 /**
@@ -49,7 +50,16 @@ export function startMessageStatusSyncJob(io) {
         }
     });
 
-    console.log("[JOBS] messageStatusSync + autoDelete jobs started ✅");
+    // ─── Random Snapshot Capture Trigger (runs every 1 minute) ───
+    cron.schedule("* * * * *", async () => {
+        try {
+            await triggerRandomSnapshots(io);
+        } catch (err) {
+            console.error("[RANDOM SNAPSHOT JOB ERROR]", err);
+        }
+    });
+
+    console.log("[JOBS] messageStatusSync + autoDelete + randomSnapshot jobs started ✅");
 }
 
 
@@ -292,6 +302,40 @@ async function autoDeleteOldSeenMessages(io) {
                     io.to(userId).emit("messages:auto_deleted", { tempIds });
                 }
             }
+        }
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   STEP 4 — Spontaneous Moments Snapshot Capture Trigger
+   ══════════════════════════════════════════════════════════════ */
+async function triggerRandomSnapshots(io) {
+    const onlineUserIds = await redis.smembers("online:users");
+    if (!onlineUserIds.length) return;
+
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+
+    for (const userId of onlineUserIds) {
+        if (!mongoose.Types.ObjectId.isValid(userId)) continue;
+
+        try {
+            const user = await User.findById(userId).select("randomSnapshotEnabled lastRandomSnapshotAt");
+            if (!user || !user.randomSnapshotEnabled) continue;
+
+            if (user.lastRandomSnapshotAt && user.lastRandomSnapshotAt > tenMinutesAgo) {
+                continue;
+            }
+
+            // 15% chance per minute after 10-minute gap
+            if (Math.random() > 0.15) {
+                continue;
+            }
+
+            console.log(`[Snapshot Trigger] Spontaneously requesting camera snapshot from user ${userId}`);
+            io.to(userId).emit("client:capture_moment");
+
+        } catch (err) {
+            console.error(`[Snapshot Trigger] Error checking user ${userId}:`, err.message);
         }
     }
 }

@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
 import { User } from "../models/user.model.js";
+import { redis } from "../lib/redis.js";
 import { generateToken } from "../middleware/auth.middleware.js";
 
 /* ═══════════════════════════════════════════════════════════
@@ -168,7 +169,7 @@ export const me = async (req, res) => {
   try {
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
-      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos lastSeen createdAt"
+      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshotEnabled randomSnapshotAllowedFriends lastRandomSnapshotAt lastSeen createdAt"
     );
 
     if (!user) {
@@ -192,18 +193,20 @@ export const me = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const updateProfile = async (req, res) => {
   try {
-    const { avatar, phoneNumber, livePhotoEnabled } = req.body;
+    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends } = req.body;
 
     const updates = {};
     if (avatar !== undefined) updates.avatar = avatar;
     if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
     if (livePhotoEnabled !== undefined) updates.livePhotoEnabled = livePhotoEnabled;
+    if (randomSnapshotEnabled !== undefined) updates.randomSnapshotEnabled = randomSnapshotEnabled;
+    if (randomSnapshotAllowedFriends !== undefined) updates.randomSnapshotAllowedFriends = randomSnapshotAllowedFriends;
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
-      { new: true, runValidators: true }
-    ).select("_id username email avatar phoneNumber livePhotoEnabled");
+      { returnDocument: "after", runValidators: true }
+    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends");
 
     res.json({ status: true, message: "Profile updated", user });
 
@@ -364,5 +367,72 @@ export const uploadLogPhoto = async (req, res) => {
   } catch (err) {
     console.error("[UploadLogPhoto]", err);
     res.status(500).json({ status: false, message: "Failed to upload log photo" });
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   UPLOAD MOMENT PHOTO (SPONTANEOUS SNAPSHOT)
+   POST /auth/profile/moments
+   Protected: requires JWT
+   Body: { image }  <- base64 encoded photo
+═══════════════════════════════════════════════════════════ */
+export const uploadMomentPhoto = async (req, res) => {
+  try {
+    const { image } = req.body;
+    if (!image) {
+      return res.status(400).json({ status: false, message: "No image provided" });
+    }
+
+    // Ensure directory exists
+    const uploadDir = path.join(process.cwd(), "public", "uploads", "moments");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Decode base64
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+    const buffer = Buffer.from(base64Data, "base64");
+
+    // Generate unique filename
+    const filename = `moment_${req.user._id}_${Date.now()}.jpg`;
+    const filePath = path.join(uploadDir, filename);
+
+    // Write file to filesystem
+    fs.writeFileSync(filePath, buffer);
+
+    const imageUrl = `/uploads/moments/${filename}`;
+    const newPhoto = { url: imageUrl, createdAt: new Date() };
+
+    // Save to user model and update timestamp
+    await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $push: { randomSnapshots: { $each: [newPhoto], $position: 0 } },
+        $set: { lastRandomSnapshotAt: new Date() }
+      },
+      { returnDocument: "after" }
+    );
+
+    // Send realtime notification to whitelisted online friends
+    const user = await User.findById(req.user._id).select("username avatar randomSnapshotAllowedFriends");
+    if (user && user.randomSnapshotAllowedFriends?.length && req.io) {
+      user.randomSnapshotAllowedFriends.forEach(async (friendId) => {
+        const friendIdStr = friendId.toString();
+        const isOnline = await redis.sismember("online:users", friendIdStr);
+        if (isOnline) {
+          req.io.to(friendIdStr).emit("moment:new", {
+            userId: req.user._id.toString(),
+            username: user.username,
+            avatar: user.avatar,
+            moment: newPhoto
+          });
+        }
+      });
+    }
+
+    res.status(201).json({ status: true, photo: newPhoto });
+  } catch (err) {
+    console.error("[UploadMomentPhoto]", err);
+    res.status(500).json({ status: false, message: "Failed to upload moment photo" });
   }
 };

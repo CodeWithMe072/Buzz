@@ -7,6 +7,8 @@ import {
   sentRequests,
   searchUsers,
   removeConnection,
+  getFriendMoments,
+  getAllFriendsMoments,
 } from "../controllers/connection.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 
@@ -22,5 +24,8 @@ router.get("/connections/pending", pendingRequests);
 router.get("/connections/sent", sentRequests);
 router.get("/connections/search", searchUsers);
 router.delete("/connections/:connectionId", removeConnection);
+router.get("/connections/moments", getAllFriendsMoments);
+router.get("/connections/moments/:friendId", getFriendMoments);
+
 
 export default router;
