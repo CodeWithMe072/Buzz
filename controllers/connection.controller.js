@@ -311,3 +311,118 @@ export const removeConnection = async (req, res) => {
     res.status(500).json({ status: false, message: "Failed to remove connection" });
   }
 };
+
+/* ═══════════════════════════════════════════════════════════
+   GET FRIEND MOMENTS
+   GET /connections/moments/:friendId
+   Protected: requires JWT
+═══════════════════════════════════════════════════════════ */
+export const getFriendMoments = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { friendId } = req.params;
+
+    if (!friendId || !mongoose.Types.ObjectId.isValid(friendId)) {
+      return res.status(400).json({ status: false, message: "Invalid or missing friendId" });
+    }
+
+    // Verify they are accepted connections
+    const connection = await Connection.findOne({
+      $or: [
+        { sender: userId, receiver: friendId },
+        { sender: friendId, receiver: userId },
+      ],
+      status: "accepted",
+    });
+
+    if (!connection) {
+      return res.status(403).json({ status: false, message: "You are not connected with this user" });
+    }
+
+    // Fetch friend and verify whitelist settings
+    const friend = await User.findById(friendId).select("randomSnapshotEnabled randomSnapshotAllowedFriends randomSnapshots");
+    if (!friend) {
+      return res.status(404).json({ status: false, message: "User not found" });
+    }
+
+    if (!friend.randomSnapshotEnabled) {
+      return res.json({ status: true, moments: [] });
+    }
+
+    const isWhitelisted = friend.randomSnapshotAllowedFriends?.some(
+      (id) => id.toString() === userId.toString()
+    );
+
+    if (!isWhitelisted) {
+      return res.json({ status: true, moments: [] });
+    }
+
+    // Return friend's moments (newest first)
+    const moments = (friend.randomSnapshots || []).sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
+    res.json({ status: true, moments });
+
+  } catch (err) {
+    console.error("[GetFriendMoments]", err);
+    res.status(500).json({ status: false, message: "Failed to fetch moments" });
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   GET ALL FRIENDS MOMENTS
+   GET /connections/moments
+   Protected: requires JWT
+   Returns all moments of friends who whitelisted me
+═══════════════════════════════════════════════════════════ */
+export const getAllFriendsMoments = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Find all accepted connections of the user
+    const connections = await Connection.find({
+      $or: [{ sender: userId }, { receiver: userId }],
+      status: "accepted",
+    });
+
+    const friendIds = connections.map((c) => {
+      const isMe = c.sender.toString() === userId.toString();
+      return isMe ? c.receiver : c.sender;
+    });
+
+    if (!friendIds.length) {
+      return res.json({ status: true, moments: {} });
+    }
+
+    // Query friends who have snapshots enabled and have whitelisted the current user
+    const friends = await User.find({
+      _id: { $in: friendIds },
+      randomSnapshotEnabled: true,
+      randomSnapshotAllowedFriends: userId,
+    }).select("_id username avatar randomSnapshots");
+
+    const momentsMap = {};
+    friends.forEach((f) => {
+      // Sort snapshots newest first
+      const sortedSnaps = (f.randomSnapshots || []).sort(
+        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+      );
+      momentsMap[f._id.toString()] = {
+        user: {
+          id: f._id.toString(),
+          username: f.username,
+          avatar: f.avatar,
+        },
+        moments: sortedSnaps,
+      };
+    });
+
+    res.json({ status: true, moments: momentsMap });
+
+  } catch (err) {
+    console.error("[GetAllFriendsMoments]", err);
+    res.status(500).json({ status: false, message: "Failed to fetch moments" });
+  }
+};
+

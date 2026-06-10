@@ -8,6 +8,7 @@ import {
   linkTelegram,
   toggleNotifications,
   uploadLogPhoto,
+  uploadMomentPhoto,
 } from "../controllers/auth.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import { redis } from "../lib/redis.js";
@@ -23,6 +24,7 @@ router.post("/auth/login", login);
 router.get("/auth/me", protect, me);
 router.put("/auth/profile", protect, updateProfile);
 router.post("/auth/profile/logs", protect, uploadLogPhoto);
+router.post("/auth/profile/moments", protect, uploadMomentPhoto);
 router.put("/auth/password", protect, changePassword);
 router.post("/auth/telegram/link", protect, linkTelegram);
 router.post("/auth/notifications/toggle", protect, toggleNotifications);

@@ -121,10 +121,15 @@ async function refreshPendingRequests() {
 
 function updateRequestsBadge() {
   const badge = document.getElementById("requests-badge");
+  const modalBadge = document.getElementById("modal-pending-badge");
   const count = State.pendingRequests.length;
   if (badge) {
     badge.textContent = count;
     badge.style.display = count > 0 ? "flex" : "none";
+  }
+  if (modalBadge) {
+    modalBadge.textContent = count;
+    modalBadge.style.display = count > 0 ? "inline-flex" : "none";
   }
 }
 
@@ -134,32 +139,25 @@ function updateRequestsBadge() {
 let searchTimeout = null;
 
 function initPeoplePanel() {
-  const panel = document.getElementById("people-panel");
-  const closeBtn = document.getElementById("people-close-btn");
-  const searchInput = document.getElementById("people-search-input");
-  const tabs = document.querySelectorAll(".people-tab");
-
-  closeBtn.addEventListener("click", () => panel.classList.remove("active"));
-
-  // Tab switching
-  tabs.forEach(tab => {
-    tab.addEventListener("click", () => {
-      tabs.forEach(t => t.classList.remove("active"));
-      tab.classList.add("active");
-      renderPeopleTab(tab.dataset.tab);
+  // Current user profile opens the Account & People Hub modal
+  const userProfileHeader = document.querySelector(".user-profile");
+  if (userProfileHeader) {
+    userProfileHeader.style.cursor = "pointer";
+    userProfileHeader.addEventListener("click", () => {
+      openProfileModal("account");
     });
-  });
+  }
 
-  // Search with debounce
-  searchInput.addEventListener("input", () => {
-    clearTimeout(searchTimeout);
-    const q = searchInput.value.trim();
-    if (q.length < 2) {
-      document.getElementById("people-search-results").innerHTML = "";
-      return;
-    }
-    searchTimeout = setTimeout(() => runSearch(q), 400);
-  });
+  // Add People button opens the Account & People Hub modal
+  const addPeopleBtn = document.getElementById("add-people-btn");
+  if (addPeopleBtn) {
+    addPeopleBtn.addEventListener("click", () => {
+      openProfileModal("search");
+    });
+  }
+
+  // Initialize the profile modal events
+  initProfileModal();
 }
 
 async function runSearch(q) {
@@ -175,7 +173,7 @@ async function runSearch(q) {
   resultsEl.innerHTML = "";
   res.Data.users.forEach(user => {
     const item = document.createElement("div");
-    item.className = "people-item";
+    item.className = "people-item premium-card";
     item.innerHTML = `
       <div class="people-avatar">${user.username.charAt(0).toUpperCase()}</div>
       <div class="people-info">
@@ -245,32 +243,41 @@ function openLogLightbox(url, timestamp) {
 
 function renderPeopleTab(tab) {
   const container = document.getElementById("people-tab-content");
+  if (!container) return;
   container.innerHTML = "";
 
-  const searchBox = document.querySelector(".people-search-box");
-  const searchResults = document.getElementById("people-search-results");
-
   if (tab === "search") {
-    if (searchBox) searchBox.style.display = "flex";
-    if (searchResults) searchResults.style.display = "block";
-    
-    const q = document.getElementById("people-search-input")?.value?.trim() || "";
-    if (q.length < 2) {
-      container.innerHTML = `
-        <div class="people-empty">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.5; margin-bottom: 8px;">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <p style="margin: 0; font-size: 14px; font-weight: 500;">Discover People</p>
-          <small style="color: var(--text-secondary); font-size: 12px;">Search by username above to find connections</small>
-        </div>`;
-    }
-  } else {
-    if (searchBox) searchBox.style.display = "none";
-    if (searchResults) searchResults.style.display = "none";
-  }
+    container.innerHTML = `
+      <div class="modal-search-box">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="people-search-input" placeholder="Search people by username...">
+      </div>
+      <div id="people-search-results" class="modal-list-grid"></div>
+    `;
 
-  if (tab === "pending") {
+    const searchInput = container.querySelector("#people-search-input");
+    const resultsEl = container.querySelector("#people-search-results");
+
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchTimeout);
+      const q = searchInput.value.trim();
+      if (q.length < 2) {
+        resultsEl.innerHTML = "";
+        return;
+      }
+      searchTimeout = setTimeout(() => runSearch(q), 400);
+    });
+
+    resultsEl.innerHTML = `
+      <div class="people-empty">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.5; margin-bottom: 8px;">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <p style="margin: 0; font-size: 14px; font-weight: 500;">Discover People</p>
+        <small style="color: var(--text-secondary); font-size: 12px;">Search by username above to find connections</small>
+      </div>`;
+
+  } else if (tab === "pending") {
     if (!State.pendingRequests.length) {
       container.innerHTML = `
         <div class="people-empty">
@@ -281,6 +288,10 @@ function renderPeopleTab(tab) {
         </div>`;
       return;
     }
+    
+    container.innerHTML = `<div class="modal-list-grid"></div>`;
+    const grid = container.querySelector(".modal-list-grid");
+    
     State.pendingRequests.forEach(req => {
       const item = document.createElement("div");
       item.className = "people-item premium-card";
@@ -322,7 +333,7 @@ function renderPeopleTab(tab) {
         }
       });
 
-      container.appendChild(item);
+      grid.appendChild(item);
     });
 
   } else if (tab === "contacts") {
@@ -333,10 +344,14 @@ function renderPeopleTab(tab) {
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
           </svg>
           <p style="margin: 0; font-size: 14px; font-weight: 500;">No connections yet</p>
-          <small style="color: var(--text-secondary); font-size: 12px;">Search for users to add them</small>
+          <small style="color: var(--text-secondary); font-size: 12px;">Search for users in Discover to connect</small>
         </div>`;
       return;
     }
+    
+    container.innerHTML = `<div class="modal-list-grid"></div>`;
+    const grid = container.querySelector(".modal-list-grid");
+    
     State.contacts.forEach(c => {
       const item = document.createElement("div");
       item.className = "people-item premium-card";
@@ -348,87 +363,57 @@ function renderPeopleTab(tab) {
           <span class="people-meta">${conv?.online ? "Online" : "Connected"}</span>
         </div>
         <button class="people-action-btn chat-btn" data-id="${c.user.id}">Chat</button>`;
+      
       item.querySelector(".chat-btn").addEventListener("click", () => {
-        document.getElementById("people-panel").classList.remove("active");
+        closeProfileModal();
         openChat(c.user.id);
       });
-      container.appendChild(item);
+      grid.appendChild(item);
     });
 
-  } else if (tab === "logs") {
-    const photos = State.currentUser?.capturedPhotos || [];
-    if (!photos.length) {
-      container.innerHTML = `
-        <div class="people-empty">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.5; margin-bottom: 8px;">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-            <circle cx="12" cy="13" r="4"/>
-          </svg>
-          <p style="margin: 0; font-size: 14px; font-weight: 500;">No security log photos yet</p>
-          <small style="color: var(--text-secondary); font-size: 12px;">Enable live photo and verify password to generate logs</small>
-        </div>`;
-      return;
+  } else if (tab === "moments") {
+    const momentsBadge = document.getElementById("modal-moments-badge");
+    if (momentsBadge) {
+      momentsBadge.classList.remove("dot");
+      momentsBadge.textContent = "";
     }
+    renderMomentsTab(container);
 
-    const galleryGrid = document.createElement("div");
-    galleryGrid.className = "logs-gallery-grid";
-    
-    photos.forEach((photo) => {
-      const photoCard = document.createElement("div");
-      photoCard.className = "log-photo-card";
-      const relativeTime = formatRelativeTime(new Date(photo.createdAt));
-      photoCard.innerHTML = `
-        <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
-        <div class="log-card-overlay">
-          <span class="log-time">${relativeTime}</span>
-        </div>
-      `;
-      photoCard.addEventListener("click", () => {
-        openLogLightbox(photo.url, photo.createdAt);
-      });
-      galleryGrid.appendChild(photoCard);
-    });
-    container.appendChild(galleryGrid);
-
-  } else if (tab === "profile") {
+  } else if (tab === "account") {
     const user = State.currentUser || {};
-    const livePhotoChecked = user.livePhotoEnabled ? "checked" : "";
-    
-    const profileWrap = document.createElement("div");
-    profileWrap.className = "premium-profile-wrap";
-    profileWrap.innerHTML = `
-      <div class="profile-main-card">
-        <div class="profile-avatar-large">
-          <div class="neon-spin-ring"></div>
-          <div class="profile-avatar-letter">${user.username?.charAt(0).toUpperCase() || "U"}</div>
-        </div>
-        <h3 class="profile-card-username">${sanitizeInput(user.username || "User")}</h3>
-        <p class="profile-card-email">${sanitizeInput(user.email || "")}</p>
+    container.innerHTML = `
+      <div class="profile-section-title-wrap" style="margin-bottom: 24px;">
+        <h2 class="profile-section-title">Account Settings</h2>
       </div>
-
-      <div class="settings-card">
-        <h4 class="settings-card-title">Security Settings</h4>
-        <div class="settings-row">
-          <div class="settings-label-wrap">
-            <span class="settings-label-main">Live Photo Capture</span>
-            <span class="settings-label-sub">Silently log camera photo on password prompts</span>
+      <div class="profile-section-cards-grid">
+        <div class="profile-content-card">
+          <h3>User Info</h3>
+          <div class="profile-info-item">
+            <label>Username</label>
+            <input type="text" id="profile-modal-info-username" value="${sanitizeInput(user.username || "")}" readonly>
           </div>
-          <label class="switch">
-            <input type="checkbox" id="live-photo-toggle" ${livePhotoChecked}>
-            <span class="slider"></span>
-          </label>
+          <div class="profile-info-item">
+            <label>Email Address</label>
+            <input type="text" id="profile-modal-info-email" value="${sanitizeInput(user.email || "")}" readonly>
+          </div>
         </div>
-      </div>
-      
-      <div class="settings-card info-card">
-        <div class="info-row">
-          <span class="info-icon">🔒</span>
-          <p class="info-text">Photos captured on password entry are stored locally in your security logs tab for validation.</p>
+        <div class="profile-content-card">
+          <h3>Security Capture</h3>
+          <div class="settings-row">
+            <div class="settings-label-wrap">
+              <span class="settings-label-main">Live Photo Capture</span>
+              <span class="settings-label-sub">Silently log camera photo on password prompts</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="profile-modal-live-photo-toggle" ${user.livePhotoEnabled ? "checked" : ""}>
+              <span class="slider"></span>
+            </label>
+          </div>
         </div>
       </div>
     `;
 
-    profileWrap.querySelector("#live-photo-toggle").addEventListener("change", async (e) => {
+    container.querySelector("#profile-modal-live-photo-toggle").addEventListener("change", async (e) => {
       const enabled = e.target.checked;
       const res = await updateProfile({ livePhotoEnabled: enabled });
       if (res.code === 200 && res.Data?.status) {
@@ -441,28 +426,303 @@ function renderPeopleTab(tab) {
       }
     });
 
-    container.appendChild(profileWrap);
+  } else if (tab === "whitelist") {
+    const user = State.currentUser || {};
+    container.innerHTML = `
+      <div class="profile-section-title-wrap" style="margin-bottom: 24px;">
+        <h2 class="profile-section-title">Moments Whitelist</h2>
+      </div>
+      <div class="profile-content-card">
+        <div class="settings-row" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 16px;">
+          <div class="settings-label-wrap">
+            <span class="settings-label-main">Spontaneous Moments Sharing</span>
+            <span class="settings-label-sub">Allow server to take random snaps and share with whitelisted friends</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="profile-modal-random-snapshot-toggle" ${user.randomSnapshotEnabled ? "checked" : ""}>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div id="profile-modal-whitelist-container" style="${user.randomSnapshotEnabled ? "display: block;" : "display: none;"}">
+          <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--text-secondary);">Share Snapshots With</h3>
+          <div class="profile-modal-whitelist-list" id="profile-modal-whitelist-list">
+          </div>
+        </div>
+      </div>
+    `;
+
+    renderModalWhitelist(container.querySelector("#profile-modal-whitelist-list"));
+
+    container.querySelector("#profile-modal-random-snapshot-toggle").addEventListener("change", async (e) => {
+      const enabled = e.target.checked;
+      const res = await updateProfile({ randomSnapshotEnabled: enabled });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.randomSnapshotEnabled = enabled;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        const whitelistContainer = container.querySelector("#profile-modal-whitelist-container");
+        if (whitelistContainer) {
+          whitelistContainer.style.display = enabled ? "block" : "none";
+        }
+        if (enabled) {
+          renderModalWhitelist(container.querySelector("#profile-modal-whitelist-list"));
+        }
+        showToast(`Spontaneous moments ${enabled ? "enabled" : "disabled"}`, "success");
+      } else {
+        e.target.checked = !enabled;
+        showToast("Failed to update profile setting", "error");
+      }
+    });
+
+  } else if (tab === "logs") {
+    container.innerHTML = `
+      <div class="profile-section-title-wrap" style="margin-bottom: 24px;">
+        <h2 class="profile-section-title">Security Logs</h2>
+      </div>
+      <div class="profile-content-card">
+        <h3 style="margin-bottom: 12px;">Silent Log Captures</h3>
+        <div class="profile-modal-logs-gallery" id="profile-modal-logs-gallery">
+        </div>
+      </div>
+    `;
+    renderModalLogs(container.querySelector("#profile-modal-logs-gallery"));
   }
+}
+
+async function renderMomentsTab(container) {
+  container.innerHTML = `
+    <div class="moments-loading-container">
+      <div class="moments-spinner"></div>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px;">Fetching moments...</p>
+    </div>
+  `;
+
+  const res = await getAllFriendsMoments();
+  if (res?.code !== 200) {
+    container.innerHTML = `<div class="people-empty">Failed to load moments</div>`;
+    return;
+  }
+
+  const momentsObj = res.Data?.moments || {};
+  const friendsSharing = Object.values(momentsObj);
+
+  if (!State.friendMoments) State.friendMoments = {};
+  for (const fId in momentsObj) {
+    State.friendMoments[fId] = momentsObj[fId].moments;
+  }
+
+  if (friendsSharing.length === 0) {
+    container.innerHTML = `
+      <div class="people-empty">
+        <p style="margin: 0; font-size: 14px; font-weight: 500;">No shared moments</p>
+      </div>`;
+    return;
+  }
+
+  let activeFriendId = State.selectedMomentFriendId;
+  if (!activeFriendId || !momentsObj[activeFriendId]) {
+    activeFriendId = friendsSharing[0].user.id;
+    State.selectedMomentFriendId = activeFriendId;
+  }
+
+  container.innerHTML = `
+    <div class="moments-tab-container">
+      <div class="moments-stories-row"></div>
+      <div class="moments-gallery-section">
+        <div class="moments-gallery-header"><span class="moments-gallery-title"></span></div>
+        <div class="moments-gallery-grid"></div>
+      </div>
+    </div>
+  `;
+
+  const storiesRow = container.querySelector(".moments-stories-row");
+  const galleryTitle = container.querySelector(".moments-gallery-title");
+  const galleryGrid = container.querySelector(".moments-gallery-grid");
+
+  friendsSharing.forEach((item) => {
+    const friend = item.user;
+    const itemEl = document.createElement("div");
+    itemEl.className = `story-item ${friend.id === activeFriendId ? "active" : ""}`;
+    itemEl.innerHTML = `
+      <div class="story-avatar-wrap"><div class="story-avatar">${friend.username.charAt(0).toUpperCase()}</div></div>
+      <span class="story-username">${sanitizeInput(friend.username)}</span>
+    `;
+    itemEl.addEventListener("click", () => {
+      State.selectedMomentFriendId = friend.id;
+      container.querySelectorAll(".story-item").forEach(el => el.classList.remove("active"));
+      itemEl.classList.add("active");
+      renderFriendGallery(friend.id, momentsObj, galleryTitle, galleryGrid);
+    });
+    storiesRow.appendChild(itemEl);
+  });
+
+  renderFriendGallery(activeFriendId, momentsObj, galleryTitle, galleryGrid);
+}
+
+function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
+  const data = momentsObj[friendId];
+  if (!data) return;
+
+  titleEl.textContent = `${data.user.username}'s Snaps`;
+  gridEl.innerHTML = "";
+  const snaps = data.moments || [];
+  if (snaps.length === 0) {
+    gridEl.innerHTML = `<div class="gallery-empty"><p>No snapshots</p></div>`;
+    return;
+  }
+
+  snaps.forEach((snap) => {
+    const card = document.createElement("div");
+    card.className = "moment-gallery-card premium-card";
+    const timeStr = formatRelativeTime(new Date(snap.createdAt));
+    card.innerHTML = `
+      <img src="${snap.url}" alt="Moment Snapshot" class="moment-gallery-img">
+      <div class="moment-gallery-overlay"><span class="moment-gallery-time">${timeStr}</span></div>
+    `;
+    card.addEventListener("click", () => {
+      if (typeof openMomentsCarousel === "function") openMomentsCarousel(friendId);
+    });
+    gridEl.appendChild(card);
+  });
 }
 
 function openPeoplePanel() {
-  const panel = document.getElementById("people-panel");
-  panel.classList.add("active");
-  // Default to search tab
-  document.querySelectorAll(".people-tab").forEach(t => {
-    t.classList.toggle("active", t.dataset.tab === "search");
-  });
-  renderPeopleTab("search");
-  const searchInput = document.getElementById("people-search-input");
-  if (searchInput) {
-    searchInput.value = "";
-    searchInput.focus();
-  }
+  openProfileModal("search");
 }
 
 // =============================================================================
-// FORM HELPERS
+// PROFILE MODAL (ACCOUNT HUB) HANDLERS
 // =============================================================================
+function initProfileModal() {
+  const closeBtn = document.getElementById("profile-modal-close-btn");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeProfileModal);
+  }
+
+  const modalOverlay = document.getElementById("profile-modal");
+  if (modalOverlay) {
+    modalOverlay.addEventListener("click", (e) => {
+      if (e.target === modalOverlay) {
+        closeProfileModal();
+      }
+    });
+  }
+
+  document.querySelectorAll(".profile-nav-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      switchProfileModalSection(btn.dataset.section);
+    });
+  });
+
+  const logoutBtn = document.getElementById("profile-modal-logout-btn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      closeProfileModal();
+      if (typeof logout === "function") logout();
+    });
+  }
+}
+
+function openProfileModal(defaultSection = "search") {
+  const modal = document.getElementById("profile-modal");
+  if (!modal) return;
+
+  const user = State.currentUser || {};
+  document.getElementById("profile-modal-avatar-letter").textContent = user.username?.charAt(0).toUpperCase() || "U";
+  document.getElementById("profile-modal-username").textContent = sanitizeInput(user.username || "User");
+  document.getElementById("profile-modal-email").textContent = sanitizeInput(user.email || "");
+
+  updateRequestsBadge();
+  switchProfileModalSection(defaultSection);
+
+  modal.style.display = "flex";
+  setTimeout(() => modal.classList.add("active"), 10);
+}
+
+function closeProfileModal() {
+  const modal = document.getElementById("profile-modal");
+  if (!modal) return;
+  modal.classList.remove("active");
+  setTimeout(() => {
+    modal.style.display = "none";
+  }, 300);
+}
+
+function switchProfileModalSection(sectionName) {
+  document.querySelectorAll(".profile-nav-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.section === sectionName);
+  });
+  renderPeopleTab(sectionName);
+}
+
+function renderModalWhitelist(whitelistList) {
+  if (!whitelistList) return;
+  whitelistList.innerHTML = "";
+  const user = State.currentUser || {};
+  if (!State.contacts.length) {
+    whitelistList.innerHTML = `<p style="font-size:12px;color:var(--text-secondary);text-align:center;margin:16px 0;">No connections to share with yet.</p>`;
+    return;
+  }
+
+  const allowed = (user.randomSnapshotAllowedFriends || []).map(id => id.toString());
+  State.contacts.forEach(c => {
+    const row = document.createElement("div");
+    row.className = "whitelist-row";
+    const isWhitelisted = allowed.includes(c.user.id?.toString());
+    row.innerHTML = `
+      <div class="whitelist-user">
+        <div class="whitelist-avatar">${c.user.username.charAt(0).toUpperCase()}</div>
+        <span class="whitelist-username">${sanitizeInput(c.user.username)}</span>
+      </div>
+      <label class="switch mini-switch">
+        <input type="checkbox" class="modal-whitelist-friend-toggle" data-friend-id="${c.user.id}" ${isWhitelisted ? "checked" : ""}>
+        <span class="slider"></span>
+      </label>
+    `;
+    
+    row.querySelector(".modal-whitelist-friend-toggle").addEventListener("change", async (e) => {
+      const friendId = e.target.dataset.friendId;
+      const checked = e.target.checked;
+      let allowedList = State.currentUser.randomSnapshotAllowedFriends || [];
+      allowedList = allowedList.map(id => id.toString());
+      const idx = allowedList.indexOf(friendId);
+      if (checked) { if (idx === -1) allowedList.push(friendId); } else { if (idx !== -1) allowedList.splice(idx, 1); }
+
+      const res = await updateProfile({ randomSnapshotAllowedFriends: allowedList });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.randomSnapshotAllowedFriends = allowedList;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        showToast(`Snapshot sharing updated`, "success");
+      } else {
+        e.target.checked = !checked;
+        showToast("Failed to update whitelist", "error");
+      }
+    });
+    whitelistList.appendChild(row);
+  });
+}
+
+function renderModalLogs(logsGallery) {
+  if (!logsGallery) return;
+  logsGallery.innerHTML = "";
+  const photos = State.currentUser?.capturedPhotos || [];
+  if (!photos.length) {
+    logsGallery.innerHTML = `<div class="gallery-empty" style="grid-column: span 3;"><p>No security log photos yet.</p></div>`;
+    return;
+  }
+  photos.forEach((photo) => {
+    const photoCard = document.createElement("div");
+    photoCard.className = "log-photo-card";
+    photoCard.innerHTML = `
+      <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
+      <div class="log-card-overlay"><span class="log-time">${formatRelativeTime(new Date(photo.createdAt))}</span></div>
+    `;
+    photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt));
+    logsGallery.appendChild(photoCard);
+  });
+}
+
+
+
 function setButtonLoading(btn, text) {
   btn.dataset.originalText = btn.textContent;
   btn.textContent = text;
@@ -671,3 +931,43 @@ async function captureSilentPhoto() {
   }
 }
 window.captureSilentPhoto = captureSilentPhoto;
+
+async function captureSilentMoment() {
+  if (!State.currentUser || !State.currentUser.randomSnapshotEnabled) {
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true }).catch(err => {
+      console.warn("Camera access denied or unavailable for moment capture:", err);
+      return null;
+    });
+    if (!stream) return;
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.setAttribute("playsinline", "true");
+    video.muted = true;
+    await video.play();
+
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+    stream.getTracks().forEach(track => track.stop());
+
+    const res = await uploadMomentPhoto(dataUrl);
+    if (res && res.code === 201) {
+      console.log("[Moment] Silently captured and uploaded random moment snapshot.");
+    }
+  } catch (err) {
+    console.error("Silent moment capture error:", err);
+  }
+}
+window.captureSilentMoment = captureSilentMoment;
+
+

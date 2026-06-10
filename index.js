@@ -23,6 +23,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
 const PORT = process.env.PORT || 5500;
 
 /* ---------- Database ---------- */
@@ -56,6 +64,12 @@ app.get("/", (req, res) => res.render("index"));
 // Redirect any other page hit back to "/" so the SPA handles it
 app.get("/app", (req, res) => res.redirect("/"));
 app.get("/login", (req, res) => res.redirect("/"));
+/* ---------- req.io Middleware ---------- */
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
 /* ---------- API routes ---------- */
 app.use("/api/webrtc", webrtcRoutes);
 app.use(authRoutes);
@@ -80,16 +94,6 @@ app.use((req, res) => {
 });
 
 /* ---------- Socket.io ---------- */
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-});
-
 initSocket(io);
 
 /* ---------- Background jobs ---------- */

@@ -1489,8 +1489,10 @@ function initChatList() {
 
     renderChatList();
 
-    // Logout button
-    document.getElementById('logout-btn').addEventListener('click', logout);
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
 }
 
 function renderChatList() {
