@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import mongoose from "mongoose";
 import { Message } from "../models/message.model.js";
 import { redis } from "../lib/redis.js";
 
@@ -31,7 +32,8 @@ export function startMessageStatusSyncJob(io) {
     // ─── Run every 1 minute ───
     cron.schedule("* * * * *", async () => {
         try {
-            await fixDeliveredStatus(io);
+            // Disabled: background delivery updates cause race conditions with sync:delivered
+            // await fixDeliveredStatus(io);
             await fixSeenStatus(io);
         } catch (err) {
             console.error("[STATUS SYNC JOB ERROR]", err);
@@ -79,6 +81,10 @@ async function fixDeliveredStatus(io) {
     for (const pair of pairs) {
         const senderId = pair._id.from;
         const receiverId = pair._id.to;
+
+        if (!mongoose.Types.ObjectId.isValid(senderId) || !mongoose.Types.ObjectId.isValid(receiverId)) {
+            continue;
+        }
 
         try {
             // ── ONLY mark delivered if receiver is online right now ──
@@ -147,6 +153,10 @@ async function fixSeenStatus(io) {
         const senderId = pair._id.from;
         const receiverId = pair._id.to;
         const oldestUnseenAt = pair.oldestUnseen;
+
+        if (!mongoose.Types.ObjectId.isValid(senderId) || !mongoose.Types.ObjectId.isValid(receiverId)) {
+            continue;
+        }
 
         try {
             // ── Find the receiver's most recent reply to sender ──

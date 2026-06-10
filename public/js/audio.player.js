@@ -93,8 +93,18 @@ function createAudioPlayer(audioUrl, messageId) {
         playBtn.disabled = true;
     });
 
-    container.classList.add("loading");
-    audio.addEventListener("canplaythrough", () => container.classList.remove("loading"));
+    if (audio.readyState >= 2) {
+        container.classList.remove("loading");
+    } else {
+        container.classList.add("loading");
+        const onCanPlay = () => {
+            container.classList.remove("loading");
+            audio.removeEventListener("canplaythrough", onCanPlay);
+            audio.removeEventListener("canplay", onCanPlay);
+        };
+        audio.addEventListener("canplaythrough", onCanPlay);
+        audio.addEventListener("canplay", onCanPlay);
+    }
 
     return container;
 }
@@ -108,10 +118,17 @@ function _formatAudioTime(seconds) {
 // =============================================================================
 // WAVEFORM RENDERER
 // =============================================================================
-function drawStaticWaveform(canvas, progress = 0) {
+function drawStaticWaveform(canvas, progress = 0, retryCount = 0) {
     const ctx = canvas.getContext("2d");
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
+
+    if (rect.width === 0) {
+        if (retryCount < 20) {
+            setTimeout(() => drawStaticWaveform(canvas, progress, retryCount + 1), 50);
+        }
+        return;
+    }
 
     canvas.width = rect.width * dpr;
     canvas.height = rect.height * dpr;

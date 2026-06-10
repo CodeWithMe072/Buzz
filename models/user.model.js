@@ -56,6 +56,18 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
+    livePhotoEnabled: {
+      type: Boolean,
+      default: false,
+    },
+
+    capturedPhotos: [
+      {
+        url: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now },
+      }
+    ],
   },
   { timestamps: true }
 );

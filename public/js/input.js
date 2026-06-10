@@ -339,7 +339,17 @@ function initVoiceRecording() {
     sendVoiceBtn.addEventListener("click", () => stopRecording(true));
 
     function startRecording(stream) {
-        mediaRecorder = new MediaRecorder(stream);
+        let options = {};
+        if (typeof MediaRecorder.isTypeSupported === "function") {
+            if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+                options.mimeType = "audio/webm;codecs=opus";
+            } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+                options.mimeType = "audio/webm";
+            } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+                options.mimeType = "audio/mp4";
+            }
+        }
+        mediaRecorder = new MediaRecorder(stream, options);
         audioChunks = [];
         isRecording = true;
         recordingStartTime = Date.now();
@@ -397,7 +407,8 @@ function initVoiceRecording() {
             cancelAnimationFrame(animationId);
             if (audioContext) audioContext.close();
             if (shouldSend && audioChunks.length > 0) {
-                const blob = new Blob(audioChunks, { type: "audio/webm" });
+                const recordedMimeType = mediaRecorder.mimeType || "audio/webm";
+                const blob = new Blob(audioChunks, { type: recordedMimeType });
                 sendVoiceMessage(blob);
             }
             audioChunks = [];
@@ -474,7 +485,7 @@ async function sendVoiceMessage(audioBlob) {
         caption: null,
         clientTime: Date.now(),
         replyTo: State.replyingTo,
-        user: State.currentUser.username,
+        user: State.currentUser.id || State.currentUser.username,
         status: { sent: false, delivered: false, seen: false },
         timestamp: Date.now()
     };
@@ -511,7 +522,12 @@ async function uploadAudio(msgId, receiver, audioBlob) {
 
     try {
         const formData = new FormData();
-        formData.append("file", audioBlob, "voice.webm");
+        const mime = audioBlob.type || "audio/webm";
+        let extension = "webm";
+        if (mime.includes("mp4") || mime.includes("aac") || mime.includes("m4a")) {
+            extension = "mp4";
+        }
+        formData.append("file", audioBlob, `voice.${extension}`);
         const token3 = TokenStore.getToken();
         const res = await fetch("/api/upload", {
             method: "POST",

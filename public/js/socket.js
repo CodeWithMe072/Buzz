@@ -160,8 +160,11 @@ function initSocket() {
   socket.on("reconnect", () => {
     NetworkMonitor.isSocketConnected = true;
     updateConnectionBanner();
-    flushOutbox();
-    flushUploadQueue();
+    if (State.apiMessagesLoaded) {
+      socket.emit("sync:delivered");
+      flushOutbox();
+      flushUploadQueue();
+    }
   });
 
   // ── Online list ───────────────────────────────────────────
@@ -240,18 +243,13 @@ function initSocket() {
       return;
     }
 
-    State.messages[message.user].unshift(message);
+    State.messages[message.user].push(message);
+    State.messages[message.user].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     State.messageIndex[message.id] = message.user;
     socket.emit("message:received", { tempId: msg.id });
 
     if (message.user === State.activeChat) {
-      const mc = document.getElementById("messages");
-      mc.appendChild(createMessageElement(message));
-      document.getElementById("messages-container").scrollTop = 99999;
-      if (message.type === "image" || message.type === "video") {
-        attactEventOnMedia();
-        if (viewer) viewer.addItem(message);
-      }
+      insertMessageInOrder(message);
       socket.emit("chat:seen", { from: message.user });
     }
 
@@ -373,12 +371,126 @@ function initSocket() {
 
   // ── Undelivered sync ──────────────────────────────────────
   socket.on("private_message_sync", (msg) => {
-    // Sync from other devices — same handling as private_message
-    const conv = State.conversations.find(c => c.id === msg.to);
-    if (conv) {
-      conv.lastMessage = msg.type === "text" ? msg.content : `📷 ${msg.type}`;
-      conv.timestamp = msg.timestamp;
+    const chatPartner = msg.to?.toString();
+    if (!chatPartner) return;
+
+    const message = {
+      id:        msg.tempId?.toString(),
+      type:      msg.type,
+      content:   msg.content,
+      cover:     msg.cover   || null,
+      thumb:     msg.thumb   || null,
+      fileName:  msg.fileName || null,
+      fileSize:  msg.fileSize || null,
+      caption:   msg.caption || null,
+      sender:    "me",
+      timestamp: msg.timestamp,
+      user:      chatPartner,
+      replyTo:   msg.replyTo || null,
+      reactions: {},
+      status:    { sent: true, delivered: true, seen: false }
+    };
+
+    if (!State.messages[chatPartner]) State.messages[chatPartner] = [];
+
+    const exists = State.messages[chatPartner].some(m =>
+      m.id?.toString() === message.id || m.tempId?.toString() === message.id
+    );
+    if (exists) return;
+
+    State.messages[chatPartner].push(message);
+    State.messages[chatPartner].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    State.messageIndex[message.id] = chatPartner;
+
+    if (chatPartner === State.activeChat) {
+      insertMessageInOrder(message);
     }
-    renderChatList();
+
+    const conv = State.conversations.find(c => c.id === chatPartner);
+    if (conv) {
+      conv.lastMessage = message.type === "text" ? message.content : `📷 ${message.type}`;
+      conv.timestamp   = message.timestamp;
+    }
+    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
+
+  // ── Background job updates ───────────────────────────────
+  socket.on("messages:bulk_seen", ({ by }) => {
+    if (typeof updateMessageSeenByTempId === "function") {
+      updateMessageSeenByTempId(by);
+    }
+  });
+
+  socket.on("messages:bulk_delivered", ({ to }) => {
+    const msgs = State.messages[to] || [];
+    msgs.forEach(m => {
+      if ((m.sender === "me" || m.user?.toString() === State.currentUser?.id?.toString()) && m.status && !m.status.delivered) {
+        m.status.delivered = true;
+        updateStatusIcon(m.id || m.tempId, m.status);
+      }
+    });
+  });
+
+  socket.on("messages:auto_deleted", ({ tempIds }) => {
+    if (!tempIds || !tempIds.length) return;
+    tempIds.forEach(tempId => {
+      const chatId = State.messageIndex[tempId];
+      if (chatId) {
+        State.messages[chatId] = (State.messages[chatId] || []).filter(m => m.id !== tempId && m.tempId !== tempId);
+        delete State.messageIndex[tempId];
+        if (chatId === State.activeChat) {
+          const el = document.querySelector(`.message[data-message-id="${tempId}"]`);
+          if (el) el.remove();
+        }
+      }
+    });
+    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+  });
+}
+
+function insertMessageInOrder(message) {
+  const mc = document.getElementById("messages");
+  if (!mc) return;
+
+  const chatId = message.user;
+  const msgs = State.messages[chatId] || [];
+
+  // Sort array descending (newest first)
+  msgs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  // Find index of this message in the sorted array
+  const k = msgs.findIndex(m => (m.id && m.id === message.id) || (m.tempId && m.tempId === message.tempId));
+  if (k === -1) return;
+
+  // Create message DOM element
+  const newEl = createMessageElement(message);
+
+  // If it's the newest message (idx 0), append to bottom
+  if (k === 0) {
+    mc.appendChild(newEl);
+  } else {
+    // Insert before the immediate newer message (idx k-1)
+    const newerMsg = msgs[k - 1];
+    const newerId = newerMsg.id || newerMsg.tempId;
+    const newerEl = mc.querySelector(`[data-message-id="${newerId}"]`);
+    if (newerEl) {
+      mc.insertBefore(newEl, newerEl);
+    } else {
+      mc.appendChild(newEl);
+    }
+  }
+
+  // Scroll to bottom if it is the newest message or if the user is close to the bottom
+  const container = document.getElementById("messages-container");
+  if (container) {
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
+    if (k === 0 || isAtBottom) {
+      container.scrollTop = 99999;
+    }
+  }
+
+  if (message.type === "image" || message.type === "video") {
+    if (typeof attactEventOnMedia === "function") attactEventOnMedia();
+    if (viewer) viewer.addItem(message);
+  }
 }
