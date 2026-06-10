@@ -57,29 +57,6 @@ export default function initSocket(io) {
     const sockets = await redis.smembers(`user:${userId}:sockets`);
     if (sockets.length === 1) {
       socket.broadcast.emit("user:online", { userId });
-
-      // Auto-deliver any messages that arrived while user was offline
-      // This fires message:delivered back to each sender
-      try {
-        const undelivered = await Message.find({
-          to: userId,
-          "status.delivered": false,
-          "status.sent": true,
-        }).select("tempId from");
-
-        for (const msg of undelivered) {
-          const senderId = msg.from.toString();
-          // Tell the sender this message was delivered
-          io.to(senderId).emit("message:delivered", { tempId: msg.tempId });
-          // Update DB
-          Message.updateOne(
-            { tempId: msg.tempId },
-            { $set: { "status.delivered": true, deliveredAt: new Date() } }
-          ).catch(() => { });
-        }
-      } catch (err) {
-        console.error("[Socket] auto-deliver on connect failed:", err.message);
-      }
     }
 
     // Send current online list to this socket only
@@ -201,15 +178,16 @@ export default function initSocket(io) {
     ───────────────────────────────────────────────────────── */
     socket.on("message:received", async ({ tempId }) => {
       try {
-        const senderId = await redis.get(`msg:${tempId}:from`);
-        if (!senderId) return;
-
-        io.to(senderId).emit("message:delivered", { tempId });
-
-        Message.updateOne(
+        const updatedMsg = await Message.findOneAndUpdate(
           { tempId, to: userId },
-          { $set: { "status.delivered": true, deliveredAt: new Date() } }
-        ).catch((err) => console.error("[Socket] Delivery save failed:", err.message));
+          { $set: { "status.delivered": true, deliveredAt: new Date() } },
+          { returnDocument: 'after' }
+        );
+
+        if (!updatedMsg) return;
+
+        const senderId = updatedMsg.from.toString();
+        io.to(senderId).emit("message:delivered", { tempId });
 
       } catch (err) {
         console.error("[Socket] message:received error:", err);

@@ -79,6 +79,11 @@ async function toggleNotifications() {
   return { Data: res?.data, code: res?.status };
 }
 
+async function uploadCapturedPhoto(image) {
+  const res = await apiRequest("POST", "/auth/profile/logs", { image });
+  return { Data: res?.data, code: res?.status };
+}
+
 // ─── Connections ─────────────────────────────────────────────
 async function getMyConnections() {
   const res = await apiRequest("GET", "/connections");

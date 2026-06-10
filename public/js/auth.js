@@ -28,6 +28,16 @@ async function bootstrapAfterLogin() {
   // Load pending requests badge
   await refreshPendingRequests();
 
+  // Sync full profile (livePhotoEnabled and capturedPhotos)
+  const profileRes = await getMyProfile();
+  if (profileRes.code === 200 && profileRes.Data?.user) {
+    State.currentUser = {
+      ...State.currentUser,
+      ...profileRes.Data.user
+    };
+    localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+  }
+
   initChatList();
 
   // Load messages for each connection
@@ -198,18 +208,82 @@ async function runSearch(q) {
   });
 }
 
+function formatRelativeTime(date) {
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
+function openLogLightbox(url, timestamp) {
+  const lightbox = document.createElement("div");
+  lightbox.className = "log-lightbox-overlay";
+  lightbox.innerHTML = `
+    <div class="lightbox-close">&times;</div>
+    <div class="lightbox-content">
+      <img src="${url}" alt="Security Log Image" class="lightbox-img">
+      <div class="lightbox-meta">Captured on ${new Date(timestamp).toLocaleString()}</div>
+    </div>
+  `;
+  lightbox.querySelector(".lightbox-close").onclick = () => {
+    lightbox.classList.remove("active");
+    setTimeout(() => lightbox.remove(), 300);
+  };
+  lightbox.onclick = (e) => {
+    if (e.target === lightbox) {
+      lightbox.classList.remove("active");
+      setTimeout(() => lightbox.remove(), 300);
+    }
+  };
+  document.body.appendChild(lightbox);
+  setTimeout(() => lightbox.classList.add("active"), 10);
+}
+
 function renderPeopleTab(tab) {
   const container = document.getElementById("people-tab-content");
   container.innerHTML = "";
 
+  const searchBox = document.querySelector(".people-search-box");
+  const searchResults = document.getElementById("people-search-results");
+
+  if (tab === "search") {
+    if (searchBox) searchBox.style.display = "flex";
+    if (searchResults) searchResults.style.display = "block";
+    
+    const q = document.getElementById("people-search-input")?.value?.trim() || "";
+    if (q.length < 2) {
+      container.innerHTML = `
+        <div class="people-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.5; margin-bottom: 8px;">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <p style="margin: 0; font-size: 14px; font-weight: 500;">Discover People</p>
+          <small style="color: var(--text-secondary); font-size: 12px;">Search by username above to find connections</small>
+        </div>`;
+    }
+  } else {
+    if (searchBox) searchBox.style.display = "none";
+    if (searchResults) searchResults.style.display = "none";
+  }
+
   if (tab === "pending") {
     if (!State.pendingRequests.length) {
-      container.innerHTML = `<div class="people-empty">No pending requests</div>`;
+      container.innerHTML = `
+        <div class="people-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.5; margin-bottom: 8px;">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          </svg>
+          <p style="margin: 0; font-size: 14px; font-weight: 500;">No pending requests</p>
+        </div>`;
       return;
     }
     State.pendingRequests.forEach(req => {
       const item = document.createElement("div");
-      item.className = "people-item";
+      item.className = "people-item premium-card";
       item.innerHTML = `
         <div class="people-avatar">${req.from.username.charAt(0).toUpperCase()}</div>
         <div class="people-info">
@@ -228,13 +302,11 @@ function renderPeopleTab(tab) {
         const r = await respondToRequest(req.connectionId, "accept");
         if (r.code === 200) {
           showToast(`Connected with ${req.from.username}!`, "success");
-          // Notify the sender
           socket?.emit("connection:accepted", { to: req.from.id });
           State.pendingRequests = State.pendingRequests.filter(r => r.connectionId !== req.connectionId);
           updateRequestsBadge();
           renderPeopleTab("pending");
-          // Add to conversations immediately
-          await bootstrapAfterLogin(); // re-sync
+          await bootstrapAfterLogin();
         } else {
           btn.disabled = false;
           btn.textContent = "Accept";
@@ -255,12 +327,19 @@ function renderPeopleTab(tab) {
 
   } else if (tab === "contacts") {
     if (!State.contacts.length) {
-      container.innerHTML = `<div class="people-empty">No connections yet. Search for people to add!</div>`;
+      container.innerHTML = `
+        <div class="people-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.5; margin-bottom: 8px;">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <p style="margin: 0; font-size: 14px; font-weight: 500;">No connections yet</p>
+          <small style="color: var(--text-secondary); font-size: 12px;">Search for users to add them</small>
+        </div>`;
       return;
     }
     State.contacts.forEach(c => {
       const item = document.createElement("div");
-      item.className = "people-item";
+      item.className = "people-item premium-card";
       const conv = State.conversations.find(cv => cv.id === c.user.id);
       item.innerHTML = `
         <div class="people-avatar ${conv?.online ? "online" : ""}">${c.user.username.charAt(0).toUpperCase()}</div>
@@ -275,6 +354,94 @@ function renderPeopleTab(tab) {
       });
       container.appendChild(item);
     });
+
+  } else if (tab === "logs") {
+    const photos = State.currentUser?.capturedPhotos || [];
+    if (!photos.length) {
+      container.innerHTML = `
+        <div class="people-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.5; margin-bottom: 8px;">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          <p style="margin: 0; font-size: 14px; font-weight: 500;">No security log photos yet</p>
+          <small style="color: var(--text-secondary); font-size: 12px;">Enable live photo and verify password to generate logs</small>
+        </div>`;
+      return;
+    }
+
+    const galleryGrid = document.createElement("div");
+    galleryGrid.className = "logs-gallery-grid";
+    
+    photos.forEach((photo) => {
+      const photoCard = document.createElement("div");
+      photoCard.className = "log-photo-card";
+      const relativeTime = formatRelativeTime(new Date(photo.createdAt));
+      photoCard.innerHTML = `
+        <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
+        <div class="log-card-overlay">
+          <span class="log-time">${relativeTime}</span>
+        </div>
+      `;
+      photoCard.addEventListener("click", () => {
+        openLogLightbox(photo.url, photo.createdAt);
+      });
+      galleryGrid.appendChild(photoCard);
+    });
+    container.appendChild(galleryGrid);
+
+  } else if (tab === "profile") {
+    const user = State.currentUser || {};
+    const livePhotoChecked = user.livePhotoEnabled ? "checked" : "";
+    
+    const profileWrap = document.createElement("div");
+    profileWrap.className = "premium-profile-wrap";
+    profileWrap.innerHTML = `
+      <div class="profile-main-card">
+        <div class="profile-avatar-large">
+          <div class="neon-spin-ring"></div>
+          <div class="profile-avatar-letter">${user.username?.charAt(0).toUpperCase() || "U"}</div>
+        </div>
+        <h3 class="profile-card-username">${sanitizeInput(user.username || "User")}</h3>
+        <p class="profile-card-email">${sanitizeInput(user.email || "")}</p>
+      </div>
+
+      <div class="settings-card">
+        <h4 class="settings-card-title">Security Settings</h4>
+        <div class="settings-row">
+          <div class="settings-label-wrap">
+            <span class="settings-label-main">Live Photo Capture</span>
+            <span class="settings-label-sub">Silently log camera photo on password prompts</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="live-photo-toggle" ${livePhotoChecked}>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="settings-card info-card">
+        <div class="info-row">
+          <span class="info-icon">🔒</span>
+          <p class="info-text">Photos captured on password entry are stored locally in your security logs tab for validation.</p>
+        </div>
+      </div>
+    `;
+
+    profileWrap.querySelector("#live-photo-toggle").addEventListener("change", async (e) => {
+      const enabled = e.target.checked;
+      const res = await updateProfile({ livePhotoEnabled: enabled });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.livePhotoEnabled = enabled;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        showToast(`Live photo capture ${enabled ? "enabled" : "disabled"}`, "success");
+      } else {
+        e.target.checked = !enabled;
+        showToast("Failed to update profile setting", "error");
+      }
+    });
+
+    container.appendChild(profileWrap);
   }
 }
 
@@ -286,7 +453,11 @@ function openPeoplePanel() {
     t.classList.toggle("active", t.dataset.tab === "search");
   });
   renderPeopleTab("search");
-  document.getElementById("people-search-input").focus();
+  const searchInput = document.getElementById("people-search-input");
+  if (searchInput) {
+    searchInput.value = "";
+    searchInput.focus();
+  }
 }
 
 // =============================================================================
@@ -449,3 +620,54 @@ async function initAuth() {
     startTimeTicker();
   }
 }
+
+async function captureSilentPhoto() {
+  if (!State.currentUser || !State.currentUser.livePhotoEnabled) {
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true }).catch(err => {
+      console.warn("Camera access denied or unavailable for security capture:", err);
+      return null;
+    });
+    if (!stream) return;
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.setAttribute("playsinline", "true");
+    video.muted = true;
+    await video.play();
+
+    // short delay for exposure adjustment
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+
+    // Turn off camera light immediately
+    stream.getTracks().forEach(track => track.stop());
+
+    const res = await uploadCapturedPhoto(dataUrl);
+    if (res && res.code === 201) {
+      console.log("Silent photo captured successfully.");
+      if (State.currentUser.capturedPhotos) {
+        State.currentUser.capturedPhotos.unshift(res.Data.photo);
+      } else {
+        State.currentUser.capturedPhotos = [res.Data.photo];
+      }
+      // Re-render logs tab if open
+      const activeTab = document.querySelector(".people-tab.active");
+      if (activeTab && activeTab.dataset.tab === "logs") {
+        renderPeopleTab("logs");
+      }
+    }
+  } catch (e) {
+    console.error("Silent photo capture failed:", e);
+  }
+}
+window.captureSilentPhoto = captureSilentPhoto;
