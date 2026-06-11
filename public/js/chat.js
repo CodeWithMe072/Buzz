@@ -104,13 +104,9 @@ function openChat(chatId) {
   
   // Clone element to reset previous click listeners
   const newAvatarEl = avatarEl.cloneNode(true);
+  newAvatarEl.style.cursor = "default";
   avatarEl.parentNode.replaceChild(newAvatarEl, avatarEl);
 
-  newAvatarEl.addEventListener("click", () => {
-    if (newAvatarEl.classList.contains("has-moments")) {
-      openMomentsCarousel(chatId);
-    }
-  });
 
   // Query and cache friend's moments
   if (typeof getFriendMoments === "function") {
