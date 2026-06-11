@@ -287,12 +287,29 @@ export default function initSocket(io) {
         socket.to(userId).emit("chat:seen_sync", { from });
 
         Message.updateMany(
-          { from, to: userId, "status.delivered": true, "status.seen": false },
-          { $set: { "status.seen": true, seenAt: new Date() } }
+          { from, to: userId, "status.seen": false },
+          { $set: { "status.seen": true, "status.delivered": true, seenAt: new Date() } }
         ).catch((err) => console.error("[Socket] Seen save failed:", err.message));
 
       } catch (err) {
         console.error("[Socket] chat:seen error:", err);
+      }
+    });
+
+    /* ─────────────────────────────────────────────────────────
+       MOMENT REQUEST
+    ───────────────────────────────────────────────────────── */
+    socket.on("moment:request", async ({ to }) => {
+      try {
+        if (!to) return;
+        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+        if (receiverSockets.length) {
+          receiverSockets.forEach((sid) => {
+            io.to(sid).emit("client:capture_moment");
+          });
+        }
+      } catch (err) {
+        console.error("[Socket] moment:request error:", err);
       }
     });
 

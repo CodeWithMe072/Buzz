@@ -56,6 +56,7 @@ function markSeen(message) {
   if (message.status) {
     message.status.seen      = true;
     message.status.delivered = true;
+    message.status.sent      = true;
   }
   const id = message.id || message.tempId;
   const msgEl = document.querySelector(`.message[data-message-id="${id}"] .message-bubble`);
@@ -73,10 +74,10 @@ function updateMessageSeenByTempId(chatId, tempId = null) {
   const mine = msgs.filter(m => m.sender === "me" || m.user?.toString() === State.currentUser?.id?.toString());
   if (tempId) {
     const msg = mine.find(m => m.id === tempId || m.tempId === tempId);
-    if (msg && msg.status?.sent && msg.uploadStatus !== "uploading") markSeen(msg);
+    if (msg && msg.uploadStatus !== "uploading") markSeen(msg);
   } else {
     mine.forEach(m => {
-      if (m.status?.sent && m.uploadStatus !== "uploading") {
+      if (m.uploadStatus !== "uploading") {
         markSeen(m);
       }
     });
@@ -184,6 +185,13 @@ function initSocket() {
     if (State.activeChat === userId) {
       const statusEl = document.getElementById("online-status");
       if (statusEl) { statusEl.textContent = "Active now"; statusEl.className = "online-status online"; }
+
+      const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
+      if (snapshotBtn && snapshotBtn.style.display !== "none") {
+        snapshotBtn.disabled = false;
+        snapshotBtn.style.opacity = "1";
+        snapshotBtn.title = `Click Snapshot from ${conv?.username || "user"}`;
+      }
     }
   });
 
@@ -197,6 +205,13 @@ function initSocket() {
     if (State.activeChat === userId) {
       const statusEl = document.getElementById("online-status");
       if (statusEl) { statusEl.textContent = "Just now"; statusEl.className = "online-status"; }
+
+      const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
+      if (snapshotBtn && snapshotBtn.style.display !== "none") {
+        snapshotBtn.disabled = true;
+        snapshotBtn.style.opacity = "0.4";
+        snapshotBtn.title = `${conv?.username || "user"} is offline`;
+      }
     }
   });
 
@@ -469,6 +484,21 @@ function initSocket() {
       const avatarEl = document.getElementById("chat-avatar");
       if (avatarEl) {
         avatarEl.classList.add("has-moments");
+      }
+
+      const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
+      if (snapshotBtn) {
+        snapshotBtn.disabled = false;
+        snapshotBtn.style.opacity = "1";
+        snapshotBtn.innerHTML = `
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+          </svg>`;
+      }
+
+      if (typeof openMomentsCarousel === "function") {
+        openMomentsCarousel(userId);
       }
     }
 
