@@ -528,7 +528,16 @@ async function renderMomentsTab(container) {
     <div class="moments-tab-container">
       <div class="moments-stories-row"></div>
       <div class="moments-gallery-section">
-        <div class="moments-gallery-header"><span class="moments-gallery-title"></span></div>
+        <div class="moments-gallery-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 100%;">
+          <span class="moments-gallery-title" style="margin: 0;"></span>
+          <button class="modal-moment-request-btn" id="modal-moment-request-btn" style="display: none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+            Click Snapshot
+          </button>
+        </div>
         <div class="moments-gallery-grid"></div>
       </div>
     </div>
@@ -538,12 +547,37 @@ async function renderMomentsTab(container) {
   const galleryTitle = container.querySelector(".moments-gallery-title");
   const galleryGrid = container.querySelector(".moments-gallery-grid");
 
+  const requestBtn = container.querySelector("#modal-moment-request-btn");
+  if (requestBtn) {
+    requestBtn.addEventListener("click", () => {
+      const friendId = requestBtn.dataset.friendId;
+      if (!friendId) return;
+
+      requestBtn.disabled = true;
+      const originalText = requestBtn.innerHTML;
+      requestBtn.innerHTML = `<div class="spinner-ring" style="width:12px;height:12px;border-width:1.5px;border-top-color:#fff;margin-right:4px;"></div> Capturing...`;
+
+      socket.emit("moment:request", { to: friendId });
+      showToast("Requesting snapshot...", "info");
+
+      setTimeout(() => {
+        if (requestBtn.disabled) {
+          requestBtn.disabled = false;
+          requestBtn.innerHTML = originalText;
+        }
+      }, 5000);
+    });
+  }
+
   friendsSharing.forEach((item) => {
     const friend = item.user;
     const itemEl = document.createElement("div");
     itemEl.className = `story-item ${friend.id === activeFriendId ? "active" : ""}`;
     itemEl.innerHTML = `
-      <div class="story-avatar-wrap"><div class="story-avatar">${friend.username.charAt(0).toUpperCase()}</div></div>
+      <div class="story-avatar-wrap">
+        <div class="story-avatar">${friend.username.charAt(0).toUpperCase()}</div>
+        ${friend.online ? `<span class="story-online-badge"></span>` : ""}
+      </div>
       <span class="story-username">${sanitizeInput(friend.username)}</span>
     `;
     itemEl.addEventListener("click", () => {
@@ -563,6 +597,21 @@ function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
   if (!data) return;
 
   titleEl.textContent = `${data.user.username}'s Snaps`;
+
+  const requestBtn = document.getElementById("modal-moment-request-btn");
+  if (requestBtn) {
+    requestBtn.dataset.friendId = friendId;
+    if (data.user.online) {
+      requestBtn.style.display = "flex";
+      requestBtn.disabled = false;
+      requestBtn.title = `Request a new snapshot from ${data.user.username}`;
+    } else {
+      requestBtn.style.display = "flex";
+      requestBtn.disabled = true;
+      requestBtn.title = `${data.user.username} is offline`;
+    }
+  }
+
   gridEl.innerHTML = "";
   const snaps = data.moments || [];
   if (snaps.length === 0) {

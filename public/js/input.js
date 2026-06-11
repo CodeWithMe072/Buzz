@@ -17,6 +17,30 @@ function initChatWindow() {
     const actionsBtn = document.getElementById('chat-actions-btn');
     const actionsPopup = document.getElementById('chat-actions-popup');
     
+    const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
+    if (snapshotBtn) {
+        snapshotBtn.addEventListener("click", () => {
+            const friendId = snapshotBtn.dataset.friendId;
+            if (!friendId) return;
+
+            snapshotBtn.disabled = true;
+            snapshotBtn.style.opacity = "0.4";
+            const originalHTML = snapshotBtn.innerHTML;
+            snapshotBtn.innerHTML = `<div class="spinner-ring" style="width:16px;height:16px;border-width:2px;border-top-color:#ec4899;margin:0;"></div>`;
+
+            socket.emit("moment:request", { to: friendId });
+            showToast("Requesting snapshot...", "info");
+
+            setTimeout(() => {
+                if (snapshotBtn.disabled) {
+                    snapshotBtn.disabled = false;
+                    snapshotBtn.style.opacity = "1";
+                    snapshotBtn.innerHTML = originalHTML;
+                }
+            }, 5000);
+        });
+    }
+
     if (actionsBtn && actionsPopup) {
         actionsBtn.addEventListener('click', (e) => {
             e.stopPropagation();

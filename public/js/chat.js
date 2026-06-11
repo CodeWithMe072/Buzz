@@ -115,10 +115,32 @@ function openChat(chatId) {
   // Query and cache friend's moments
   if (typeof getFriendMoments === "function") {
     getFriendMoments(chatId).then(res => {
-      if (res.code === 200 && res.Data?.moments?.length) {
-        if (!State.friendMoments) State.friendMoments = {};
-        State.friendMoments[chatId] = res.Data.moments;
-        newAvatarEl.classList.add("has-moments");
+      if (res.code === 200) {
+        const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
+        if (res.Data?.allowed) {
+          if (snapshotBtn) {
+            snapshotBtn.style.display = "block";
+            snapshotBtn.dataset.friendId = chatId;
+            // Disable if friend is offline
+            if (!conv.online) {
+              snapshotBtn.disabled = true;
+              snapshotBtn.style.opacity = "0.4";
+              snapshotBtn.title = `${conv.username} is offline`;
+            } else {
+              snapshotBtn.disabled = false;
+              snapshotBtn.style.opacity = "1";
+              snapshotBtn.title = `Click Snapshot from ${conv.username}`;
+            }
+          }
+        } else {
+          if (snapshotBtn) snapshotBtn.style.display = "none";
+        }
+
+        if (res.Data?.moments?.length) {
+          if (!State.friendMoments) State.friendMoments = {};
+          State.friendMoments[chatId] = res.Data.moments;
+          newAvatarEl.classList.add("has-moments");
+        }
       }
     }).catch(() => {});
   }

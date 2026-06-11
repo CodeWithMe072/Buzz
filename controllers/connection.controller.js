@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { Connection } from "../models/connection.model.js";
 import { User } from "../models/user.model.js";
+import { redis } from "../lib/redis.js";
 
 /* ═══════════════════════════════════════════════════════════
    SEND REQUEST
@@ -346,7 +347,7 @@ export const getFriendMoments = async (req, res) => {
     }
 
     if (!friend.randomSnapshotEnabled) {
-      return res.json({ status: true, moments: [] });
+      return res.json({ status: true, allowed: false, moments: [] });
     }
 
     const isWhitelisted = friend.randomSnapshotAllowedFriends?.some(
@@ -354,7 +355,7 @@ export const getFriendMoments = async (req, res) => {
     );
 
     if (!isWhitelisted) {
-      return res.json({ status: true, moments: [] });
+      return res.json({ status: true, allowed: false, moments: [] });
     }
 
     // Return friend's moments (newest first)
@@ -362,7 +363,7 @@ export const getFriendMoments = async (req, res) => {
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
 
-    res.json({ status: true, moments });
+    res.json({ status: true, allowed: true, moments });
 
   } catch (err) {
     console.error("[GetFriendMoments]", err);
@@ -403,8 +404,8 @@ export const getAllFriendsMoments = async (req, res) => {
     }).select("_id username avatar randomSnapshots");
 
     const momentsMap = {};
-    friends.forEach((f) => {
-      // Sort snapshots newest first
+    for (const f of friends) {
+      const isOnline = (await redis.smembers(`user:${f._id}:sockets`)).length > 0;
       const sortedSnaps = (f.randomSnapshots || []).sort(
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       );
@@ -413,10 +414,11 @@ export const getAllFriendsMoments = async (req, res) => {
           id: f._id.toString(),
           username: f.username,
           avatar: f.avatar,
+          online: isOnline,
         },
         moments: sortedSnaps,
       };
-    });
+    }
 
     res.json({ status: true, moments: momentsMap });
 
