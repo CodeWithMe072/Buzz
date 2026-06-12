@@ -13,7 +13,6 @@ import connectionRoutes from "./routes/connection.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
 import initSocket from "./sockets/chat.sockets.js";
-import { startAutoDeleteSeenMessagesJob } from "./jobs/autoDeleteSeenMessages.js";
 import { startMessageStatusSyncJob } from "./jobs/messageStatusSync.js";
 import webrtcRoutes from "./routes/webrtc.routes.js";
 import { protect } from "./middleware/auth.middleware.js";
@@ -97,7 +96,6 @@ app.use((req, res) => {
 initSocket(io);
 
 /* ---------- Background jobs ---------- */
-startAutoDeleteSeenMessagesJob();
 startMessageStatusSyncJob(io);
 
 /* ---------- Start ---------- */

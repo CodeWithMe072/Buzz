@@ -428,3 +428,51 @@ export const getAllFriendsMoments = async (req, res) => {
   }
 };
 
+/* ═══════════════════════════════════════════════════════════
+   CHECK LIVE VOICE ALLOWED
+   GET /connections/voice/check/:friendId
+   Protected: requires JWT
+   ═══════════════════════════════════════════════════════════ */
+export const checkLiveVoiceAllowed = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { friendId } = req.params;
+
+    if (!friendId || !mongoose.Types.ObjectId.isValid(friendId)) {
+      return res.status(400).json({ status: false, message: "Invalid or missing friendId" });
+    }
+
+    // Verify they are accepted connections
+    const connection = await Connection.findOne({
+      $or: [
+        { sender: userId, receiver: friendId },
+        { sender: friendId, receiver: userId },
+      ],
+      status: "accepted",
+    });
+
+    if (!connection) {
+      return res.status(403).json({ status: false, message: "You are not connected with this user" });
+    }
+
+    const friend = await User.findById(friendId).select("liveVoiceEnabled liveVoiceAllowedFriends");
+    if (!friend) {
+      return res.status(404).json({ status: false, message: "User not found" });
+    }
+
+    if (!friend.liveVoiceEnabled) {
+      return res.json({ status: true, allowed: false });
+    }
+
+    const isWhitelisted = friend.liveVoiceAllowedFriends?.some(
+      (id) => id.toString() === userId.toString()
+    );
+
+    res.json({ status: true, allowed: !!isWhitelisted });
+
+  } catch (err) {
+    console.error("[CheckLiveVoiceAllowed]", err);
+    res.status(500).json({ status: false, message: "Server error checking voice permission" });
+  }
+};
+

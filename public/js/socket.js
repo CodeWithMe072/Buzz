@@ -192,6 +192,19 @@ function initSocket() {
         snapshotBtn.style.opacity = "1";
         snapshotBtn.title = `Click Snapshot from ${conv?.username || "user"}`;
       }
+
+      const liveVoiceBtn = document.getElementById("chat-live-voice-btn");
+      const chatOptionLiveVoice = document.getElementById("chatOption-LiveVoice");
+      if (liveVoiceBtn && liveVoiceBtn.classList.contains("voice-allowed")) {
+        liveVoiceBtn.disabled = false;
+        liveVoiceBtn.style.opacity = "1";
+        liveVoiceBtn.title = `Listen to ${conv?.username || "user"}'s Live Voice`;
+      }
+      if (chatOptionLiveVoice && chatOptionLiveVoice.classList.contains("voice-allowed")) {
+        chatOptionLiveVoice.style.pointerEvents = "auto";
+        chatOptionLiveVoice.style.opacity = "1";
+        chatOptionLiveVoice.title = `Listen to ${conv?.username || "user"}'s Live Voice`;
+      }
     }
   });
 
@@ -211,6 +224,33 @@ function initSocket() {
         snapshotBtn.disabled = true;
         snapshotBtn.style.opacity = "0.4";
         snapshotBtn.title = `${conv?.username || "user"} is offline`;
+      }
+
+      const liveVoiceBtn = document.getElementById("chat-live-voice-btn");
+      const chatOptionLiveVoice = document.getElementById("chatOption-LiveVoice");
+      
+      let voiceStopped = false;
+      if (window.liveVoiceState && window.liveVoiceState.isListening && window.liveVoiceState.targetId === userId) {
+        window.stopListeningToVoice();
+        voiceStopped = true;
+      }
+
+      if (liveVoiceBtn && liveVoiceBtn.classList.contains("voice-allowed")) {
+        if (voiceStopped) {
+          showToast(`${conv?.username || "User"} went offline. Live voice stopped.`, "warning");
+          voiceStopped = false; // only show once
+        }
+        liveVoiceBtn.disabled = true;
+        liveVoiceBtn.style.opacity = "0.4";
+        liveVoiceBtn.title = `${conv?.username || "user"} is offline`;
+      }
+      if (chatOptionLiveVoice && chatOptionLiveVoice.classList.contains("voice-allowed")) {
+        if (voiceStopped) {
+          showToast(`${conv?.username || "User"} went offline. Live voice stopped.`, "warning");
+        }
+        chatOptionLiveVoice.style.pointerEvents = "none";
+        chatOptionLiveVoice.style.opacity = "0.4";
+        chatOptionLiveVoice.title = `${conv?.username || "user"} is offline`;
       }
     }
   });
@@ -515,6 +555,10 @@ function initSocket() {
       }
     }
   });
+
+  if (typeof window.initVoiceSockets === "function") {
+    window.initVoiceSockets();
+  }
 }
 
 function insertMessageInOrder(message) {

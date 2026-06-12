@@ -554,6 +554,33 @@ const EmojiPanel = (() => {
   const $ = id => document.getElementById(id);
   let userCustomGifs = [];
 
+  function showCustomConfirm(title, message, onConfirm) {
+    const modal = $("custom-confirm-modal");
+    const titleEl = $("confirm-modal-title");
+    const msgEl = $("confirm-modal-message");
+    const cancelBtn = $("confirm-modal-cancel-btn");
+    const okBtn = $("confirm-modal-ok-btn");
+
+    if (!modal || !titleEl || !msgEl || !cancelBtn || !okBtn) {
+      if (confirm(message)) onConfirm();
+      return;
+    }
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    modal.style.display = "flex";
+
+    const close = () => {
+      modal.style.display = "none";
+    };
+
+    cancelBtn.onclick = close;
+    okBtn.onclick = () => {
+      close();
+      onConfirm();
+    };
+  }
+
   function init() {
     const btn = $("emoji-panel-btn");
     const panel = $("custom-emoji-panel");
@@ -609,9 +636,9 @@ const EmojiPanel = (() => {
       });
     }
 
-    // Close on click outside (but not on input or panel elements)
+    // Close on click outside (but not on input or panel elements, nor custom uploader/confirm modals)
     document.addEventListener("click", (e) => {
-      if (!panel.contains(e.target) && e.target !== btn && !e.target.closest("#emoji-panel-btn") && e.target !== messageInput) {
+      if (!panel.contains(e.target) && e.target !== btn && !e.target.closest("#emoji-panel-btn") && e.target !== messageInput && !e.target.closest("#custom-gif-upload-modal") && !e.target.closest("#custom-confirm-modal")) {
         if (panel.classList.contains("active")) {
           panel.classList.remove("active");
           scrollToBottom();
@@ -753,6 +780,18 @@ const EmojiPanel = (() => {
     const gifFileName = $("custom-gif-file-name");
     const gifUploadBtn = $("custom-gif-upload-btn");
     const gifSectionInput = $("custom-gif-section-input");
+    const gifSectionSelect = $("custom-gif-section-select");
+    const gifSectionInputContainer = $("custom-gif-section-input-container");
+
+    if (gifSectionSelect && gifSectionInputContainer) {
+      gifSectionSelect.addEventListener("change", () => {
+        if (gifSectionSelect.value === "new") {
+          gifSectionInputContainer.style.display = "block";
+        } else {
+          gifSectionInputContainer.style.display = "none";
+        }
+      });
+    }
 
     if (gifSelectBtn && gifFileInput) {
       gifSelectBtn.addEventListener("click", () => {
@@ -776,7 +815,12 @@ const EmojiPanel = (() => {
         const file = gifFileInput.files[0];
         if (!file) return;
 
-        const section = (gifSectionInput.value || "").trim() || "My GIFs";
+        let section = "";
+        if (gifSectionSelect && gifSectionSelect.value !== "new") {
+          section = gifSectionSelect.value;
+        } else {
+          section = (gifSectionInput.value || "").trim() || "My GIFs";
+        }
         
         gifUploadBtn.disabled = true;
         gifUploadBtn.textContent = "Uploading...";
@@ -1067,6 +1111,57 @@ const EmojiPanel = (() => {
     if (!container) return;
     container.innerHTML = "";
 
+    const titleEl = $("custom-section-title");
+    if (titleEl) {
+      titleEl.textContent = sectionName;
+    }
+
+    // Add to section button (Add More)
+    const addBtn = $("add-to-section-btn");
+    if (addBtn) {
+      const newAddBtn = addBtn.cloneNode(true);
+      addBtn.parentNode.replaceChild(newAddBtn, addBtn);
+      newAddBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openUploadModal(sectionName);
+      });
+    }
+
+    const delBtn = $("delete-section-btn");
+    if (delBtn) {
+      const newDelBtn = delBtn.cloneNode(true);
+      delBtn.parentNode.replaceChild(newDelBtn, delBtn);
+      newDelBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        showCustomConfirm(
+          "Delete Tab",
+          `Are you sure you want to delete the "${sectionName}" tab and all its custom GIFs/videos?`,
+          async () => {
+            try {
+              const token = TokenStore.getToken();
+              const headers = {};
+              if (token) headers["Authorization"] = `Bearer ${token}`;
+
+              const res = await fetch(`/api/gifs/custom/section/${encodeURIComponent(sectionName)}`, {
+                method: "DELETE",
+                headers
+              });
+
+              if (res.ok) {
+                showToast(`Deleted section "${sectionName}" successfully`, "success");
+                await loadCustomGifsAndTrending("emojis");
+              } else {
+                showToast("Failed to delete section", "error");
+              }
+            } catch (err) {
+              console.error("Delete section error:", err);
+              showToast("Failed to delete section", "error");
+            }
+          }
+        );
+      });
+    }
+
     let filtered = userCustomGifs.filter(cg => (cg.section || "My GIFs") === sectionName);
 
     if (query) {
@@ -1080,9 +1175,18 @@ const EmojiPanel = (() => {
     }
 
     filtered.forEach(gif => {
+      const itemContainer = document.createElement("div");
+      itemContainer.className = "gif-item-wrapper";
+      itemContainer.style.position = "relative";
+      itemContainer.style.display = "inline-block";
+      itemContainer.style.width = "100%";
+      itemContainer.style.aspectRatio = "1";
+
       const btn = document.createElement("button");
       btn.className = "gif-item-btn";
       btn.type = "button";
+      btn.style.width = "100%";
+      btn.style.height = "100%";
       const urlLower = (gif.url || "").toLowerCase();
       const isVideo = urlLower.endsWith(".mp4") || urlLower.endsWith(".m4v") || urlLower.endsWith(".m4bb");
       if (isVideo) {
@@ -1091,7 +1195,72 @@ const EmojiPanel = (() => {
         btn.innerHTML = `<img src="${gif.url}" alt="GIF" loading="lazy">`;
       }
       btn.addEventListener("click", () => sendSpecialTypeMessage("gif", gif.url));
-      container.appendChild(btn);
+
+      const delSingleBtn = document.createElement("button");
+      delSingleBtn.type = "button";
+      delSingleBtn.className = "gif-delete-single-btn";
+      delSingleBtn.innerHTML = `&times;`;
+      delSingleBtn.style.position = "absolute";
+      delSingleBtn.style.top = "4px";
+      delSingleBtn.style.right = "4px";
+      delSingleBtn.style.background = "rgba(0, 0, 0, 0.6)";
+      delSingleBtn.style.border = "none";
+      delSingleBtn.style.color = "#ef4444";
+      delSingleBtn.style.fontSize = "16px";
+      delSingleBtn.style.width = "18px";
+      delSingleBtn.style.height = "18px";
+      delSingleBtn.style.borderRadius = "50%";
+      delSingleBtn.style.display = "flex";
+      delSingleBtn.style.alignItems = "center";
+      delSingleBtn.style.justifyContent = "center";
+      delSingleBtn.style.cursor = "pointer";
+      delSingleBtn.style.lineHeight = "1";
+      delSingleBtn.style.zIndex = "2";
+      delSingleBtn.style.transition = "all 0.2s";
+      delSingleBtn.title = "Delete GIF";
+
+      delSingleBtn.addEventListener("mouseover", () => {
+        delSingleBtn.style.background = "#ef4444";
+        delSingleBtn.style.color = "#ffffff";
+      });
+      delSingleBtn.addEventListener("mouseout", () => {
+        delSingleBtn.style.background = "rgba(0, 0, 0, 0.6)";
+        delSingleBtn.style.color = "#ef4444";
+      });
+
+      delSingleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        showCustomConfirm(
+          "Delete GIF",
+          "Are you sure you want to delete this custom GIF/video?",
+          async () => {
+            try {
+              const token = TokenStore.getToken();
+              const headers = {};
+              if (token) headers["Authorization"] = `Bearer ${token}`;
+
+              const res = await fetch(`/api/gifs/custom/${gif._id}`, {
+                method: "DELETE",
+                headers
+              });
+
+              if (res.ok) {
+                showToast("GIF deleted successfully", "success");
+                await loadCustomGifsAndTrending(`custom-section-${sectionName}`);
+              } else {
+                showToast("Failed to delete GIF", "error");
+              }
+            } catch (err) {
+              console.error("Delete GIF error:", err);
+              showToast("Failed to delete GIF", "error");
+            }
+          }
+        );
+      });
+
+      itemContainer.appendChild(btn);
+      itemContainer.appendChild(delSingleBtn);
+      container.appendChild(itemContainer);
     });
   }
 
@@ -1099,7 +1268,7 @@ const EmojiPanel = (() => {
     renderCustomSectionGifs(sectionName, query);
   }
 
-  function openUploadModal() {
+  function openUploadModal(preselectedSection) {
     const modal = $("custom-gif-upload-modal");
     if (modal) {
       modal.style.display = "flex";
@@ -1108,6 +1277,8 @@ const EmojiPanel = (() => {
       const fileInput = $("custom-gif-file-input");
       const fileName = $("custom-gif-file-name");
       const uploadBtn = $("custom-gif-upload-btn");
+      const sectionSelect = $("custom-gif-section-select");
+      const sectionInputContainer = $("custom-gif-section-input-container");
       
       if (sectionInput) sectionInput.value = "";
       if (fileInput) fileInput.value = "";
@@ -1115,6 +1286,37 @@ const EmojiPanel = (() => {
       if (uploadBtn) {
         uploadBtn.disabled = true;
         uploadBtn.textContent = "Upload";
+      }
+
+      if (sectionSelect) {
+        sectionSelect.innerHTML = '<option value="new">-- Create New Tab/Section --</option>';
+        const sections = [];
+        userCustomGifs.forEach(gif => {
+          const sec = gif.section || "My GIFs";
+          if (!sections.includes(sec)) {
+            sections.push(sec);
+          }
+        });
+        sections.forEach(sec => {
+          const opt = document.createElement("option");
+          opt.value = sec;
+          opt.textContent = sec;
+          sectionSelect.appendChild(opt);
+        });
+        
+        if (preselectedSection) {
+          sectionSelect.value = preselectedSection;
+        } else {
+          sectionSelect.value = "new";
+        }
+      }
+
+      if (sectionInputContainer) {
+        if (preselectedSection && preselectedSection !== "new") {
+          sectionInputContainer.style.display = "none";
+        } else {
+          sectionInputContainer.style.display = "block";
+        }
       }
     }
   }

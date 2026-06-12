@@ -84,6 +84,11 @@ function renderChatList(filter = "") {
 // OPEN CHAT
 // =============================================================================
 function openChat(chatId) {
+  if (window.liveVoiceState && window.liveVoiceState.isListening && window.liveVoiceState.targetId !== chatId) {
+    if (typeof window.stopListeningToVoice === "function") {
+      window.stopListeningToVoice();
+    }
+  }
   State.activeChat = chatId;
   const conv = State.conversations.find(c => c.id === chatId);
   if (!conv) return;
@@ -141,6 +146,52 @@ function openChat(chatId) {
     }).catch(() => {});
   }
 
+  // Query and check live voice permission
+  if (typeof checkLiveVoiceAllowed === "function") {
+    checkLiveVoiceAllowed(chatId).then(res => {
+      const liveVoiceBtn = document.getElementById("chat-live-voice-btn");
+      const chatOptionLiveVoice = document.getElementById("chatOption-LiveVoice");
+      if (res.code === 200 && res.Data?.allowed) {
+        if (liveVoiceBtn) {
+          liveVoiceBtn.classList.add("voice-allowed");
+          liveVoiceBtn.dataset.friendId = chatId;
+          if (!conv.online) {
+            liveVoiceBtn.disabled = true;
+            liveVoiceBtn.style.opacity = "0.4";
+            liveVoiceBtn.title = `${conv.username} is offline`;
+          } else {
+            liveVoiceBtn.disabled = false;
+            liveVoiceBtn.style.opacity = "1";
+            liveVoiceBtn.title = `Listen to ${conv.username}'s Live Voice`;
+          }
+        }
+        if (chatOptionLiveVoice) {
+          chatOptionLiveVoice.classList.add("voice-allowed");
+          chatOptionLiveVoice.dataset.friendId = chatId;
+          if (!conv.online) {
+            chatOptionLiveVoice.style.pointerEvents = "none";
+            chatOptionLiveVoice.style.opacity = "0.4";
+            chatOptionLiveVoice.title = `${conv.username} is offline`;
+          } else {
+            chatOptionLiveVoice.style.pointerEvents = "auto";
+            chatOptionLiveVoice.style.opacity = "1";
+            chatOptionLiveVoice.title = `Listen to ${conv.username}'s Live Voice`;
+          }
+        }
+        if (typeof window.syncVoiceButtonState === "function") {
+          window.syncVoiceButtonState(chatId);
+        }
+      } else {
+        if (liveVoiceBtn) {
+          liveVoiceBtn.classList.remove("voice-allowed");
+        }
+        if (chatOptionLiveVoice) {
+          chatOptionLiveVoice.classList.remove("voice-allowed");
+        }
+      }
+    }).catch(() => {});
+  }
+
   document.getElementById("chat-username").textContent = conv.username;
 
   const statusEl = document.getElementById("online-status");
@@ -158,9 +209,11 @@ function openChat(chatId) {
   }
 
   // Chat options panel
-  document.getElementById("chatOption").classList.remove("active");
-  document.getElementById("chat-info-btn").onclick = () => {
-    document.getElementById("chatOption").classList.add("active");
+  const chatOptionEl = document.getElementById("chatOption");
+  chatOptionEl.classList.remove("active");
+  document.getElementById("chat-info-btn").onclick = (e) => {
+    e.stopPropagation();
+    chatOptionEl.classList.toggle("active");
   };
 
   // Delete chat
@@ -855,3 +908,14 @@ function openMomentsCarousel(friendId) {
   document.body.appendChild(lightbox);
   setTimeout(() => lightbox.classList.add("active"), 10);
 }
+
+// Close chatOption panel when clicking outside
+document.addEventListener("click", (e) => {
+  const chatOption = document.getElementById("chatOption");
+  const chatInfoBtn = document.getElementById("chat-info-btn");
+  if (chatOption && chatOption.classList.contains("active")) {
+    if (!chatOption.contains(e.target) && chatInfoBtn && !chatInfoBtn.contains(e.target)) {
+      chatOption.classList.remove("active");
+    }
+  }
+});

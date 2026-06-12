@@ -430,7 +430,7 @@ function renderPeopleTab(tab) {
     const user = State.currentUser || {};
     container.innerHTML = `
       <div class="profile-section-title-wrap" style="margin-bottom: 24px;">
-        <h2 class="profile-section-title">Moments Whitelist</h2>
+        <h2 class="profile-section-title">Privacy & Permissions Whitelist</h2>
       </div>
       <div class="profile-content-card">
         <div class="settings-row" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 16px;">
@@ -449,9 +449,28 @@ function renderPeopleTab(tab) {
           </div>
         </div>
       </div>
+
+      <div class="profile-content-card" style="margin-top: 24px;">
+        <div class="settings-row" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 16px;">
+          <div class="settings-label-wrap">
+            <span class="settings-label-main">Live Voice Listening</span>
+            <span class="settings-label-sub">Allow whitelisted friends to listen to your live microphone voice</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="profile-modal-live-voice-toggle" ${user.liveVoiceEnabled ? "checked" : ""}>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div id="profile-modal-voice-whitelist-container" style="${user.liveVoiceEnabled ? "display: block;" : "display: none;"}">
+          <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--text-secondary);">Allow Live Voice Listening to</h3>
+          <div class="profile-modal-whitelist-list" id="profile-modal-voice-whitelist-list">
+          </div>
+        </div>
+      </div>
     `;
 
     renderModalWhitelist(container.querySelector("#profile-modal-whitelist-list"));
+    renderModalVoiceWhitelist(container.querySelector("#profile-modal-voice-whitelist-list"));
 
     container.querySelector("#profile-modal-random-snapshot-toggle").addEventListener("change", async (e) => {
       const enabled = e.target.checked;
@@ -467,6 +486,26 @@ function renderPeopleTab(tab) {
           renderModalWhitelist(container.querySelector("#profile-modal-whitelist-list"));
         }
         showToast(`Spontaneous moments ${enabled ? "enabled" : "disabled"}`, "success");
+      } else {
+        e.target.checked = !enabled;
+        showToast("Failed to update profile setting", "error");
+      }
+    });
+
+    container.querySelector("#profile-modal-live-voice-toggle").addEventListener("change", async (e) => {
+      const enabled = e.target.checked;
+      const res = await updateProfile({ liveVoiceEnabled: enabled });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.liveVoiceEnabled = enabled;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        const voiceWhitelistContainer = container.querySelector("#profile-modal-voice-whitelist-container");
+        if (voiceWhitelistContainer) {
+          voiceWhitelistContainer.style.display = enabled ? "block" : "none";
+        }
+        if (enabled) {
+          renderModalVoiceWhitelist(container.querySelector("#profile-modal-voice-whitelist-list"));
+        }
+        showToast(`Live Voice Listening ${enabled ? "enabled" : "disabled"}`, "success");
       } else {
         e.target.checked = !enabled;
         showToast("Failed to update profile setting", "error");
@@ -741,6 +780,53 @@ function renderModalWhitelist(whitelistList) {
         State.currentUser.randomSnapshotAllowedFriends = allowedList;
         localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
         showToast(`Snapshot sharing updated`, "success");
+      } else {
+        e.target.checked = !checked;
+        showToast("Failed to update whitelist", "error");
+      }
+    });
+    whitelistList.appendChild(row);
+  });
+}
+
+function renderModalVoiceWhitelist(whitelistList) {
+  if (!whitelistList) return;
+  whitelistList.innerHTML = "";
+  const user = State.currentUser || {};
+  if (!State.contacts.length) {
+    whitelistList.innerHTML = `<p style="font-size:12px;color:var(--text-secondary);text-align:center;margin:16px 0;">No connections to share with yet.</p>`;
+    return;
+  }
+
+  const allowed = (user.liveVoiceAllowedFriends || []).map(id => id.toString());
+  State.contacts.forEach(c => {
+    const row = document.createElement("div");
+    row.className = "whitelist-row";
+    const isWhitelisted = allowed.includes(c.user.id?.toString());
+    row.innerHTML = `
+      <div class="whitelist-user">
+        <div class="whitelist-avatar">${c.user.username.charAt(0).toUpperCase()}</div>
+        <span class="whitelist-username">${sanitizeInput(c.user.username)}</span>
+      </div>
+      <label class="switch mini-switch">
+        <input type="checkbox" class="modal-voice-whitelist-friend-toggle" data-friend-id="${c.user.id}" ${isWhitelisted ? "checked" : ""}>
+        <span class="slider"></span>
+      </label>
+    `;
+    
+    row.querySelector(".modal-voice-whitelist-friend-toggle").addEventListener("change", async (e) => {
+      const friendId = e.target.dataset.friendId;
+      const checked = e.target.checked;
+      let allowedList = State.currentUser.liveVoiceAllowedFriends || [];
+      allowedList = allowedList.map(id => id.toString());
+      const idx = allowedList.indexOf(friendId);
+      if (checked) { if (idx === -1) allowedList.push(friendId); } else { if (idx !== -1) allowedList.splice(idx, 1); }
+
+      const res = await updateProfile({ liveVoiceAllowedFriends: allowedList });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.liveVoiceAllowedFriends = allowedList;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        showToast(`Voice listening permission updated`, "success");
       } else {
         e.target.checked = !checked;
         showToast("Failed to update whitelist", "error");

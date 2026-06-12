@@ -49,13 +49,21 @@ export default function initSocket(io) {
       console.log(`[Socket] ${userId} reconnected — offline timer cancelled`);
     }
 
+    // Clean up stale socket IDs from Redis on connect
+    const existingSockets = await redis.smembers(`user:${userId}:sockets`);
+    for (const sid of existingSockets) {
+      if (!io.sockets.sockets.has(sid)) {
+        await redis.srem(`user:${userId}:sockets`, sid);
+      }
+    }
+
     await redis.sadd(`user:${userId}:sockets`, socket.id);
     await redis.sadd("online:users", userId);
     socket.join(userId);
 
-    // If this is the user's first socket (first device), broadcast online status
-    const sockets = await redis.smembers(`user:${userId}:sockets`);
-    if (sockets.length === 1) {
+    // If this is the user's first active socket, broadcast online status
+    const remainingSockets = await redis.smembers(`user:${userId}:sockets`);
+    if (remainingSockets.length === 1) {
       socket.broadcast.emit("user:online", { userId });
     }
 
@@ -314,6 +322,70 @@ export default function initSocket(io) {
     });
 
     /* ─────────────────────────────────────────────────────────
+       LIVE VOICE STREAMING
+    ───────────────────────────────────────────────────────── */
+    socket.on("voice:request", async ({ to }) => {
+      try {
+        if (!to) return;
+        console.log(`[Socket] voice:request received from ${userId} (${socket.user.username}) to ${to}`);
+        const connected = await areConnected(userId, to);
+        if (!connected) {
+          console.warn(`[Socket] voice:request blocked: users ${userId} and ${to} are not connected`);
+          return;
+        }
+
+        const targetUser = await User.findById(to).select("liveVoiceEnabled liveVoiceAllowedFriends");
+        if (!targetUser || !targetUser.liveVoiceEnabled) {
+          console.warn(`[Socket] voice:request blocked: target ${to} has disabled live voice`);
+          socket.emit("voice:error", { to, message: "User has disabled Live Voice" });
+          return;
+        }
+
+        const isWhitelisted = targetUser.liveVoiceAllowedFriends?.some(
+          (id) => id.toString() === userId.toString()
+        );
+        if (!isWhitelisted) {
+          console.warn(`[Socket] voice:request blocked: requester ${userId} is not whitelisted by target ${to}`);
+          socket.emit("voice:error", { to, message: "You are not whitelisted to listen to this user" });
+          return;
+        }
+
+        const isOnline = await redis.sismember("online:users", to);
+        if (isOnline) {
+          console.log(`[Socket] voice:request accepted. Relaying client:voice_start to room ${to}`);
+          io.to(to).emit("client:voice_start", { requesterId: userId, requesterName: socket.user.username });
+        } else {
+          console.warn(`[Socket] voice:request blocked: target ${to} is offline`);
+          socket.emit("voice:error", { to, message: "User is offline" });
+        }
+      } catch (err) {
+        console.error("[Socket] voice:request error:", err);
+      }
+    });
+
+    socket.on("voice:chunk", async ({ to, samples, sampleRate }) => {
+      try {
+        if (!to) return;
+        // Send raw binary PCM payload directly to target's socket room
+        io.to(to).emit("client:voice_chunk", { from: userId, samples, sampleRate });
+      } catch (err) {
+        console.error("[Socket] voice:chunk error:", err);
+      }
+    });
+
+    socket.on("voice:stop", async ({ to }) => {
+      try {
+        if (!to) return;
+        console.log(`[Socket] voice:stop received from ${userId} to stop target ${to}`);
+        io.to(to).emit("client:voice_stop", { stoppedBy: userId });
+      } catch (err) {
+        console.error("[Socket] voice:stop error:", err);
+      }
+    });
+
+
+
+    /* ─────────────────────────────────────────────────────────
        CONNECTION REQUEST NOTIFICATIONS (real-time)
        When user A sends a request to user B, user B gets notified
        if they're online.
@@ -549,7 +621,16 @@ export default function initSocket(io) {
       await redis.srem(`user:${userId}:sockets`, socket.id);
 
       const remaining = await redis.smembers(`user:${userId}:sockets`);
-      if (remaining.length > 0) return; // other devices still connected
+      const activeRemaining = [];
+      for (const sid of remaining) {
+        if (io.sockets.sockets.has(sid)) {
+          activeRemaining.push(sid);
+        } else {
+          await redis.srem(`user:${userId}:sockets`, sid).catch(() => {});
+        }
+      }
+
+      if (activeRemaining.length > 0) return; // other devices still connected
 
       // Cancel any existing offline timer
       const existing = disconnectTimers.get(userId);
@@ -570,7 +651,15 @@ export default function initSocket(io) {
       // 30-second grace period for network blips / mobile tab switches
       const timer = setTimeout(async () => {
         const current = await redis.smembers(`user:${userId}:sockets`);
-        if (current.length > 0) {
+        const activeCurrent = [];
+        for (const sid of current) {
+          if (io.sockets.sockets.has(sid)) {
+            activeCurrent.push(sid);
+          } else {
+            await redis.srem(`user:${userId}:sockets`, sid).catch(() => {});
+          }
+        }
+        if (activeCurrent.length > 0) {
           disconnectTimers.delete(userId);
           return;
         }

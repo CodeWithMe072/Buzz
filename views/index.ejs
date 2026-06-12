@@ -464,6 +464,14 @@
                                         <polyline points="21 15 16 10 5 21"/>
                                     </svg>Show Media
                                 </div>
+                                <div class="chatOption-button" id="chatOption-LiveVoice">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                        <line x1="12" y1="19" x2="12" y2="23"/>
+                                        <line x1="8" y1="23" x2="16" y2="23"/>
+                                    </svg><span id="chatOption-LiveVoice-text">Live Voice</span>
+                                </div>
                             </div>
                             <button class="icon-btn back-btn" id="back-btn">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -492,6 +500,14 @@
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                                     <circle cx="12" cy="13" r="4"/>
+                                </svg>
+                            </button>
+                            <button class="icon-btn" id="chat-live-voice-btn" title="Live Voice">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                    <line x1="12" y1="19" x2="12" y2="23"/>
+                                    <line x1="8" y1="23" x2="16" y2="23"/>
                                 </svg>
                             </button>
                             <button class="icon-btn" id="chat-info-btn">
@@ -609,8 +625,15 @@
                                 </div>
 
                                 <!-- Custom Section Container -->
-                                <div class="emoji-tab-content" id="emoji-tab-content-custom-section" style="display: none;">
-                                    <div class="gif-grid-container" id="custom-section-grid-container"></div>
+                                <div class="emoji-tab-content" id="emoji-tab-content-custom-section" style="display: none; flex-direction: column; width: 100%;">
+                                    <div class="custom-section-header" id="custom-section-header" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border-color); width: 100%;">
+                                        <span class="custom-section-title" id="custom-section-title" style="font-weight: 600; font-size: 13px; color: var(--text-primary);">Section Name</span>
+                                        <div style="display: flex; gap: 8px;">
+                                            <button type="button" class="add-to-section-btn" id="add-to-section-btn" style="background: rgba(255, 255, 255, 0.1); border: 1px solid var(--border-color); color: var(--text-primary); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s;">Add More</button>
+                                            <button type="button" class="delete-section-btn" id="delete-section-btn" onmouseover="this.style.background='rgba(239, 68, 68, 0.2)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.1)'" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s;">Delete Tab</button>
+                                        </div>
+                                    </div>
+                                    <div class="gif-grid-container" id="custom-section-grid-container" style="flex: 1; width: 100%;"></div>
                                 </div>
                             </div>
                         </div>
@@ -647,7 +670,13 @@
                 </div>
                 <div class="custom-gif-upload-panel" style="margin-top: 15px;">
                     <div style="margin-bottom: 15px;">
-                        <label for="custom-gif-section-input" style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">Section Name</label>
+                        <label for="custom-gif-section-select" style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">Upload to Existing Tab/Section</label>
+                        <select id="custom-gif-section-select" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: #0c0c0c; color: var(--text-primary);">
+                            <option value="new">-- Create New Tab/Section --</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 15px;" id="custom-gif-section-input-container">
+                        <label for="custom-gif-section-input" style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">New Section Name</label>
                         <input type="text" id="custom-gif-section-input" placeholder="e.g. Reactions" autocomplete="off" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); color: var(--text-primary);">
                     </div>
                     <div style="margin-bottom: 20px;">
@@ -663,6 +692,18 @@
                     <button type="button" class="custom-gif-btn upload-btn" id="custom-gif-upload-btn" disabled style="width: 100%; padding: 12px; border-radius: 8px; background: var(--accent-blue); border: none; color: white; font-weight: bold; cursor: pointer;">
                          Upload
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Confirm Modal -->
+        <div class="modal-overlay" id="custom-confirm-modal" style="display:none; z-index: 2000;">
+            <div class="emoji-picker" style="max-width: 350px; padding: 25px; text-align: center; border-radius: 12px; background: rgba(0, 0, 0, 0.95); border: 1px solid var(--border-color); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+                <h3 id="confirm-modal-title" style="margin-bottom: 10px; color: var(--text-primary); font-size: 16px; font-weight: 600;">Confirm Action</h3>
+                <p id="confirm-modal-message" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;"></p>
+                <div style="display: flex; gap: 10px; justify-content: center; width: 100%;">
+                    <button type="button" id="confirm-modal-cancel-btn" style="flex: 1; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 500; cursor: pointer; transition: all 0.2s;">Cancel</button>
+                    <button type="button" id="confirm-modal-ok-btn" style="flex: 1; padding: 10px; border-radius: 8px; background: #ef4444; border: none; color: white; font-weight: 500; cursor: pointer; transition: all 0.2s;">Delete</button>
                 </div>
             </div>
         </div>
@@ -896,6 +937,7 @@
     <script src="/js/audio.player.js"></script>
     <script src="/js/media.viewer.js"></script>
     <script src="/js/messages.dom.js"></script>
+    <script src="/js/voice.stream.js"></script>
     <script src="/js/socket.js"></script>
     <script src="/js/chat.js"></script>
     <script src="/js/input.js"></script>
