@@ -4,6 +4,19 @@ import path from "path";
 import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
 import { generateToken } from "../middleware/auth.middleware.js";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
+// Configure Cloudflare R2 client
+const s3 = new S3Client({
+  region: "auto",
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+});
+const BUCKET = process.env.R2_BUCKET;
+const PUBLIC_BASE_URL = process.env.R2_PUBLIC_URL;
 
 /* ═══════════════════════════════════════════════════════════
    REGISTER
@@ -169,7 +182,7 @@ export const me = async (req, res) => {
   try {
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
-      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshotEnabled randomSnapshotAllowedFriends lastRandomSnapshotAt lastSeen createdAt"
+      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt lastSeen createdAt"
     );
 
     if (!user) {
@@ -193,7 +206,7 @@ export const me = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const updateProfile = async (req, res) => {
   try {
-    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends } = req.body;
+    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends } = req.body;
 
     const updates = {};
     if (avatar !== undefined) updates.avatar = avatar;
@@ -201,12 +214,14 @@ export const updateProfile = async (req, res) => {
     if (livePhotoEnabled !== undefined) updates.livePhotoEnabled = livePhotoEnabled;
     if (randomSnapshotEnabled !== undefined) updates.randomSnapshotEnabled = randomSnapshotEnabled;
     if (randomSnapshotAllowedFriends !== undefined) updates.randomSnapshotAllowedFriends = randomSnapshotAllowedFriends;
+    if (liveVoiceEnabled !== undefined) updates.liveVoiceEnabled = liveVoiceEnabled;
+    if (liveVoiceAllowedFriends !== undefined) updates.liveVoiceAllowedFriends = liveVoiceAllowedFriends;
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
       { returnDocument: "after", runValidators: true }
-    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends");
+    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends");
 
     res.json({ status: true, message: "Profile updated", user });
 
@@ -336,24 +351,25 @@ export const uploadLogPhoto = async (req, res) => {
       return res.status(400).json({ status: false, message: "No image provided" });
     }
 
-    // Ensure directory exists
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "logs");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
     // Decode base64
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
-    // Generate unique filename
-    const filename = `log_${req.user._id}_${Date.now()}.jpg`;
-    const filePath = path.join(uploadDir, filename);
+    // Generate unique filename/key
+    const filename = `logs/log_${req.user._id}_${Date.now()}.jpg`;
 
-    // Write file to filesystem
-    fs.writeFileSync(filePath, buffer);
+    // Upload to Cloudflare R2
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: filename,
+        Body: buffer,
+        ContentType: "image/jpeg",
+        CacheControl: "public, max-age=31536000",
+      })
+    );
 
-    const imageUrl = `/uploads/logs/${filename}`;
+    const imageUrl = `${PUBLIC_BASE_URL}/${filename}`;
     const newPhoto = { url: imageUrl, createdAt: new Date() };
 
     // Save to user model
@@ -366,7 +382,7 @@ export const uploadLogPhoto = async (req, res) => {
     res.status(201).json({ status: true, photo: newPhoto });
   } catch (err) {
     console.error("[UploadLogPhoto]", err);
-    res.status(500).json({ status: false, message: "Failed to upload log photo" });
+    res.status(500).json({ status: false, message: "Failed to upload log photo to R2" });
   }
 };
 
@@ -383,24 +399,25 @@ export const uploadMomentPhoto = async (req, res) => {
       return res.status(400).json({ status: false, message: "No image provided" });
     }
 
-    // Ensure directory exists
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "moments");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
     // Decode base64
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
-    // Generate unique filename
-    const filename = `moment_${req.user._id}_${Date.now()}.jpg`;
-    const filePath = path.join(uploadDir, filename);
+    // Generate unique filename/key
+    const filename = `moments/moment_${req.user._id}_${Date.now()}.jpg`;
 
-    // Write file to filesystem
-    fs.writeFileSync(filePath, buffer);
+    // Upload to Cloudflare R2
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: filename,
+        Body: buffer,
+        ContentType: "image/jpeg",
+        CacheControl: "public, max-age=31536000",
+      })
+    );
 
-    const imageUrl = `/uploads/moments/${filename}`;
+    const imageUrl = `${PUBLIC_BASE_URL}/${filename}`;
     const newPhoto = { url: imageUrl, createdAt: new Date() };
 
     // Save to user model and update timestamp
@@ -433,6 +450,6 @@ export const uploadMomentPhoto = async (req, res) => {
     res.status(201).json({ status: true, photo: newPhoto });
   } catch (err) {
     console.error("[UploadMomentPhoto]", err);
-    res.status(500).json({ status: false, message: "Failed to upload moment photo" });
+    res.status(500).json({ status: false, message: "Failed to upload moment photo to R2" });
   }
 };

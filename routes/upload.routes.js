@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
 import fse from "fs-extra";
 import path from "path";
@@ -61,6 +61,21 @@ async function uploadToR2(filePath, key, mimeType) {
         })
     );
     return getPublicFileUrl(key);
+}
+
+async function deleteFromR2(url) {
+    try {
+        if (!url || !url.startsWith(PUBLIC_BASE_URL)) return;
+        const key = url.replace(`${PUBLIC_BASE_URL}/`, "");
+        await s3.send(
+            new DeleteObjectCommand({
+                Bucket: BUCKET,
+                Key: key,
+            })
+        );
+    } catch (err) {
+        console.error("[deleteFromR2] failed:", err);
+    }
 }
 
 // =============================================================================
@@ -313,6 +328,38 @@ router.get("/api/gifs/custom", protect, async (req, res) => {
     } catch (err) {
         console.error("[gifs/custom] error:", err);
         res.status(500).json({ error: "Failed to fetch custom GIFs" });
+    }
+});
+
+// Delete single custom GIF
+router.delete("/api/gifs/custom/:id", protect, async (req, res) => {
+    try {
+        const gif = await CustomGif.findOne({ _id: req.params.id, user: req.user._id });
+        if (!gif) {
+            return res.status(404).json({ error: "GIF not found" });
+        }
+        await deleteFromR2(gif.url);
+        await CustomGif.deleteOne({ _id: gif._id });
+        res.json({ status: true, message: "GIF deleted successfully" });
+    } catch (err) {
+        console.error("[gifs/delete] error:", err);
+        res.status(500).json({ error: "Failed to delete GIF" });
+    }
+});
+
+// Delete entire custom GIF section/tab
+router.delete("/api/gifs/custom/section/:sectionName", protect, async (req, res) => {
+    try {
+        const sectionName = req.params.sectionName;
+        const gifs = await CustomGif.find({ user: req.user._id, section: sectionName });
+        for (const gif of gifs) {
+            await deleteFromR2(gif.url);
+        }
+        await CustomGif.deleteMany({ user: req.user._id, section: sectionName });
+        res.json({ status: true, message: "Section and its GIFs deleted successfully" });
+    } catch (err) {
+        console.error("[gifs/deleteSection] error:", err);
+        res.status(500).json({ error: "Failed to delete section" });
     }
 });
 

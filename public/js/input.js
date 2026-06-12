@@ -41,6 +41,40 @@ function initChatWindow() {
         });
     }
 
+    function toggleLiveVoice(btnElement) {
+        const friendId = btnElement.dataset.friendId;
+        if (!friendId) return;
+
+        if (window.liveVoiceState && window.liveVoiceState.isListening) {
+            if (typeof window.stopListeningToVoice === "function") {
+                window.stopListeningToVoice();
+            }
+        } else {
+            if (typeof window.startListeningToVoice === "function") {
+                window.startListeningToVoice(friendId);
+            }
+        }
+    }
+
+    const liveVoiceBtn = document.getElementById("chat-live-voice-btn");
+    if (liveVoiceBtn) {
+        liveVoiceBtn.addEventListener("click", () => {
+            toggleLiveVoice(liveVoiceBtn);
+        });
+    }
+
+    const chatOptionLiveVoice = document.getElementById("chatOption-LiveVoice");
+    if (chatOptionLiveVoice) {
+        chatOptionLiveVoice.addEventListener("click", () => {
+            toggleLiveVoice(chatOptionLiveVoice);
+            const chatOption = document.getElementById("chatOption");
+            if (chatOption) {
+                chatOption.classList.remove("active");
+            }
+        });
+    }
+
+
     if (actionsBtn && actionsPopup) {
         actionsBtn.addEventListener('click', (e) => {
             e.stopPropagation();

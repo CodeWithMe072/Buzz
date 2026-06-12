@@ -6852,3 +6852,36 @@ input:checked+.slider:before {
         grid-template-columns: 1fr;
     }
 }
+
+/* =============================================================================
+   Live Voice Responsive & Menu Rules
+   ============================================================================= */
+
+#chatOption-LiveVoice {
+    display: none !important;
+}
+
+#chat-live-voice-btn {
+    display: none;
+}
+
+#chat-live-voice-btn.voice-allowed {
+    display: block;
+}
+
+@media (max-width: 767px) {
+    #chat-live-voice-btn.voice-allowed {
+        display: none !important;
+    }
+    #chatOption-LiveVoice.voice-allowed {
+        display: flex !important;
+    }
+}
+
+/* Active options item style override to prevent layout disruption */
+#chatOption-LiveVoice.voice-btn-listening {
+    border-radius: 5px !important;
+    animation: none !important;
+    box-shadow: none !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+}

@@ -170,3 +170,8 @@ async function getAllFriendsMoments() {
   return { Data: res?.data, code: res?.status };
 }
 
+async function checkLiveVoiceAllowed(friendId) {
+  const res = await apiRequest("GET", `/connections/voice/check/${friendId}`);
+  return { Data: res?.data, code: res?.status };
+}
+

@@ -9,6 +9,7 @@ import {
   removeConnection,
   getFriendMoments,
   getAllFriendsMoments,
+  checkLiveVoiceAllowed,
 } from "../controllers/connection.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 
@@ -26,6 +27,6 @@ router.get("/connections/search", searchUsers);
 router.delete("/connections/:connectionId", removeConnection);
 router.get("/connections/moments", getAllFriendsMoments);
 router.get("/connections/moments/:friendId", getFriendMoments);
-
+router.get("/connections/voice/check/:friendId", checkLiveVoiceAllowed);
 
 export default router;

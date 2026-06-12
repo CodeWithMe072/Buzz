@@ -78,6 +78,16 @@ const userSchema = new mongoose.Schema(
         ref: "User",
       }
     ],
+    liveVoiceEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    liveVoiceAllowedFriends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      }
+    ],
     randomSnapshots: [
       {
         url: { type: String, required: true },

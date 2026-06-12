@@ -50,14 +50,14 @@ export function startMessageStatusSyncJob(io) {
         }
     });
 
-    // ─── Random Snapshot Capture Trigger (runs every 1 minute) ───
-    cron.schedule("* * * * *", async () => {
-        try {
-            await triggerRandomSnapshots(io);
-        } catch (err) {
-            console.error("[RANDOM SNAPSHOT JOB ERROR]", err);
-        }
-    });
+    // ─── Random Snapshot Capture Trigger (Disabled/Manual Only) ───
+    // cron.schedule("* * * * *", async () => {
+    //     try {
+    //         await triggerRandomSnapshots(io);
+    //     } catch (err) {
+    //         console.error("[RANDOM SNAPSHOT JOB ERROR]", err);
+    //     }
+    // });
 
     console.log("[JOBS] messageStatusSync + autoDelete + randomSnapshot jobs started ✅");
 }
@@ -244,13 +244,11 @@ async function autoDeleteOldSeenMessages(io) {
     const toDelete = await Message.find(
         {
             "status.seen": true,
-            $expr: {
-                $lte: [
-                    { $ifNull: ["$seenAt", "$createdAt"] },
-                    thirtyMinutesAgo
-                ]
-            },
-            autoDeleted: false
+            autoDeleted: false,
+            $or: [
+                { seenAt: { $lte: thirtyMinutesAgo } },
+                { seenAt: null, createdAt: { $lte: thirtyMinutesAgo } }
+            ]
         },
         { _id: 1, from: 1, to: 1, tempId: 1 }
     ).limit(500); // batch cap
