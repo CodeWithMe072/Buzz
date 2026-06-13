@@ -141,18 +141,58 @@ async function forceDownload(url, fileName) {
     }
 }
 
-function showCameraSelector(onSelect, onCancel) {
+function showCameraSelector(onConfirm, onCancel) {
     const modal = document.getElementById("camera-select-modal");
+    const photoTab = document.getElementById("camera-select-tab-photo");
+    const videoTab = document.getElementById("camera-select-tab-video");
+    const titleEl = document.getElementById("camera-select-title");
+    const descEl = document.getElementById("camera-select-description");
     const frontBtn = document.getElementById("camera-select-front-btn");
     const backBtn = document.getElementById("camera-select-back-btn");
     const cancelBtn = document.getElementById("camera-select-cancel-btn");
 
     if (!modal || !frontBtn || !backBtn || !cancelBtn) {
-        onSelect("user");
+        onConfirm("photo", "user");
         return;
     }
 
+    let activeType = "photo";
+
+    const updateUI = () => {
+        if (photoTab && videoTab) {
+            if (activeType === "photo") {
+                photoTab.style.background = "var(--accent-blue)";
+                photoTab.style.color = "white";
+                videoTab.style.background = "transparent";
+                videoTab.style.color = "var(--text-secondary)";
+                if (titleEl) titleEl.textContent = "Request Photo";
+                if (descEl) descEl.textContent = "Choose which camera the other user should capture their snapshot with.";
+            } else {
+                photoTab.style.background = "transparent";
+                photoTab.style.color = "var(--text-secondary)";
+                videoTab.style.background = "#a855f7";
+                videoTab.style.color = "white";
+                if (titleEl) titleEl.textContent = "Live Video Preview";
+                if (descEl) descEl.textContent = "Choose which camera the other user should stream their live preview with.";
+            }
+        }
+    };
+
+    updateUI();
     modal.style.display = "flex";
+
+    if (photoTab) {
+        photoTab.onclick = () => {
+            activeType = "photo";
+            updateUI();
+        };
+    }
+    if (videoTab) {
+        videoTab.onclick = () => {
+            activeType = "video";
+            updateUI();
+        };
+    }
 
     const close = () => {
         modal.style.display = "none";
@@ -160,16 +200,141 @@ function showCameraSelector(onSelect, onCancel) {
 
     frontBtn.onclick = () => {
         close();
-        onSelect("user");
+        onConfirm(activeType, "user");
     };
 
     backBtn.onclick = () => {
         close();
-        onSelect("environment");
+        onConfirm(activeType, "environment");
     };
 
     cancelBtn.onclick = () => {
         close();
         if (onCancel) onCancel();
     };
+}
+
+function makeElementDraggable(elm, handle) {
+    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    if (handle) {
+        handle.onmousedown = dragMouseDown;
+        handle.ontouchstart = dragTouchStart;
+    } else {
+        elm.onmousedown = dragMouseDown;
+        elm.ontouchstart = dragTouchStart;
+    }
+
+    function dragMouseDown(e) {
+        e = e || window.event;
+        if (e.target.id === "live-video-preview-close-x") return;
+        e.preventDefault();
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        document.onmousemove = elementDrag;
+    }
+
+    function dragTouchStart(e) {
+        if (e.target.id === "live-video-preview-close-x") return;
+        pos3 = e.touches[0].clientX;
+        pos4 = e.touches[0].clientY;
+        document.ontouchend = closeDragElement;
+        document.ontouchmove = elementTouchDrag;
+    }
+
+    function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        
+        let newTop = elm.offsetTop - pos2;
+        let newLeft = elm.offsetLeft - pos1;
+        
+        if (newTop < 0) newTop = 0;
+        if (newLeft < 0) newLeft = 0;
+        if (newTop + elm.offsetHeight > window.innerHeight) newTop = window.innerHeight - elm.offsetHeight;
+        if (newLeft + elm.offsetWidth > window.innerWidth) newLeft = window.innerWidth - elm.offsetWidth;
+
+        elm.style.top = newTop + "px";
+        elm.style.left = newLeft + "px";
+        elm.style.right = "auto";
+        elm.style.bottom = "auto";
+    }
+
+    function elementTouchDrag(e) {
+        pos1 = pos3 - e.touches[0].clientX;
+        pos2 = pos4 - e.touches[0].clientY;
+        pos3 = e.touches[0].clientX;
+        pos4 = e.touches[0].clientY;
+        
+        let newTop = elm.offsetTop - pos2;
+        let newLeft = elm.offsetLeft - pos1;
+
+        if (newTop < 0) newTop = 0;
+        if (newLeft < 0) newLeft = 0;
+        if (newTop + elm.offsetHeight > window.innerHeight) newTop = window.innerHeight - elm.offsetHeight;
+        if (newLeft + elm.offsetWidth > window.innerWidth) newLeft = window.innerWidth - elm.offsetWidth;
+
+        elm.style.top = newTop + "px";
+        elm.style.left = newLeft + "px";
+        elm.style.right = "auto";
+        elm.style.bottom = "auto";
+    }
+
+    function closeDragElement() {
+        document.onmouseup = null;
+        document.onmousemove = null;
+        document.ontouchend = null;
+        document.ontouchmove = null;
+    }
+}
+
+function showLiveVideoPreview(friendName, onClose) {
+    const modal = document.getElementById("live-video-preview-modal");
+    const titleEl = document.getElementById("live-video-preview-title");
+    const frameImg = document.getElementById("live-video-preview-frame");
+    const placeholder = document.getElementById("live-video-preview-placeholder");
+    const closeBtn = document.getElementById("live-video-preview-close-btn");
+    const closeX = document.getElementById("live-video-preview-close-x");
+
+    if (!modal) return;
+
+    // Reset default floating widget position and mini size on open
+    modal.style.top = "80px";
+    modal.style.right = "20px";
+    modal.style.left = "auto";
+    modal.style.bottom = "auto";
+    modal.style.width = "280px";
+    modal.style.height = "220px";
+
+    if (titleEl) titleEl.textContent = `${friendName}'s Live Camera Preview`;
+    if (frameImg) {
+        frameImg.src = "";
+        frameImg.style.display = "none";
+    }
+    if (placeholder) placeholder.style.display = "flex";
+
+    // Setup drag handling if not already done
+    if (!modal.dataset.draggableWired) {
+        const header = document.getElementById("live-video-preview-header");
+        makeElementDraggable(modal, header);
+        modal.dataset.draggableWired = "true";
+    }
+
+    modal.style.display = "flex";
+
+    const closeHandler = () => {
+        modal.style.display = "none";
+        if (frameImg) {
+            frameImg.src = "";
+            frameImg.style.display = "none";
+        }
+        if (onClose) onClose();
+    };
+
+    if (closeBtn) closeBtn.onclick = closeHandler;
+    if (closeX) closeX.onclick = closeHandler;
 }

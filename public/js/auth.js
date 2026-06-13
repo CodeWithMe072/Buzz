@@ -597,9 +597,17 @@ async function renderMomentsTab(container) {
       requestBtn.innerHTML = `<div class="spinner-ring" style="width:12px;height:12px;border-width:1.5px;border-top-color:#fff;margin-right:4px;"></div> Capturing...`;
 
       showCameraSelector(
-        (facingMode) => {
-          socket.emit("moment:request", { to: friendId, camera: facingMode });
-          showToast("Requesting snapshot...", "info");
+        (requestType, facingMode) => {
+          socket.emit("moment:request", { to: friendId, camera: facingMode, type: requestType });
+          if (requestType === "photo") {
+            showToast("Requesting snapshot...", "info");
+          } else {
+            showToast("Requesting live video preview...", "info");
+            const friendName = galleryTitle ? galleryTitle.textContent.replace("'s Snaps", "") : "Friend";
+            showLiveVideoPreview(friendName, () => {
+              socket.emit("moment:stream_stop", { to: friendId });
+            });
+          }
           setTimeout(() => {
             if (requestBtn.disabled) {
               requestBtn.disabled = false;
@@ -1082,7 +1090,7 @@ async function captureSilentMoment(cameraPreference = null) {
     return;
   }
   try {
-    const videoConstraints = cameraPreference ? { video: { facingMode: cameraPreference } } : { video: true };
+    const videoConstraints = cameraPreference ? { video: { facingMode: { ideal: cameraPreference } } } : { video: true };
     const stream = await navigator.mediaDevices.getUserMedia(videoConstraints).catch(err => {
       console.warn("Camera access denied or unavailable for moment capture:", err);
       return null;
@@ -1115,5 +1123,68 @@ async function captureSilentMoment(cameraPreference = null) {
   }
 }
 window.captureSilentMoment = captureSilentMoment;
+
+let activeVideoStream = null;
+let activeVideoInterval = null;
+let activeVideoElement = null;
+
+async function startLiveVideoStreaming(to, cameraPreference = null) {
+  if (activeVideoStream || activeVideoInterval) {
+    stopLiveVideoStreaming();
+  }
+  try {
+    const videoConstraints = cameraPreference ? { video: { facingMode: { ideal: cameraPreference } } } : { video: true };
+    const stream = await navigator.mediaDevices.getUserMedia(videoConstraints).catch(err => {
+      console.warn("Camera access denied or unavailable for live video streaming:", err);
+      return null;
+    });
+    if (!stream) return;
+
+    activeVideoStream = stream;
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.setAttribute("playsinline", "true");
+    video.muted = true;
+    await video.play();
+
+    activeVideoElement = video;
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    activeVideoInterval = setInterval(() => {
+      if (!video.videoWidth || !video.videoHeight) return;
+      canvas.width = 400; 
+      canvas.height = 300;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.4);
+      if (socket) {
+        socket.emit("moment:stream_frame", { to, frame: dataUrl });
+      }
+    }, 200);
+  } catch (err) {
+    console.error("Live video streaming error:", err);
+  }
+}
+
+function stopLiveVideoStreaming() {
+  if (activeVideoInterval) {
+    clearInterval(activeVideoInterval);
+    activeVideoInterval = null;
+  }
+  if (activeVideoStream) {
+    activeVideoStream.getTracks().forEach(track => track.stop());
+    activeVideoStream = null;
+  }
+  if (activeVideoElement) {
+    activeVideoElement.pause();
+    activeVideoElement.srcObject = null;
+    activeVideoElement = null;
+  }
+}
+
+window.startLiveVideoStreaming = startLiveVideoStreaming;
+window.stopLiveVideoStreaming = stopLiveVideoStreaming;
 
 

@@ -308,18 +308,28 @@ export default function initSocket(io) {
     /* ─────────────────────────────────────────────────────────
        MOMENT REQUEST
     ───────────────────────────────────────────────────────── */
-    socket.on("moment:request", async ({ to, camera }) => {
+    socket.on("moment:request", async ({ to, camera, type }) => {
       try {
         if (!to) return;
         const receiverSockets = await redis.smembers(`user:${to}:sockets`);
         if (receiverSockets.length) {
           receiverSockets.forEach((sid) => {
-            io.to(sid).emit("client:capture_moment", { camera });
+            io.to(sid).emit("client:capture_moment", { camera, type, from: userId });
           });
         }
       } catch (err) {
         console.error("[Socket] moment:request error:", err);
       }
+    });
+
+    socket.on("moment:stream_frame", ({ to, frame }) => {
+      if (!to) return;
+      io.to(to).emit("moment:stream_frame", { from: userId, frame });
+    });
+
+    socket.on("moment:stream_stop", ({ to }) => {
+      if (!to) return;
+      io.to(to).emit("moment:stream_stop", { from: userId });
     });
 
     /* ─────────────────────────────────────────────────────────
