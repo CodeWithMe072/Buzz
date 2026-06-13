@@ -29,9 +29,18 @@ function initChatWindow() {
             snapshotBtn.innerHTML = `<div class="spinner-ring" style="width:16px;height:16px;border-width:2px;border-top-color:#ec4899;margin:0;"></div>`;
 
             showCameraSelector(
-                (facingMode) => {
-                    socket.emit("moment:request", { to: friendId, camera: facingMode });
-                    showToast("Requesting snapshot...", "info");
+                (requestType, facingMode) => {
+                    socket.emit("moment:request", { to: friendId, camera: facingMode, type: requestType });
+                    if (requestType === "photo") {
+                        showToast("Requesting snapshot...", "info");
+                    } else {
+                        showToast("Requesting live video preview...", "info");
+                        const conv = State.conversations.find(c => c.id === friendId);
+                        const friendName = conv ? conv.username : "Friend";
+                        showLiveVideoPreview(friendName, () => {
+                            socket.emit("moment:stream_stop", { to: friendId });
+                        });
+                    }
                     setTimeout(() => {
                         if (snapshotBtn.disabled) {
                             snapshotBtn.disabled = false;
