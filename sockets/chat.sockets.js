@@ -89,6 +89,7 @@ export default function initSocket(io) {
           caption = null, replyTo = null,
           clientTime, fileName = null, fileSize = null,
           cover = null, thumb = null,
+          isDisappearing = false
         } = payload.message || {};
 
         if (!tempId || !to || !type) return;
@@ -121,6 +122,7 @@ export default function initSocket(io) {
           replyTo,
           cover,
           thumb,
+          isDisappearing,
           timestamp: now,
           status: { delivered: false },
         });
@@ -128,7 +130,7 @@ export default function initSocket(io) {
         // Sync to sender's other devices
         socket.to(userId).emit("private_message_sync", {
           tempId, to, type, content, fileName, fileSize,
-          caption, cover, thumb, timestamp: now,
+          caption, cover, thumb, isDisappearing, timestamp: now,
         });
 
         // Ack to sender immediately
@@ -148,6 +150,7 @@ export default function initSocket(io) {
           thumb,
           replyTo,
           clientTime,
+          isDisappearing,
           status: { sent: true, delivered: false, seen: false },
         })
           .then(() => socket.emit("message_saved", { tempId }))

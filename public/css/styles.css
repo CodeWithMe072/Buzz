@@ -6885,3 +6885,43 @@ input:checked+.slider:before {
     box-shadow: none !important;
     background: rgba(239, 68, 68, 0.1) !important;
 }
+
+/* =============================================================================
+   Instagram-style Disappearing Messages & Camera Capture Overlay
+   ============================================================================= */
+.message-bubble.disappearing-bubble {
+    padding: 0 !important;
+    overflow: hidden;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.disappearing-preview-content {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.disappearing-preview-content:hover {
+    transform: scale(1.02);
+    filter: brightness(1.05);
+}
+
+#camera-capture-trigger:hover {
+    transform: scale(1.08);
+}
+#camera-capture-trigger:active {
+    transform: scale(0.95);
+}
+
+#camera-capture-flip-btn:hover,
+#camera-capture-close-btn:hover {
+    background: rgba(255,255,255,0.25) !important;
+}
+
+#camera-preview-send-btn:hover {
+    transform: scale(1.03);
+}
+#camera-preview-send-btn:active {
+    transform: scale(0.97);
+}
