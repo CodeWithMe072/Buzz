@@ -708,6 +708,19 @@
             </div>
         </div>
 
+        <!-- Camera Selection Modal -->
+        <div class="modal-overlay" id="camera-select-modal" style="display:none; z-index: 2100;">
+            <div class="emoji-picker" style="max-width: 350px; padding: 25px; text-align: center; border-radius: 12px; background: rgba(0, 0, 0, 0.95); border: 1px solid var(--border-color); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+                <h3 style="margin-bottom: 10px; color: var(--text-primary); font-size: 16px; font-weight: 600;">Select Camera</h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">Choose which camera the other user should capture their snapshot with.</p>
+                <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                    <button type="button" id="camera-select-front-btn" style="padding: 12px; border-radius: 8px; background: var(--accent-blue); border: none; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;">Front Camera (Selfie)</button>
+                    <button type="button" id="camera-select-back-btn" style="padding: 12px; border-radius: 8px; background: var(--accent-blue); border: none; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;">Back Camera (Environment)</button>
+                    <button type="button" id="camera-select-cancel-btn" style="padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 500; cursor: pointer; transition: all 0.2s;">Cancel</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Toast -->
         <div class="toast-container" id="toast-container"></div>
 

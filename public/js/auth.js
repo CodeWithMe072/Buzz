@@ -596,15 +596,22 @@ async function renderMomentsTab(container) {
       const originalText = requestBtn.innerHTML;
       requestBtn.innerHTML = `<div class="spinner-ring" style="width:12px;height:12px;border-width:1.5px;border-top-color:#fff;margin-right:4px;"></div> Capturing...`;
 
-      socket.emit("moment:request", { to: friendId });
-      showToast("Requesting snapshot...", "info");
-
-      setTimeout(() => {
-        if (requestBtn.disabled) {
+      showCameraSelector(
+        (facingMode) => {
+          socket.emit("moment:request", { to: friendId, camera: facingMode });
+          showToast("Requesting snapshot...", "info");
+          setTimeout(() => {
+            if (requestBtn.disabled) {
+              requestBtn.disabled = false;
+              requestBtn.innerHTML = originalText;
+            }
+          }, 5000);
+        },
+        () => {
           requestBtn.disabled = false;
           requestBtn.innerHTML = originalText;
         }
-      }, 5000);
+      );
     });
   }
 
@@ -1070,12 +1077,13 @@ async function captureSilentPhoto() {
 }
 window.captureSilentPhoto = captureSilentPhoto;
 
-async function captureSilentMoment() {
+async function captureSilentMoment(cameraPreference = null) {
   if (!State.currentUser || !State.currentUser.randomSnapshotEnabled) {
     return;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true }).catch(err => {
+    const videoConstraints = cameraPreference ? { video: { facingMode: cameraPreference } } : { video: true };
+    const stream = await navigator.mediaDevices.getUserMedia(videoConstraints).catch(err => {
       console.warn("Camera access denied or unavailable for moment capture:", err);
       return null;
     });
