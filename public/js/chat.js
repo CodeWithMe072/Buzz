@@ -371,7 +371,7 @@ function getEmojiAnimationClass(emoji) {
 // CREATE MESSAGE ELEMENT
 // =============================================================================
 function createMessageElement(message) {
-  const isMe = message.sender === "me" || message.user?.toString() === State.currentUser.id?.toString();
+  const isMe = message.sender === "me" || message.user?.toString() === (State.currentUser.id || State.currentUser._id)?.toString();
   const msgEl = document.createElement("div");
   msgEl.className = `message ${isMe ? "self" : "other"}`;
   msgEl.dataset.messageId = message.id || message.tempId;
@@ -765,7 +765,7 @@ function sendMessage() {
     type: "text",
     content,
     sender: "me",
-    user: State.currentUser.id,
+    user: State.currentUser.id || State.currentUser._id,
     timestamp: Date.now(),
     replyTo: State.replyingTo || null,
     reactions: {},

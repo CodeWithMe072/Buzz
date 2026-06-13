@@ -21,6 +21,7 @@ const State = {
   playTune:         true,
   messageIndex:     {},     // { [tempId/id]: userId }
   apiMessagesLoaded: false,
+  onlineUsers:      [],
 
   // ── Connections ──────────────────────────────────────────
   pendingRequests:  [],   // incoming { connectionId, from, sentAt }

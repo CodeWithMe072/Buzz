@@ -729,7 +729,7 @@
         </div>
 
         <!-- Live Video Preview Modal (Floating, Draggable, Resizable Widget) -->
-        <div id="live-video-preview-modal" style="display:none; position: fixed; z-index: 2500; right: 20px; top: 80px; width: 280px; height: 220px; min-width: 200px; max-width: 600px; min-height: 180px; max-height: 480px; border-radius: 12px; background: rgba(0, 0, 0, 0.9); border: 1px solid var(--border-color); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); flex-direction: column; overflow: hidden; resize: both;">
+        <div id="live-video-preview-modal" style="display:none; position: fixed; z-index: 2500; right: 20px; top: 80px; width: 280px; height: 220px; min-width: 200px; max-width: 600px; min-height: 180px; max-height: 480px; border-radius: 12px; background: rgba(0, 0, 0, 0.9); border: 1px solid var(--border-color); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); flex-direction: column; overflow: hidden;">
             <!-- Header (Drag Handle) -->
             <div id="live-video-preview-header" style="padding: 10px 15px; background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.07); cursor: move; display: flex; justify-content: space-between; align-items: center; user-select: none; flex-shrink: 0; height: 38px;">
                 <span id="live-video-preview-title" style="font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%;">Live Camera Preview</span>
@@ -738,7 +738,7 @@
             
             <!-- Video Frame / Placeholder Container -->
             <div style="flex: 1; position: relative; background: #0b0b0b; overflow: hidden; width: 100%; display: flex; align-items: center; justify-content: center;">
-                <img id="live-video-preview-frame" style="width: 100%; height: 100%; object-fit: cover; display: none;" />
+                <img id="live-video-preview-frame" style="width: 100%; height: 100%; object-fit: contain; display: none;" />
                 <div id="live-video-preview-placeholder" style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; color: var(--text-secondary); padding: 15px;">
                     <div class="spinner-ring" style="width: 20px; height: 20px; border-width: 2.5px; border-top-color: #a855f7;"></div>
                     <span style="font-size: 11px; text-align: center;">Waiting for video feed...</span>
@@ -748,8 +748,8 @@
             <!-- Hidden Close Button to maintain JS compatibility -->
             <button type="button" id="live-video-preview-close-btn" style="display: none;"></button>
             
-            <!-- Resize handle indicator element -->
-            <div style="position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; cursor: se-resize; pointer-events: none; background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.2) 50%); border-bottom-right-radius: 12px;"></div>
+            <!-- Interactive Resize Handle -->
+            <div id="live-video-preview-resize-handle" style="position: absolute; bottom: 0; right: 0; width: 20px; height: 20px; cursor: se-resize; z-index: 2501; background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.3) 50%); border-bottom-right-radius: 12px;"></div>
         </div>
 
         <!-- Toast -->

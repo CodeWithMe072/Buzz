@@ -171,18 +171,35 @@ function initSocket() {
   // ── Online list ───────────────────────────────────────────
   socket.on("online:list", ({ users }) => {
     console.log("[DEBUG] socket online:list received:", users, "conversations in state:", State.conversations.map(c => ({ id: c.id, username: c.username })));
+    State.onlineUsers = users || [];
     State.conversations.forEach(conv => {
-      conv.online = users.includes(conv.id);
+      conv.online = State.onlineUsers.includes(conv.id);
     });
     renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
-    if (State.activeChat && users.includes(State.activeChat)) {
-      const statusEl = document.getElementById("online-status");
-      if (statusEl) { statusEl.textContent = "Active now"; statusEl.className = "online-status online"; }
+    if (State.activeChat) {
+      const conv = State.conversations.find(c => c.id === State.activeChat);
+      if (conv) {
+        const statusEl = document.getElementById("online-status");
+        if (statusEl) {
+          if (State.onlineUsers.includes(State.activeChat)) {
+            statusEl.textContent = "Active now";
+            statusEl.className = "online-status online";
+          } else {
+            const lastseen = formatTime(new Date(conv.lastSeen).getTime());
+            statusEl.textContent = lastseen === "Just now" ? "Just now" : `Last seen ${lastseen} ago`;
+            statusEl.className = "online-status";
+          }
+        }
+      }
     }
   });
 
   socket.on("user:online", ({ userId }) => {
     console.log("[DEBUG] socket user:online received:", userId);
+    if (!State.onlineUsers) State.onlineUsers = [];
+    if (!State.onlineUsers.includes(userId)) {
+      State.onlineUsers.push(userId);
+    }
     const conv = State.conversations.find(c => c.id === userId);
     if (conv) {
       conv.online = true;
@@ -215,6 +232,9 @@ function initSocket() {
   });
 
   socket.on("user:offline", ({ userId }) => {
+    if (State.onlineUsers) {
+      State.onlineUsers = State.onlineUsers.filter(id => id !== userId);
+    }
     const conv = State.conversations.find(c => c.id === userId);
     if (conv) {
       conv.online  = false;
@@ -265,7 +285,7 @@ function initSocket() {
   socket.on("private_message", (msg) => {
     // Normalize all IDs to strings
     const fromId = msg.from?.toString();
-    const myId   = State.currentUser.id?.toString();
+    const myId   = (State.currentUser.id || State.currentUser._id)?.toString();
 
     if (State.playTune && fromId !== State.activeChat) {
       tone.currentTime = 0;
@@ -300,14 +320,14 @@ function initSocket() {
       m.id?.toString() === message.id || m.tempId?.toString() === message.id
     );
     if (exists) {
-      socket.emit("message:received", { tempId: msg.id });
+      socket.emit("message:received", { tempId: msg.tempId || msg.id });
       return;
     }
 
     State.messages[message.user].push(message);
     State.messages[message.user].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     State.messageIndex[message.id] = message.user;
-    socket.emit("message:received", { tempId: msg.id });
+    socket.emit("message:received", { tempId: msg.tempId || msg.id });
 
     if (message.user === State.activeChat) {
       insertMessageInOrder(message);
@@ -424,7 +444,7 @@ function initSocket() {
         timestamp: 0,
         lastMessage: "",
         unread: 0,
-        online: false,
+        online: (State.onlineUsers && State.onlineUsers.includes(c.user.id)) || false,
       }));
       renderChatList();
     }

@@ -698,7 +698,7 @@ export default function initSocket(io) {
 async function markUserOffline(userId, socket) {
   try {
     await redis.srem("online:users", userId);
-    socket.broadcast.emit("user:offline", { userId });
+    socket.nsp.emit("user:offline", { userId });
     await User.findByIdAndUpdate(userId, { lastSeen: new Date() });
     console.log(`[Socket] ${userId} marked offline`);
   } catch (err) {

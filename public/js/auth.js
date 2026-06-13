@@ -21,7 +21,7 @@ async function bootstrapAfterLogin() {
       timestamp: 0,
       lastMessage: "",
       unread: 0,
-      online: false,
+      online: (State.onlineUsers && State.onlineUsers.includes(c.user.id)) || false,
     }));
   }
 
@@ -31,9 +31,13 @@ async function bootstrapAfterLogin() {
   // Sync full profile (livePhotoEnabled and capturedPhotos)
   const profileRes = await getMyProfile();
   if (profileRes.code === 200 && profileRes.Data?.user) {
+    const user = profileRes.Data.user;
+    if (user._id && !user.id) {
+      user.id = user._id.toString();
+    }
     State.currentUser = {
       ...State.currentUser,
-      ...profileRes.Data.user
+      ...user
     };
     localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
   }
@@ -56,7 +60,7 @@ async function bootstrapAfterLogin() {
         fileSize: m.fileSize || null,
         caption: m.caption || null,
         replyTo: m.replyTo || null,
-        sender: m.from?.toString() === State.currentUser.id?.toString() ? "me" : "other",
+        sender: m.from?.toString() === (State.currentUser.id || State.currentUser._id)?.toString() ? "me" : "other",
         user: m.from?.toString(),
         timestamp: m.createdAt || m.clientTime,
         reactions: m.reactions || {},
@@ -1155,8 +1159,23 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
 
     activeVideoInterval = setInterval(() => {
       if (!video.videoWidth || !video.videoHeight) return;
-      canvas.width = 400; 
-      canvas.height = 300;
+      
+      // Calculate target dimensions maintaining actual video aspect ratio
+      const maxDim = 400;
+      let targetWidth = video.videoWidth;
+      let targetHeight = video.videoHeight;
+      if (targetWidth > maxDim || targetHeight > maxDim) {
+        if (targetWidth > targetHeight) {
+          targetHeight = Math.round((targetHeight * maxDim) / targetWidth);
+          targetWidth = maxDim;
+        } else {
+          targetWidth = Math.round((targetWidth * maxDim) / targetHeight);
+          targetHeight = maxDim;
+        }
+      }
+      
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.4);
       if (socket) {

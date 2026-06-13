@@ -1342,7 +1342,7 @@ const EmojiPanel = (() => {
       type: type,
       content: content,
       sender: "me",
-      user: State.currentUser.id,
+      user: State.currentUser.id || State.currentUser._id,
       timestamp: Date.now(),
       replyTo: State.replyingTo || null,
       reactions: {},
