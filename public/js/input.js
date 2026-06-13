@@ -28,16 +28,24 @@ function initChatWindow() {
             const originalHTML = snapshotBtn.innerHTML;
             snapshotBtn.innerHTML = `<div class="spinner-ring" style="width:16px;height:16px;border-width:2px;border-top-color:#ec4899;margin:0;"></div>`;
 
-            socket.emit("moment:request", { to: friendId });
-            showToast("Requesting snapshot...", "info");
-
-            setTimeout(() => {
-                if (snapshotBtn.disabled) {
+            showCameraSelector(
+                (facingMode) => {
+                    socket.emit("moment:request", { to: friendId, camera: facingMode });
+                    showToast("Requesting snapshot...", "info");
+                    setTimeout(() => {
+                        if (snapshotBtn.disabled) {
+                            snapshotBtn.disabled = false;
+                            snapshotBtn.style.opacity = "1";
+                            snapshotBtn.innerHTML = originalHTML;
+                        }
+                    }, 5000);
+                },
+                () => {
                     snapshotBtn.disabled = false;
                     snapshotBtn.style.opacity = "1";
                     snapshotBtn.innerHTML = originalHTML;
                 }
-            }, 5000);
+            );
         });
     }
 

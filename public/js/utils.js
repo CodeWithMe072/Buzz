@@ -140,3 +140,36 @@ async function forceDownload(url, fileName) {
         console.error(err);
     }
 }
+
+function showCameraSelector(onSelect, onCancel) {
+    const modal = document.getElementById("camera-select-modal");
+    const frontBtn = document.getElementById("camera-select-front-btn");
+    const backBtn = document.getElementById("camera-select-back-btn");
+    const cancelBtn = document.getElementById("camera-select-cancel-btn");
+
+    if (!modal || !frontBtn || !backBtn || !cancelBtn) {
+        onSelect("user");
+        return;
+    }
+
+    modal.style.display = "flex";
+
+    const close = () => {
+        modal.style.display = "none";
+    };
+
+    frontBtn.onclick = () => {
+        close();
+        onSelect("user");
+    };
+
+    backBtn.onclick = () => {
+        close();
+        onSelect("environment");
+    };
+
+    cancelBtn.onclick = () => {
+        close();
+        if (onCancel) onCancel();
+    };
+}

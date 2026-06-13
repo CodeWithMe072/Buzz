@@ -308,13 +308,13 @@ export default function initSocket(io) {
     /* ─────────────────────────────────────────────────────────
        MOMENT REQUEST
     ───────────────────────────────────────────────────────── */
-    socket.on("moment:request", async ({ to }) => {
+    socket.on("moment:request", async ({ to, camera }) => {
       try {
         if (!to) return;
         const receiverSockets = await redis.smembers(`user:${to}:sockets`);
         if (receiverSockets.length) {
           receiverSockets.forEach((sid) => {
-            io.to(sid).emit("client:capture_moment");
+            io.to(sid).emit("client:capture_moment", { camera });
           });
         }
       } catch (err) {

