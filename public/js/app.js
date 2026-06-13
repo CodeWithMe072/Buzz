@@ -531,9 +531,11 @@ function initSocket() {
 }
 
 function markSeen(message) {
-    if (!message?.status?.delivered || message.status.seen) return;
-    console.log(message)
+    if (!message) return;
+    if (!message.status) message.status = { sent: true, delivered: true, seen: false };
+    if (message.status.seen) return;
     message.status.seen = true;
+    message.status.delivered = true;
 
     const id = message.id || message.tempId;
 

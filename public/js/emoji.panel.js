@@ -944,7 +944,12 @@ const EmojiPanel = (() => {
     });
   }
 
-  async function loadCustomGifsAndTrending(activeTabName) {
+  let customGifsLoaded = false;
+  async function loadCustomGifsAndTrending(activeTabName, forceRefresh = false) {
+    if (customGifsLoaded && !activeTabName && !forceRefresh) {
+      return;
+    }
+    customGifsLoaded = true;
     try {
       const token = TokenStore.getToken();
       const headers = {};

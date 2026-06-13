@@ -170,13 +170,19 @@ function initSocket() {
 
   // ── Online list ───────────────────────────────────────────
   socket.on("online:list", ({ users }) => {
+    console.log("[DEBUG] socket online:list received:", users, "conversations in state:", State.conversations.map(c => ({ id: c.id, username: c.username })));
     State.conversations.forEach(conv => {
       conv.online = users.includes(conv.id);
     });
     renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    if (State.activeChat && users.includes(State.activeChat)) {
+      const statusEl = document.getElementById("online-status");
+      if (statusEl) { statusEl.textContent = "Active now"; statusEl.className = "online-status online"; }
+    }
   });
 
   socket.on("user:online", ({ userId }) => {
+    console.log("[DEBUG] socket user:online received:", userId);
     const conv = State.conversations.find(c => c.id === userId);
     if (conv) {
       conv.online = true;
