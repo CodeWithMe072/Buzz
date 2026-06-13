@@ -212,8 +212,10 @@ function openChat(chatId) {
   const chatOptionEl = document.getElementById("chatOption");
   chatOptionEl.classList.remove("active");
   document.getElementById("chat-info-btn").onclick = (e) => {
+    console.log("[DEBUG] chat-info-btn clicked. Previous active:", chatOptionEl.classList.contains("active"));
     e.stopPropagation();
     chatOptionEl.classList.toggle("active");
+    console.log("[DEBUG] chat-info-btn click handled. New active:", chatOptionEl.classList.contains("active"));
   };
 
   // Delete chat
@@ -913,8 +915,10 @@ function openMomentsCarousel(friendId) {
 document.addEventListener("click", (e) => {
   const chatOption = document.getElementById("chatOption");
   const chatInfoBtn = document.getElementById("chat-info-btn");
+  console.log("[DEBUG] document click target:", e.target.tagName + "#" + e.target.id + "." + e.target.className, "chatOption active:", chatOption?.classList.contains("active"));
   if (chatOption && chatOption.classList.contains("active")) {
     if (!chatOption.contains(e.target) && chatInfoBtn && !chatInfoBtn.contains(e.target)) {
+      console.log("[DEBUG] removing active class from chatOption due to click outside");
       chatOption.classList.remove("active");
     }
   }

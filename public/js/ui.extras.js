@@ -68,9 +68,12 @@ async function fakePasswordApi(password) {
     }
     const response = await loginuser({ identifier: State.currentUser.username, password });
     console.log(response)
-    if (response.Data.version !== localStorage.getItem("app_version")) {
+    const oldVersion = localStorage.getItem("app_version");
+    if (response.Data.version !== oldVersion) {
         localStorage.setItem("app_version", response.Data.version);
-        await fetch("/auth/flush-redis", { method: "POST" });
+        if (oldVersion !== null) {
+            await fetch("/auth/flush-redis", { method: "POST" });
+        }
     }
     return !!response.Data?.status;
 }

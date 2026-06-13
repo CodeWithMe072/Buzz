@@ -104,7 +104,7 @@ async function bootstrapAfterLogin() {
   renderChatList();
 
   if (typeof EmojiPanel !== "undefined" && EmojiPanel.loadCustomGifsAndTrending) {
-    EmojiPanel.loadCustomGifsAndTrending();
+    EmojiPanel.loadCustomGifsAndTrending(null, true);
   }
 }
 
@@ -899,9 +899,12 @@ function handelAuthForm() {
         email: response.Data.user.email,
       };
       localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-      if (response.Data.version !== localStorage.getItem("app_version")) {
+      const oldVersion = localStorage.getItem("app_version");
+      if (response.Data.version !== oldVersion) {
         localStorage.setItem("app_version", response.Data.version);
-        await fetch("/auth/flush-redis", { method: "POST" });
+        if (oldVersion !== null) {
+          await fetch("/auth/flush-redis", { method: "POST" });
+        }
       }
 
       // Link Telegram if running inside Telegram

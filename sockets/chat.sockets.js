@@ -69,6 +69,7 @@ export default function initSocket(io) {
 
     // Send current online list to this socket only
     const onlineUsers = await redis.smembers("online:users");
+    console.log(`[Socket] ${userId} connected. Current online:users:`, onlineUsers);
     socket.emit("online:list", { users: onlineUsers });
 
     /* ─────────────────────────────────────────────────────────
@@ -630,11 +631,14 @@ export default function initSocket(io) {
         }
       }
 
+      console.log(`[Socket] ${userId} disconnect remaining sockets in redis:`, remaining, "active remaining:", activeRemaining);
+
       if (activeRemaining.length > 0) return; // other devices still connected
 
       // Cancel any existing offline timer
       const existing = disconnectTimers.get(userId);
       if (existing) {
+        console.log(`[Socket] ${userId} disconnect — existing offline timer cleared`);
         clearTimeout(existing);
         disconnectTimers.delete(userId);
       }
@@ -644,12 +648,16 @@ export default function initSocket(io) {
         reason === "client namespace disconnect";
 
       if (isHardDisconnect) {
+        console.log(`[Socket] ${userId} is hard disconnect. Marking offline immediately.`);
         await markUserOffline(userId, socket);
         return;
       }
 
+      const gracePeriod = process.env.SOCKET_GRACE_PERIOD ? parseInt(process.env.SOCKET_GRACE_PERIOD) : 30_000;
+      console.log(`[Socket] ${userId} starting grace period timer of ${gracePeriod}ms`);
       // 30-second grace period for network blips / mobile tab switches
       const timer = setTimeout(async () => {
+        console.log(`[Socket] ${userId} grace period timer fired`);
         const current = await redis.smembers(`user:${userId}:sockets`);
         const activeCurrent = [];
         for (const sid of current) {
@@ -660,12 +668,14 @@ export default function initSocket(io) {
           }
         }
         if (activeCurrent.length > 0) {
+          console.log(`[Socket] ${userId} grace period timer check: user has active sockets. Not marking offline.`);
           disconnectTimers.delete(userId);
           return;
         }
+        console.log(`[Socket] ${userId} grace period timer check: user has no active sockets. Marking offline.`);
         await markUserOffline(userId, socket);
         disconnectTimers.delete(userId);
-      }, 30_000);
+      }, gracePeriod);
 
       disconnectTimers.set(userId, timer);
     });
