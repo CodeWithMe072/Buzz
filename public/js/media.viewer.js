@@ -68,8 +68,9 @@ async function generateVideoThumbnail(videoUrl) {
 // MEDIA VIEWER CLASS
 // =============================================================================
 class MediaViewer {
-    constructor(chatId) {
+    constructor(chatId, data = []) {
         this.chatId = chatId;
+        this.data = data;
         this.mediaItems = [];
         this.currentIndex = 0;
         this.chunkSize = 10;
@@ -87,6 +88,10 @@ class MediaViewer {
         this.touchEndX = 0;
         this.isDragging = false;
 
+        this.hasMore = true;
+        this.isLoading = false;
+        this.lastCreatedAt = null;
+
         this.collectMediaItems();
         this.bindEvents();
     }
@@ -94,17 +99,31 @@ class MediaViewer {
     /* ─── DATA ─── */
 
     collectMediaItems() {
-        this.mediaItems = (State.messages[this.chatId] || [])
-            .filter(m => (m.type === 'image' || m.type === 'video') && m.content)
-            .map((m, index) => ({
+        if (this.data && this.data.length) {
+            this.mediaItems = this.data.map((m, index) => ({
                 index,
                 id: m.id ?? m.tempId,
                 type: m.type,
-                src: m.content,
+                src: m.content || m.src,
                 thumb: m.thumb || null,
-                cover: m.cover || null
+                cover: m.cover || null,
+                createdAt: m.createdAt || m.timestamp || null
             }));
+        } else {
+            this.mediaItems = (State.messages[this.chatId] || [])
+                .filter(m => (m.type === 'image' || m.type === 'video' || m.type === 'gif') && m.content)
+                .map((m, index) => ({
+                    index,
+                    id: m.id ?? m.tempId,
+                    type: m.type,
+                    src: m.content,
+                    thumb: m.thumb || null,
+                    cover: m.cover || null,
+                    createdAt: m.createdAt || m.timestamp || null
+                }));
+        }
         this.renderedCount = 0;
+        this.lastCreatedAt = this.mediaItems[this.mediaItems.length - 1]?.createdAt || null;
     }
 
     getIndexByMessageId(messageId) {
@@ -113,8 +132,21 @@ class MediaViewer {
 
     /* ─── LIFECYCLE ─── */
 
-    open(indexOrId) {
-        this.collectMediaItems();
+    open(indexOrId, initialItems = null) {
+        if (initialItems && initialItems.length) {
+            this.mediaItems = initialItems.map((m, index) => ({
+                ...m,
+                index
+            }));
+            this.renderedCount = 0;
+            this.hasMore = initialItems.length === 10;
+        } else {
+            this.collectMediaItems();
+            this.hasMore = true;
+        }
+        this.isLoading = false;
+        this.lastCreatedAt = this.mediaItems[this.mediaItems.length - 1]?.createdAt || null;
+
         let index = -1;
         if (typeof indexOrId === "number") {
             index = indexOrId;
@@ -134,9 +166,47 @@ class MediaViewer {
         this.container.querySelectorAll('video').forEach(v => v.pause());
     }
 
-    navigate(direction) {
+    async loadMoreFromDB() {
+        if (this.isLoading || !this.hasMore) return;
+        this.isLoading = true;
+        try {
+            const data = await fetchMedia(this.chatId, this.lastCreatedAt, 10);
+            const mediaMessages = data.Data?.data || [];
+            if (mediaMessages.length < 10) {
+                this.hasMore = false;
+            }
+            if (mediaMessages.length > 0) {
+                this.lastCreatedAt = mediaMessages[mediaMessages.length - 1].createdAt;
+                mediaMessages.forEach(m => {
+                    const id = m.id ?? m.tempId;
+                    if (this.mediaItems.some(item => String(item.id) === String(id))) return;
+                    this.mediaItems.push({
+                        index: this.mediaItems.length,
+                        id,
+                        type: m.type,
+                        src: m.content,
+                        thumb: m.thumb || null,
+                        cover: m.cover || null,
+                        createdAt: m.createdAt
+                    });
+                });
+                this.updateControls();
+                this.renderMore();
+            }
+        } catch (err) {
+            console.error("Failed to load more media:", err);
+        } finally {
+            this.isLoading = false;
+        }
+    }
+
+    async navigate(direction) {
         const next = this.currentIndex + direction;
-        if (next < 0 || next >= this.mediaItems.length) return;
+        if (next < 0) return;
+        if (direction > 0 && next >= this.mediaItems.length - 4) {
+            await this.loadMoreFromDB();
+        }
+        if (next >= this.mediaItems.length) return;
         this.currentIndex = next;
         if (this.currentIndex >= this.renderedCount - 3) this.renderMore();
         this.updateMedia();
@@ -194,14 +264,17 @@ class MediaViewer {
 
         const thumbImg = document.createElement('img');
         thumbImg.loading = "lazy";
-        thumbImg.src = item.type === 'image'
+        thumbImg.src = item.type !== 'video'
             ? (item.thumb || item.src)
             : (item.cover || item.thumb || item.src);
         if (item.type === 'video') thumb.classList.add('video');
 
         thumb.appendChild(thumbImg);
-        thumb.addEventListener('click', () => {
+        thumb.addEventListener('click', async () => {
             this.currentIndex = index;
+            if (this.currentIndex >= this.mediaItems.length - 4) {
+                await this.loadMoreFromDB();
+            }
             if (this.currentIndex >= this.renderedCount - 1) this.renderMore();
             this.updateMedia();
         });
@@ -225,10 +298,12 @@ class MediaViewer {
     }
 
     updateControls() {
-        document.getElementById('currentIndex').textContent = this.currentIndex + 1;
-        document.getElementById('totalMedia').textContent = this.mediaItems.length;
-        this.prevBtn.disabled = this.currentIndex === 0;
-        this.nextBtn.disabled = this.currentIndex === this.mediaItems.length - 1;
+        const currentIdEl = document.getElementById('currentIndex');
+        const totalMediaEl = document.getElementById('totalMedia');
+        if (currentIdEl) currentIdEl.textContent = this.currentIndex + 1;
+        if (totalMediaEl) totalMediaEl.textContent = this.mediaItems.length;
+        if (this.prevBtn) this.prevBtn.disabled = this.currentIndex === 0;
+        if (this.nextBtn) this.nextBtn.disabled = this.currentIndex === this.mediaItems.length - 1;
     }
 
     /* ─── EVENTS ─── */
@@ -266,11 +341,17 @@ class MediaViewer {
             this.handleSwipe();
         });
 
-        this.thumbnailContainer.addEventListener("scroll", () => {
+        this.thumbnailContainer.addEventListener("scroll", async () => {
             const nearEnd =
                 this.thumbnailContainer.scrollLeft + this.thumbnailContainer.clientWidth >=
                 this.thumbnailContainer.scrollWidth - 200;
-            if (nearEnd && this.renderedCount < this.mediaItems.length) this.renderMore();
+            if (nearEnd) {
+                if (this.renderedCount < this.mediaItems.length) {
+                    this.renderMore();
+                } else if (this.hasMore && !this.isLoading) {
+                    await this.loadMoreFromDB();
+                }
+            }
         });
     }
 
@@ -282,7 +363,7 @@ class MediaViewer {
 
     addItem(msg) {
         if (!msg?.content) return;
-        if (!(msg.type === "image" || msg.type === "video")) return;
+        if (!(msg.type === "image" || msg.type === "video" || msg.type === "gif")) return;
         const id = msg.id ?? msg.tempId;
         if (this.mediaItems.some(item => String(item.id) === String(id))) return;
 
@@ -293,7 +374,8 @@ class MediaViewer {
             type: msg.type,
             src: msg.content,
             thumb: msg.thumb || null,
-            cover: msg.cover || null
+            cover: msg.cover || null,
+            createdAt: msg.createdAt || msg.timestamp || null
         });
         if (this.overlay.classList.contains("active")) {
             if (this.currentIndex >= this.renderedCount - 3) this.renderMore();

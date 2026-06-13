@@ -130,8 +130,12 @@ async function deleteChat(userId) {
   const res = await apiRequest("DELETE", `/api/chat/${userId}`);
   return { Data: res?.data, code: res?.status };
 }
-async function fetchMedia(activeChat) {
-  const res = await apiRequest("GET", `/api/chat/${activeChat}/media`);
+async function fetchMedia(activeChat, before = null, limit = 10) {
+  let url = `/api/chat/${activeChat}/media?limit=${limit}`;
+  if (before) {
+    url += `&before=${encodeURIComponent(before)}`;
+  }
+  const res = await apiRequest("GET", url);
   return { Data: res?.data, code: res?.status };
 }
 async function getVersion() {
