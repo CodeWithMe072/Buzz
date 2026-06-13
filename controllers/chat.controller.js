@@ -117,6 +117,7 @@ export const getMedia = async (req, res) => {
   try {
     const { userId } = req.params;
     const myId = req.user._id;
+    const { limit = 10, before } = req.query;
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({ status: false, message: "Invalid userId" });
@@ -127,14 +128,21 @@ export const getMedia = async (req, res) => {
       return res.status(403).json({ status: false, message: "Not connected" });
     }
 
-    const media = await Message.find({
+    const query = {
       $or: [
         { from: myId, to: userId },
         { from: userId, to: myId },
       ],
-      type: { $in: ["image", "video", "document", "audio"] }
-    })
+      type: { $in: ["image", "video", "gif"] }
+    };
+
+    if (before) {
+      query.createdAt = { $lt: new Date(before) };
+    }
+
+    const media = await Message.find(query)
       .sort({ createdAt: -1 })
+      .limit(Number(limit))
       .select("tempId type content cover thumb caption fileName fileSize createdAt from");
 
     res.json({ status: true, count: media.length, data: media });
