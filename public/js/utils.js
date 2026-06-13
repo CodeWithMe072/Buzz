@@ -238,8 +238,8 @@ function makeElementDraggable(elm, handle) {
         if (e.target.id === "live-video-preview-close-x") return;
         pos3 = e.touches[0].clientX;
         pos4 = e.touches[0].clientY;
-        document.ontouchend = closeDragElement;
-        document.ontouchmove = elementTouchDrag;
+        document.addEventListener('touchmove', elementTouchDrag, { passive: false });
+        document.addEventListener('touchend', closeDragElement, { passive: true });
     }
 
     function elementDrag(e) {
@@ -265,6 +265,7 @@ function makeElementDraggable(elm, handle) {
     }
 
     function elementTouchDrag(e) {
+        if (e.cancelable) e.preventDefault();
         pos1 = pos3 - e.touches[0].clientX;
         pos2 = pos4 - e.touches[0].clientY;
         pos3 = e.touches[0].clientX;
@@ -287,8 +288,82 @@ function makeElementDraggable(elm, handle) {
     function closeDragElement() {
         document.onmouseup = null;
         document.onmousemove = null;
-        document.ontouchend = null;
-        document.ontouchmove = null;
+        document.removeEventListener('touchmove', elementTouchDrag);
+        document.removeEventListener('touchend', closeDragElement);
+    }
+}
+
+function makeElementResizable(elm, handle) {
+    if (!handle) return;
+    
+    handle.addEventListener('mousedown', initResize);
+    handle.addEventListener('touchstart', initResize);
+
+    function initResize(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        let startWidth, startHeight, startX, startY;
+        
+        if (e.type === 'touchstart') {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        } else {
+            startX = e.clientX;
+            startY = e.clientY;
+        }
+        
+        // Convert right/bottom to explicit left/top to avoid layout shifts during resize
+        const rect = elm.getBoundingClientRect();
+        elm.style.left = rect.left + "px";
+        elm.style.top = rect.top + "px";
+        elm.style.right = "auto";
+        elm.style.bottom = "auto";
+        
+        const styles = window.getComputedStyle(elm);
+        startWidth = parseInt(styles.width, 10);
+        startHeight = parseInt(styles.height, 10);
+        
+        function resizeHandler(moveEvent) {
+            let currentX, currentY;
+            if (moveEvent.type === 'touchmove') {
+                currentX = moveEvent.touches[0].clientX;
+                currentY = moveEvent.touches[0].clientY;
+            } else {
+                currentX = moveEvent.clientX;
+                currentY = moveEvent.clientY;
+            }
+            
+            let newWidth = startWidth + (currentX - startX);
+            let newHeight = startHeight + (currentY - startY);
+            
+            // Limit bounds
+            const minWidth = 200;
+            const maxWidth = Math.min(window.innerWidth - elm.offsetLeft - 10, 600);
+            const minHeight = 180;
+            const maxHeight = Math.min(window.innerHeight - elm.offsetTop - 10, 480);
+            
+            if (newWidth < minWidth) newWidth = minWidth;
+            if (newWidth > maxWidth) newWidth = maxWidth;
+            
+            if (newHeight < minHeight) newHeight = minHeight;
+            if (newHeight > maxHeight) newHeight = maxHeight;
+            
+            elm.style.width = newWidth + 'px';
+            elm.style.height = newHeight + 'px';
+        }
+        
+        function stopResizeHandler() {
+            document.removeEventListener('mousemove', resizeHandler);
+            document.removeEventListener('mouseup', stopResizeHandler);
+            document.removeEventListener('touchmove', resizeHandler);
+            document.removeEventListener('touchend', stopResizeHandler);
+        }
+        
+        document.addEventListener('mousemove', resizeHandler, { passive: true });
+        document.addEventListener('mouseup', stopResizeHandler, { passive: true });
+        document.addEventListener('touchmove', resizeHandler, { passive: false });
+        document.addEventListener('touchend', stopResizeHandler, { passive: true });
     }
 }
 
@@ -302,13 +377,21 @@ function showLiveVideoPreview(friendName, onClose) {
 
     if (!modal) return;
 
-    // Reset default floating widget position and mini size on open
-    modal.style.top = "80px";
-    modal.style.right = "20px";
+    // Reset default floating widget position and size based on mobile viewport
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+        modal.style.width = Math.min(260, window.innerWidth - 20) + "px";
+        modal.style.height = "200px";
+        modal.style.right = "10px";
+        modal.style.top = "70px";
+    } else {
+        modal.style.width = "280px";
+        modal.style.height = "220px";
+        modal.style.right = "20px";
+        modal.style.top = "80px";
+    }
     modal.style.left = "auto";
     modal.style.bottom = "auto";
-    modal.style.width = "280px";
-    modal.style.height = "220px";
 
     if (titleEl) titleEl.textContent = `${friendName}'s Live Camera Preview`;
     if (frameImg) {
@@ -317,10 +400,15 @@ function showLiveVideoPreview(friendName, onClose) {
     }
     if (placeholder) placeholder.style.display = "flex";
 
-    // Setup drag handling if not already done
+    // Setup drag and resize handling if not already done
     if (!modal.dataset.draggableWired) {
         const header = document.getElementById("live-video-preview-header");
         makeElementDraggable(modal, header);
+        
+        const resizeHandle = document.getElementById("live-video-preview-resize-handle");
+        if (resizeHandle) {
+            makeElementResizable(modal, resizeHandle);
+        }
         modal.dataset.draggableWired = "true";
     }
 
@@ -338,3 +426,4 @@ function showLiveVideoPreview(friendName, onClose) {
     if (closeBtn) closeBtn.onclick = closeHandler;
     if (closeX) closeX.onclick = closeHandler;
 }
+

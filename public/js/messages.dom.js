@@ -89,7 +89,7 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
     }
 
     /* ─── Status update ─── */
-    if ((updates.status || updates.content || updates.cover) && chatId !== State.currentUser.id) {
+    if ((updates.status || updates.content || updates.cover) && chatId !== (State.currentUser.id || State.currentUser._id)) {
         const messageStatus = msgEl.querySelector(".msg-status-wrap");
         if (!messageStatus) return;
 

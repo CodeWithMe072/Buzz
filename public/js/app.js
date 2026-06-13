@@ -31,7 +31,8 @@ const State = {
     allusers: [],
     playTune: true,
     messageIndex: {},
-    apiMessagesLoaded: false
+    apiMessagesLoaded: false,
+    onlineUsers: []
 };
 const UploadManager = {
     queue: [],
@@ -189,14 +190,14 @@ function initSocket() {
 
         if (alreadyExists) {
             // Message already in state from API load — just emit received so DB gets updated
-            socket.emit("message:received", { tempId: msg.id });
+            socket.emit("message:received", { tempId: msg.tempId || msg.id });
             return; // ← skip everything else, no duplicate render
         }
         State.messages[message.user].unshift(message);
         State.messageIndex[message.id] = message.user;
 
         // Tell server this message was received (triggers delivered tick for sender)
-        socket.emit("message:received", { tempId: msg.id });
+        socket.emit("message:received", { tempId: msg.tempId || msg.id });
 
         if (message.user === State.activeChat) {
             // Render message in open chat

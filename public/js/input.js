@@ -213,7 +213,7 @@ async function handelMedia(file) {
         caption: null,
         clientTime: Date.now(),
         replyTo: State.replyingTo,
-        user: State.currentUser.id,
+        user: State.currentUser.id || State.currentUser._id,
         status: { sent: false, delivered: false, seen: false },
         timestamp: Date.now()
     };
@@ -560,7 +560,7 @@ async function sendVoiceMessage(audioBlob) {
         caption: null,
         clientTime: Date.now(),
         replyTo: State.replyingTo,
-        user: State.currentUser.id || State.currentUser.username,
+        user: State.currentUser.id || State.currentUser._id || State.currentUser.username,
         status: { sent: false, delivered: false, seen: false },
         timestamp: Date.now()
     };

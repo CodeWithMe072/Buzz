@@ -353,7 +353,7 @@ const CallManager = (() => {
       console.log("[WebRTC] ICE restart offer sent");
       socket.emit("call:offer", {
         to: _activePeer.id, type: _mode, sdp: offer, roomId: _roomId,
-        from: { id: State.currentUser.id, username: State.currentUser.username, avatar: State.currentUser.avatar }
+        from: { id: State.currentUser.id || State.currentUser._id, username: State.currentUser.username, avatar: State.currentUser.avatar }
       });
     } catch (err) {
       console.error("[WebRTC] ICE restart failed:", err);
@@ -384,7 +384,7 @@ const CallManager = (() => {
   // when a call starts — visible to both parties.
   function _injectCallMessage(peerId, isOutgoing) {
     if (!_roomId || !_mode) return;
-    const myId = State.currentUser.id;
+    const myId = State.currentUser.id || State.currentUser._id;
     const chatId = isOutgoing ? peerId : myId;
     const fromId = isOutgoing ? myId : peerId;
 
@@ -530,7 +530,7 @@ const CallManager = (() => {
         type: mode,
         sdp:  offer,
         roomId: _roomId,
-        from: { id: State.currentUser.id, username: State.currentUser.username, avatar: State.currentUser.avatar },
+        from: { id: State.currentUser.id || State.currentUser._id, username: State.currentUser.username, avatar: State.currentUser.avatar },
       });
     } catch (err) {
       console.error("[WebRTC] createOffer failed:", err);
@@ -1010,7 +1010,7 @@ const CallManager = (() => {
         type: newMode,
         sdp: offer,
         roomId: _roomId,
-        from: { id: State.currentUser.id, username: State.currentUser.username, avatar: State.currentUser.avatar }
+        from: { id: State.currentUser.id || State.currentUser._id, username: State.currentUser.username, avatar: State.currentUser.avatar }
       });
       showToast(newMode === "audio" ? "Switched to voice call" : "Switched to video call", "success");
     } catch (err) {
