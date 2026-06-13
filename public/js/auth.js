@@ -69,7 +69,8 @@ async function bootstrapAfterLogin() {
         callStatus: m.callStatus,
         callRoomId: m.callRoomId,
         callExpiresAt: m.callExpiresAt,
-        callDuration: m.callDuration
+        callDuration: m.callDuration,
+        isDisappearing: m.isDisappearing || false
       })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
       for (const msg of State.messages[conv.id]) {

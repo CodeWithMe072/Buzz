@@ -414,7 +414,57 @@ function createMessageElement(message) {
   const statusSVG = isMe ? `<span class="msg-status-wrap">${getStatusIconHTML(message.status)}</span>` : "";
   const footerHTML = `<div class="msg-footer"><span class="message-time">${formatTime(message.timestamp)}</span>${statusSVG}</div>`;
 
-  if (message.type === "text") {
+  if (message.isDisappearing) {
+    bubbleEl.classList.add("disappearing-bubble");
+    const isVideo = message.type === "video";
+    
+    const mediaPreviewHTML = isVideo
+      ? `<video src="${message.content}" muted autoplay loop playsinline style="width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; border-radius: inherit;"></video>`
+      : `<img src="${message.content}" alt="Disappearing Photo" style="width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;" />`;
+
+    const badgeIconHTML = isVideo
+      ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 4px; vertical-align: middle;">
+           <polygon points="23 7 16 12 23 17 23 7"/>
+           <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+         </svg>`
+      : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 4px; vertical-align: middle;">
+           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+           <circle cx="12" cy="13" r="4"/>
+         </svg>`;
+
+    bubbleEl.innerHTML = `
+      ${replyHTML}
+      <div class="disappearing-preview-content" style="cursor: pointer; position: relative; width: 200px; height: 266px; border-radius: 16px; overflow: hidden; background: #0b0b0b; border: 1px solid rgba(255,255,255,0.08);">
+         ${mediaPreviewHTML}
+         
+         <!-- Disappearing Overlay Badge -->
+         <div style="position: absolute; bottom: 8px; left: 8px; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: white; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; display: flex; align-items: center; gap: 2px; border: 1px solid rgba(255,255,255,0.15); pointer-events: none; z-index: 5; text-transform: uppercase; letter-spacing: 0.5px;">
+            ${badgeIconHTML}
+            <span>${isVideo ? 'Video' : '10s Photo'}</span>
+         </div>
+      </div>
+      ${footerHTML}
+    `;
+    
+    const previewContainer = bubbleEl.querySelector(".disappearing-preview-content");
+    if (previewContainer) {
+      previewContainer.addEventListener("click", () => {
+        const username = isMe ? 'You' : (State.conversations.find(c => c.id === State.activeChat)?.username || 'Friend');
+        const avatar = isMe ? (State.currentUser.avatar || '/images/default-avatar.png') : (State.conversations.find(c => c.id === State.activeChat)?.avatar || '/images/default-avatar.png');
+        if (typeof window.openDisappearingStoryViewer === "function") {
+          window.openDisappearingStoryViewer({
+            src: message.content,
+            type: message.type,
+            username: username,
+            avatar: avatar
+          });
+        } else {
+          showToast("Story viewer loading...", "info");
+        }
+      });
+    }
+
+  } else if (message.type === "text") {
     if (isEmojiOnly) {
       bubbleEl.innerHTML = `
         ${replyHTML}

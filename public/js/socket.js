@@ -311,7 +311,8 @@ function initSocket() {
       callStatus: msg.callStatus,
       callRoomId: msg.callRoomId,
       callExpiresAt: msg.callExpiresAt,
-      callDuration: msg.callDuration
+      callDuration: msg.callDuration,
+      isDisappearing: msg.isDisappearing || false
     };
 
     if (!State.messages[message.user]) State.messages[message.user] = [];
@@ -469,7 +470,8 @@ function initSocket() {
       user:      chatPartner,
       replyTo:   msg.replyTo || null,
       reactions: {},
-      status:    { sent: true, delivered: true, seen: false }
+      status:    { sent: true, delivered: true, seen: false },
+      isDisappearing: msg.isDisappearing || false
     };
 
     if (!State.messages[chatPartner]) State.messages[chatPartner] = [];
