@@ -44,6 +44,7 @@ function initChatWindow() {
                             }
                         });
                         if (typeof window.startReceivingVideoStream === "function") {
+                            window.liveVideoCameraPreference = facingMode;
                             await window.startReceivingVideoStream(friendId);
                         }
                         socket.emit("moment:request", { to: friendId, camera: facingMode, type: requestType });

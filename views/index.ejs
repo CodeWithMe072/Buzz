@@ -739,8 +739,17 @@
         <div id="live-video-preview-modal" style="display:none; position: fixed; z-index: 2500; right: 20px; top: 80px; width: 280px; height: 220px; min-width: 200px; max-width: 600px; min-height: 180px; max-height: 480px; border-radius: 12px; background: rgba(0, 0, 0, 0.9); border: 1px solid var(--border-color); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); flex-direction: column; overflow: hidden;">
             <!-- Header (Drag Handle) -->
             <div id="live-video-preview-header" style="padding: 10px 15px; background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.07); cursor: move; display: flex; justify-content: space-between; align-items: center; user-select: none; flex-shrink: 0; height: 38px;">
-                <span id="live-video-preview-title" style="font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%;">Live Camera Preview</span>
-                <button type="button" id="live-video-preview-close-x" style="background: transparent; border: none; color: var(--text-secondary); font-size: 18px; font-weight: bold; cursor: pointer; padding: 0 4px; line-height: 1; transition: color 0.2s;" title="Close">&times;</button>
+                <span id="live-video-preview-title" style="font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%;">Live Camera Preview</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button type="button" id="live-video-preview-toggle-cam" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; padding: 0 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s; outline: none;" title="Switch Camera" onmouseover="this.style.color='var(--text-primary)'" onmouseout="this.style.color='var(--text-secondary)'">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M23 4v6h-6"></path>
+                            <path d="M1 20v-6h6"></path>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
+                    <button type="button" id="live-video-preview-close-x" style="background: transparent; border: none; color: var(--text-secondary); font-size: 18px; font-weight: bold; cursor: pointer; padding: 0 4px; line-height: 1; transition: color 0.2s;" title="Close">&times;</button>
+                </div>
             </div>
             
             <!-- Video Frame / Placeholder Container -->
