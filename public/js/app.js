@@ -2620,7 +2620,7 @@ function createAudioPlayer(audioUrl, messageId) {
 
     // 🔑 Mobile-specific audio configuration
     audio.preload = "metadata"; // Faster loading on mobile
-    audio.crossOrigin = "anonymous";
+    // Removed audio.crossOrigin = "anonymous" to prevent CORS blockages on cross-origin cloud media playback
 
     // Draw static waveform
     drawStaticWaveform(canvas);

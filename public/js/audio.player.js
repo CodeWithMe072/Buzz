@@ -30,7 +30,7 @@ function createAudioPlayer(audioUrl, messageId) {
     const audio = new Audio(audioUrl);
     audioPlayers.set(messageId, audio);
     audio.preload = "metadata";
-    audio.crossOrigin = "anonymous";
+    // Removed audio.crossOrigin = "anonymous" to prevent CORS blockages on cross-origin cloud media playback
 
     drawStaticWaveform(canvas);
 
