@@ -312,7 +312,9 @@ function initSocket() {
       callRoomId: msg.callRoomId,
       callExpiresAt: msg.callExpiresAt,
       callDuration: msg.callDuration,
-      isDisappearing: msg.isDisappearing || false
+      isDisappearing: msg.isDisappearing || false,
+      cameraFacing: msg.cameraFacing || null,
+      cameraFilter: msg.cameraFilter || null
     };
 
     if (!State.messages[message.user]) State.messages[message.user] = [];
@@ -471,7 +473,9 @@ function initSocket() {
       replyTo:   msg.replyTo || null,
       reactions: {},
       status:    { sent: true, delivered: true, seen: false },
-      isDisappearing: msg.isDisappearing || false
+      isDisappearing: msg.isDisappearing || false,
+      cameraFacing: msg.cameraFacing || null,
+      cameraFilter: msg.cameraFilter || null
     };
 
     if (!State.messages[chatPartner]) State.messages[chatPartner] = [];

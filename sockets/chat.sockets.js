@@ -89,7 +89,9 @@ export default function initSocket(io) {
           caption = null, replyTo = null,
           clientTime, fileName = null, fileSize = null,
           cover = null, thumb = null,
-          isDisappearing = false
+          isDisappearing = false,
+          cameraFacing = null,
+          cameraFilter = null
         } = payload.message || {};
 
         if (!tempId || !to || !type) return;
@@ -123,6 +125,8 @@ export default function initSocket(io) {
           cover,
           thumb,
           isDisappearing,
+          cameraFacing,
+          cameraFilter,
           timestamp: now,
           status: { delivered: false },
         });
@@ -130,7 +134,7 @@ export default function initSocket(io) {
         // Sync to sender's other devices
         socket.to(userId).emit("private_message_sync", {
           tempId, to, type, content, fileName, fileSize,
-          caption, cover, thumb, isDisappearing, timestamp: now,
+          caption, cover, thumb, isDisappearing, cameraFacing, cameraFilter, timestamp: now,
         });
 
         // Ack to sender immediately
@@ -151,6 +155,8 @@ export default function initSocket(io) {
           replyTo,
           clientTime,
           isDisappearing,
+          cameraFacing,
+          cameraFilter,
           status: { sent: true, delivered: false, seen: false },
         })
           .then(() => socket.emit("message_saved", { tempId }))
@@ -214,7 +220,7 @@ export default function initSocket(io) {
         const undelivered = await Message.find({
           to: userId,
           "status.delivered": false,
-        }).select("tempId from type content caption cover thumb replyTo fileName fileSize callType callStatus callRoomId callExpiresAt callDuration createdAt");
+        }).select("tempId from type content caption cover thumb replyTo fileName fileSize callType callStatus callRoomId callExpiresAt callDuration isDisappearing cameraFacing cameraFilter createdAt");
 
         for (const msg of undelivered) {
           socket.emit("private_message", {
@@ -233,6 +239,9 @@ export default function initSocket(io) {
             callRoomId: msg.callRoomId,
             callExpiresAt: msg.callExpiresAt,
             callDuration: msg.callDuration,
+            isDisappearing: msg.isDisappearing,
+            cameraFacing: msg.cameraFacing,
+            cameraFilter: msg.cameraFilter,
             timestamp: msg.createdAt,
             status: { delivered: false },
           });

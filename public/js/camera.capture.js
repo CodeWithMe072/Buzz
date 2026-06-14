@@ -18,6 +18,24 @@
     let storyDurationTimer = null;
     let storyProgressInterval = null;
 
+    // Camera Filter States & Preset Configurations
+    let currentFilter = "normal";
+    const FILTERS = [
+        { name: "normal", label: "Normal", css: "none" },
+        { name: "clarendon", label: "Clarendon", css: "contrast(1.2) saturate(1.35) brightness(1.1) hue-rotate(-5deg)" },
+        { name: "juno", label: "Juno", css: "contrast(1.15) saturate(1.3) sepia(0.08) hue-rotate(-5deg) brightness(1.05)" },
+        { name: "lark", label: "Lark", css: "brightness(1.08) contrast(0.95) saturate(1.15) hue-rotate(5deg)" },
+        { name: "gingham", label: "Gingham", css: "brightness(1.05) contrast(0.9) saturate(0.85) sepia(0.18)" },
+        { name: "crema", label: "Crema", css: "contrast(0.95) saturate(0.9) brightness(1.05) sepia(0.25) hue-rotate(-10deg)" },
+        { name: "slumber", label: "Slumber", css: "brightness(1.05) contrast(0.9) saturate(0.8) sepia(0.35) hue-rotate(15deg)" },
+        { name: "valencia", label: "Valencia", css: "contrast(1.08) saturate(1.08) sepia(0.25) brightness(1.05) hue-rotate(-5deg)" },
+        { name: "inkwell", label: "Inkwell", css: "grayscale(1) contrast(1.15) brightness(1.05)" },
+        { name: "glasses", label: "Glasses 🕶️", css: "none" },
+        { name: "retro8mm", label: "8mm Film 📹", css: "sepia(0.3) contrast(0.9) saturate(0.9) brightness(0.95)" },
+        { name: "time", label: "Time 🤍", css: "contrast(0.95) saturate(0.9) brightness(1.05) sepia(0.25)" },
+        { name: "day", label: "Day 📅", css: "brightness(1.05) contrast(0.95) saturate(1.1) hue-rotate(5deg)" }
+    ];
+
     document.addEventListener("DOMContentLoaded", () => {
         // Wire custom camera button in actions menu
         const cameraBtn = document.getElementById("camera-btn-custom");
@@ -79,6 +97,9 @@
         if (storyCloseX) {
             storyCloseX.addEventListener("click", closeDisappearingStoryViewer);
         }
+
+        // Initialize Filter Selector Options
+        initCameraFilters();
     });
 
     /* =============================================================================
@@ -102,8 +123,8 @@
         const constraints = {
             video: {
                 facingMode: currentCameraFacing,
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
+                width: { ideal: 3840, max: 3840 },
+                height: { ideal: 2160, max: 2160 }
             },
             audio: true // request audio for video records
         };
@@ -112,6 +133,12 @@
             stream = await navigator.mediaDevices.getUserMedia(constraints);
             videoEl.srcObject = stream;
             videoEl.style.display = "block";
+            if (currentCameraFacing === "user") {
+                videoEl.classList.add("mirrored-media");
+            } else {
+                videoEl.classList.remove("mirrored-media");
+            }
+            applyFilterToCaptureVideo();
             await videoEl.play();
         } catch (err) {
             console.error("Camera access failed:", err);
@@ -218,26 +245,137 @@
         canvas.height = videoEl.videoHeight || 480;
         const ctx = canvas.getContext("2d");
         
-        // Mirror snapshot if using front camera
+        // Enable high-quality image smoothing
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        
+        // Apply canvas context filter matching current selected filter
+        const activeFilter = FILTERS.find(f => f.name === currentFilter);
+        if (activeFilter) {
+            ctx.filter = activeFilter.css;
+        }
+
+        // Draw camera frame (mirrored if using front camera)
+        ctx.save();
         if (currentCameraFacing === "user") {
             ctx.translate(canvas.width, 0);
             ctx.scale(-1, 1);
         }
         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
 
-        canvas.toBlob((blob) => {
-            if (!blob) return;
-            capturedBlob = blob;
-            capturedFileType = "image/jpeg";
-            
-            const objectUrl = URL.createObjectURL(blob);
-            imgPreview.src = objectUrl;
-            imgPreview.style.display = "block";
-            videoEl.style.display = "none";
-            
-            showPreviewStateControls();
-            stopLiveCameraStream();
-        }, "image/jpeg", 0.9);
+        // Helper to output to blob and preview once all baking is done
+        const bakeOverlaysAndSave = () => {
+            canvas.toBlob((blob) => {
+                if (!blob) return;
+                capturedBlob = blob;
+                capturedFileType = "image/jpeg";
+                
+                const objectUrl = URL.createObjectURL(blob);
+                imgPreview.src = objectUrl;
+                imgPreview.style.display = "block";
+                videoEl.style.display = "none";
+                
+                showPreviewStateControls();
+                stopLiveCameraStream();
+                // Hide floating overlays during photo preview since they are already baked into the photo pixels!
+                updateCameraOverlayVisibility(false);
+            }, "image/jpeg", 1.0);
+        };
+
+        // Bake overlays into photo based on active filter
+        if (currentFilter === "glasses") {
+            const svgString = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" width="200" height="60">
+                <path d="M10 25 C10 10, 80 10, 85 25 C90 40, 15 40, 10 25 Z" fill="#181818" stroke="#d4af37" stroke-width="1.8" />
+                <text x="47" y="29" fill="#fff" font-size="9" font-family="sans-serif" text-anchor="middle" font-weight="bold" letter-spacing="1.5">vibes</text>
+                <path d="M115 25 C120 10, 190 10, 190 25 C185 40, 110 40, 115 25 Z" fill="#181818" stroke="#d4af37" stroke-width="1.8" />
+                <text x="152" y="29" fill="#fff" font-size="9" font-family="sans-serif" text-anchor="middle" font-weight="bold" letter-spacing="1.5">vibes</text>
+                <path d="M85 22 Q100 15 115 22" fill="none" stroke="#d4af37" stroke-width="2.2" />
+                <path d="M10 22 C3 22, 1 12, 1 12" fill="none" stroke="#d4af37" stroke-width="1.5" />
+                <path d="M190 22 C197 22, 199 12, 199 12" fill="none" stroke="#d4af37" stroke-width="1.5" />
+            </svg>
+            `;
+            const img = new Image();
+            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+            img.onload = () => {
+                const glassesWidth = canvas.width * 0.45;
+                const glassesHeight = glassesWidth * (60 / 200);
+                const glassesX = (canvas.width - glassesWidth) / 2;
+                const glassesY = canvas.height * 0.4 - glassesHeight / 2;
+                ctx.drawImage(img, glassesX, glassesY, glassesWidth, glassesHeight);
+                URL.revokeObjectURL(url);
+                bakeOverlaysAndSave();
+            };
+            img.src = url;
+        } else if (currentFilter === "retro8mm") {
+            const borderWidth = Math.max(15, canvas.width * 0.035);
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, canvas.width, borderWidth);
+            ctx.fillRect(0, canvas.height - borderWidth, canvas.width, borderWidth);
+            ctx.fillRect(0, 0, borderWidth, canvas.height);
+            ctx.fillRect(canvas.width - borderWidth, 0, borderWidth, canvas.height);
+
+            // sprocket holes
+            ctx.fillStyle = "#222222";
+            const numHoles = 10;
+            const holeWidth = borderWidth * 0.25;
+            const holeHeight = holeWidth * 2.2;
+            const holeXLeft = borderWidth * 0.25;
+            const holeXRight = canvas.width - borderWidth * 0.55;
+            for (let i = 0; i < numHoles; i++) {
+                const holeY = (canvas.height / numHoles) * (i + 0.5) - holeHeight / 2;
+                ctx.fillRect(holeXLeft, holeY, holeWidth, holeHeight);
+                ctx.fillRect(holeXRight, holeY, holeWidth, holeHeight);
+            }
+            bakeOverlaysAndSave();
+        } else if (currentFilter === "time") {
+            const now = new Date();
+            let hours = now.getHours();
+            const ampm = hours >= 12 ? 'pm' : 'am';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const timeStr = `${hours}:${minutes} ${ampm}`;
+
+            const fontSize = Math.max(16, canvas.width * 0.045);
+            ctx.font = `italic ${fontSize}px Georgia, serif`;
+            ctx.fillStyle = "#ffffff";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 2;
+            ctx.fillText(`life at ${timeStr} 🤍`, canvas.width / 2, canvas.height / 2);
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            bakeOverlaysAndSave();
+        } else if (currentFilter === "day") {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayStr = days[new Date().getDay()];
+            const dayFontSize = Math.max(26, canvas.width * 0.065);
+            ctx.font = `900 ${dayFontSize}px 'Arial Black', sans-serif`;
+            ctx.fillStyle = "#ffffff";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "alphabetic";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 4;
+            const dayY = canvas.height - Math.max(120, canvas.height * 0.15);
+            ctx.fillText(dayStr.toUpperCase(), canvas.width / 2, dayY);
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            bakeOverlaysAndSave();
+        } else {
+            bakeOverlaysAndSave();
+        }
     }
 
     function startVideoRecording() {
@@ -276,6 +414,11 @@
                 const objectUrl = URL.createObjectURL(capturedBlob);
                 videoPreview.src = objectUrl;
                 videoPreview.style.display = "block";
+                if (currentCameraFacing === "user") {
+                    videoPreview.classList.add("mirrored-media");
+                } else {
+                    videoPreview.classList.remove("mirrored-media");
+                }
                 videoEl.style.display = "none";
                 videoPreview.play();
             }
@@ -369,7 +512,11 @@
             videoPreview.pause();
             videoPreview.src = "";
             videoPreview.style.display = "none";
+            videoPreview.classList.remove("mirrored-media");
         }
+
+        currentFilter = "normal";
+        selectCameraFilter("normal");
 
         capturedBlob = null;
         capturedFileType = "";
@@ -432,6 +579,8 @@
             user: State.currentUser.id || State.currentUser._id,
             status: { sent: false, delivered: false, seen: false },
             isDisappearing: true,
+            cameraFacing: currentCameraFacing,
+            cameraFilter: currentFilter,
             timestamp: Date.now()
         };
 
@@ -482,7 +631,9 @@
                         clientTime: Date.now(),
                         cover,
                         thumb,
-                        isDisappearing: true
+                        isDisappearing: true,
+                        cameraFacing: message.cameraFacing,
+                        cameraFilter: message.cameraFilter
                     }
                 });
 
@@ -523,11 +674,59 @@
             progressBar.style.width = "0%";
         }
 
+        // Initially hide all story graphic overlays
+        const storyGlasses = document.getElementById("story-overlay-glasses");
+        const storyRetro8mm = document.getElementById("story-overlay-retro8mm");
+        const storyTime = document.getElementById("story-overlay-time");
+        const storyDay = document.getElementById("story-overlay-day");
+
+        if (storyGlasses) storyGlasses.style.display = "none";
+        if (storyRetro8mm) storyRetro8mm.style.display = "none";
+        if (storyTime) storyTime.style.display = "none";
+        if (storyDay) storyDay.style.display = "none";
+
         viewer.style.display = "flex";
 
         if (details.type === "video") {
             video.src = details.src;
             video.style.display = "block";
+            if (details.cameraFacing === "user") {
+                video.classList.add("mirrored-media");
+            } else {
+                video.classList.remove("mirrored-media");
+            }
+            
+            // Apply story viewer playback filter class
+            const filterClasses = FILTERS.map(f => `filter-${f.name}`);
+            video.classList.remove(...filterClasses);
+            if (details.cameraFilter) {
+                video.classList.add(`filter-${details.cameraFilter}`);
+            }
+
+            // Show appropriate graphical overlay for video stories
+            if (details.cameraFilter === "glasses" && storyGlasses) {
+                storyGlasses.style.display = "block";
+            } else if (details.cameraFilter === "retro8mm" && storyRetro8mm) {
+                storyRetro8mm.style.display = "block";
+            } else if (details.cameraFilter === "time" && storyTime) {
+                const msgTime = new Date(details.timestamp || Date.now());
+                let hours = msgTime.getHours();
+                const ampm = hours >= 12 ? 'pm' : 'am';
+                hours = hours % 12;
+                hours = hours ? hours : 12;
+                const minutes = msgTime.getMinutes().toString().padStart(2, '0');
+                const timeStr = `${hours}:${minutes} ${ampm}`;
+                const valEl = storyTime.querySelector(".story-time-val");
+                if (valEl) valEl.textContent = timeStr;
+                storyTime.style.display = "block";
+            } else if (details.cameraFilter === "day" && storyDay) {
+                const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                const msgTime = new Date(details.timestamp || Date.now());
+                const dayStr = days[msgTime.getDay()];
+                const valEl = storyDay.querySelector(".story-day-val");
+                if (valEl) valEl.textContent = dayStr;
+                storyDay.style.display = "block";
+            }
             
             // Wait for video meta to initialize timing
             video.onloadedmetadata = () => {
@@ -545,7 +744,7 @@
                 closeDisappearingStoryViewer();
             };
         } else {
-            // Photo story
+            // Photo story (overlays are already baked into the JPEG, so no floating HTML overlays needed!)
             img.src = details.src;
             img.style.display = "block";
             startStoryProgressTracking(10000); // exactly 10 seconds countdown
@@ -581,10 +780,27 @@
         if (video) {
             video.pause();
             video.src = "";
+            video.style.display = "none";
+            video.classList.remove("mirrored-media");
+            
+            // Clean up filter classes on close
+            const filterClasses = FILTERS.map(f => `filter-${f.name}`);
+            video.classList.remove(...filterClasses);
         }
         if (img) {
             img.src = "";
         }
+
+        // Hide all active story graphic overlays
+        const storyGlasses = document.getElementById("story-overlay-glasses");
+        const storyRetro8mm = document.getElementById("story-overlay-retro8mm");
+        const storyTime = document.getElementById("story-overlay-time");
+        const storyDay = document.getElementById("story-overlay-day");
+
+        if (storyGlasses) storyGlasses.style.display = "none";
+        if (storyRetro8mm) storyRetro8mm.style.display = "none";
+        if (storyTime) storyTime.style.display = "none";
+        if (storyDay) storyDay.style.display = "none";
 
         // Clean up intervals
         if (storyDurationTimer) {
@@ -599,4 +815,180 @@
 
     // Expose openStoryViewer globally for chat.js actions
     window.openDisappearingStoryViewer = openDisappearingStoryViewer;
+
+    /* =============================================================================
+       FILTER ENGINE METHODS
+       ============================================================================= */
+    function initCameraFilters() {
+        const bar = document.getElementById("camera-filter-bar");
+        if (!bar) return;
+        
+        bar.innerHTML = "";
+        FILTERS.forEach(f => {
+            const opt = document.createElement("div");
+            opt.className = `filter-option ${f.name === currentFilter ? 'active' : ''}`;
+            opt.dataset.filter = f.name;
+            
+            const preview = document.createElement("div");
+            preview.className = "filter-option-preview";
+            
+            // Generate distinct colorful backgrounds for filter icons
+            let gradient = "";
+            if (f.name === "normal") gradient = "linear-gradient(45deg, #7c3aed, #db2777)";
+            else if (f.name === "clarendon") gradient = "linear-gradient(45deg, #3b82f6, #06b6d4)";
+            else if (f.name === "juno") gradient = "linear-gradient(45deg, #f97316, #e11d48)";
+            else if (f.name === "lark") gradient = "linear-gradient(45deg, #10b981, #60a5fa)";
+            else if (f.name === "gingham") gradient = "linear-gradient(45deg, #a8a29e, #e7e5e4)";
+            else if (f.name === "crema") gradient = "linear-gradient(45deg, #f5e0c3, #c49a6c)";
+            else if (f.name === "slumber") gradient = "linear-gradient(45deg, #a3e635, #ca8a04)";
+            else if (f.name === "valencia") gradient = "linear-gradient(45deg, #facc15, #ea580c)";
+            else if (f.name === "inkwell") gradient = "linear-gradient(45deg, #374151, #f3f4f6)";
+            else if (f.name === "glasses") gradient = "linear-gradient(45deg, #f59e0b, #d97706)";
+            else if (f.name === "retro8mm") gradient = "linear-gradient(45deg, #78716c, #44403c)";
+            else if (f.name === "time") gradient = "linear-gradient(45deg, #ec4899, #f43f5e)";
+            else if (f.name === "day") gradient = "linear-gradient(45deg, #8b5cf6, #6366f1)";
+            
+            preview.style.background = gradient;
+            preview.style.filter = f.css;
+            
+            const label = document.createElement("span");
+            label.className = "filter-option-label";
+            label.textContent = f.label;
+            
+            opt.appendChild(preview);
+            opt.appendChild(label);
+            
+            opt.addEventListener("click", () => {
+                selectCameraFilter(f.name);
+            });
+            
+            bar.appendChild(opt);
+        });
+
+        // Horizontal mouse-wheel scroll support
+        bar.addEventListener("wheel", (e) => {
+            if (e.deltaY !== 0) {
+                e.preventDefault();
+                bar.scrollLeft += e.deltaY;
+            }
+        });
+
+        // Horizontal mouse drag-to-scroll support
+        let isDown = false;
+        let startX;
+        let scrollLeft;
+        let dragThreshold = 5;
+        let moved = false;
+
+        bar.addEventListener("mousedown", (e) => {
+            isDown = true;
+            startX = e.pageX - bar.offsetLeft;
+            scrollLeft = bar.scrollLeft;
+            moved = false;
+        });
+
+        bar.addEventListener("mouseleave", () => {
+            isDown = false;
+        });
+
+        bar.addEventListener("mouseup", () => {
+            isDown = false;
+        });
+
+        bar.addEventListener("mousemove", (e) => {
+            if (!isDown) return;
+            const x = e.pageX - bar.offsetLeft;
+            const walk = (x - startX) * 1.5;
+            if (Math.abs(walk) > dragThreshold) {
+                moved = true;
+                e.preventDefault();
+                bar.scrollLeft = scrollLeft - walk;
+            }
+        });
+
+        // Intercept clicks during/after dragging
+        bar.addEventListener("click", (e) => {
+            if (moved) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true);
+    }
+
+    function selectCameraFilter(filterName) {
+        currentFilter = filterName;
+        
+        // Update selection UI highlight
+        const options = document.querySelectorAll(".filter-option");
+        options.forEach(opt => {
+            if (opt.dataset.filter === filterName) {
+                opt.classList.add("active");
+            } else {
+                opt.classList.remove("active");
+            }
+        });
+        
+        applyFilterToCaptureVideo();
+    }
+
+    function applyFilterToCaptureVideo() {
+        const videoEl = document.getElementById("camera-capture-video");
+        const videoPreview = document.getElementById("camera-capture-video-preview");
+        const filterClasses = FILTERS.map(f => `filter-${f.name}`);
+        
+        if (videoEl) {
+            videoEl.classList.remove(...filterClasses);
+            videoEl.classList.add(`filter-${currentFilter}`);
+        }
+        
+        if (videoPreview) {
+            videoPreview.classList.remove(...filterClasses);
+            videoPreview.classList.add(`filter-${currentFilter}`);
+        }
+
+        const imgPreview = document.getElementById("camera-capture-img-preview");
+        const isPhotoPreview = imgPreview && imgPreview.style.display !== "none";
+        updateCameraOverlayVisibility(!isPhotoPreview);
+    }
+
+    function updateCameraOverlayVisibility(showOverlays = true) {
+        const glasses = document.getElementById("overlay-glasses");
+        const retro8mm = document.getElementById("overlay-retro8mm");
+        const time = document.getElementById("overlay-time");
+        const day = document.getElementById("overlay-day");
+
+        if (glasses) glasses.style.display = "none";
+        if (retro8mm) retro8mm.style.display = "none";
+        if (time) time.style.display = "none";
+        if (day) day.style.display = "none";
+
+        if (!showOverlays) return;
+
+        if (currentFilter === "glasses" && glasses) {
+            glasses.style.display = "block";
+        } else if (currentFilter === "retro8mm" && retro8mm) {
+            retro8mm.style.display = "block";
+        } else if (currentFilter === "time" && time) {
+            const now = new Date();
+            let hours = now.getHours();
+            const ampm = hours >= 12 ? 'pm' : 'am';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const timeStr = `${hours}:${minutes} ${ampm}`;
+            const valEl = time.querySelector(".dynamic-time-val");
+            if (valEl) valEl.textContent = timeStr;
+            time.style.display = "block";
+        } else if (currentFilter === "day" && day) {
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const dayStr = days[nowDayIndex()];
+            const valEl = day.querySelector(".dynamic-day-val");
+            if (valEl) valEl.textContent = dayStr;
+            day.style.display = "block";
+        }
+    }
+
+    function nowDayIndex() {
+        return new Date().getDay();
+    }
 })();
