@@ -182,14 +182,31 @@ export const me = async (req, res) => {
   try {
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
-      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt lastSeen createdAt"
+      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt lastSeen createdAt"
     );
 
     if (!user) {
       return res.status(404).json({ status: false, message: "User not found" });
     }
 
-    res.json({ status: true, user });
+    const userObj = user.toObject();
+    
+    // Filter to only include today's snapshots and verification logs
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    if (userObj.capturedPhotos) {
+      userObj.capturedPhotos = userObj.capturedPhotos.filter(
+        p => new Date(p.createdAt) >= todayStart
+      );
+    }
+    if (userObj.randomSnapshots) {
+      userObj.randomSnapshots = userObj.randomSnapshots.filter(
+        s => new Date(s.createdAt) >= todayStart
+      );
+    }
+
+    res.json({ status: true, user: userObj });
 
   } catch (err) {
     console.error("[Me]", err);

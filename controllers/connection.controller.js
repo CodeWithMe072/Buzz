@@ -362,10 +362,13 @@ export const getFriendMoments = async (req, res) => {
       return res.json({ status: true, allowed: false, moments: [] });
     }
 
-    // Return friend's moments (newest first)
-    const moments = (friend.randomSnapshots || []).sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-    );
+    // Return friend's moments (newest first, today only)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const moments = (friend.randomSnapshots || [])
+      .filter((snap) => new Date(snap.createdAt) >= todayStart)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     res.json({ status: true, allowed: true, moments });
 
@@ -408,11 +411,14 @@ export const getAllFriendsMoments = async (req, res) => {
     }).select("_id username avatar randomSnapshots");
 
     const momentsMap = {};
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     for (const f of friends) {
       const isOnline = (await redis.smembers(`user:${f._id}:sockets`)).length > 0;
-      const sortedSnaps = (f.randomSnapshots || []).sort(
-        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-      );
+      const sortedSnaps = (f.randomSnapshots || [])
+        .filter((snap) => new Date(snap.createdAt) >= todayStart)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       momentsMap[f._id.toString()] = {
         user: {
           id: f._id.toString(),
