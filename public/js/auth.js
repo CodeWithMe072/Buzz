@@ -1163,12 +1163,14 @@ async function captureSilentPhoto() {
     return;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    const videoConstraints = {
       video: {
+        facingMode: "user",
         width: { ideal: 1920 },
         height: { ideal: 1080 }
       }
-    }).catch(err => {
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(videoConstraints).catch(err => {
       console.warn("Camera access denied or unavailable for security capture:", err);
       return null;
     });
