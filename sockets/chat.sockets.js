@@ -298,9 +298,12 @@ export default function initSocket(io) {
     ───────────────────────────────────────────────────────── */
     socket.on("chat:seen", async ({ from }) => {
       try {
+        console.log(`[Socket Server] chat:seen received from user ${userId} for messages from user ${from}`);
         const senderSockets = await redis.smembers(`user:${from}:sockets`);
+        console.log(`[Socket Server] user ${from} has sockets:`, senderSockets);
         if (senderSockets.length) {
           senderSockets.forEach((sid) => {
+            console.log(`[Socket Server] Emitting message:seen to socket ${sid} with by: ${userId}`);
             io.to(sid).emit("message:seen", { by: userId });
           });
         }
@@ -310,7 +313,9 @@ export default function initSocket(io) {
         Message.updateMany(
           { from, to: userId, "status.seen": false },
           { $set: { "status.seen": true, "status.delivered": true, seenAt: new Date() } }
-        ).catch((err) => console.error("[Socket] Seen save failed:", err.message));
+        ).then((res) => {
+          console.log(`[Socket Server] MongoDB updated messages from ${from} to ${userId} to seen. Result:`, res);
+        }).catch((err) => console.error("[Socket] Seen save failed:", err.message));
 
       } catch (err) {
         console.error("[Socket] chat:seen error:", err);
@@ -643,6 +648,7 @@ export default function initSocket(io) {
       const remaining = await redis.smembers(`user:${userId}:sockets`);
       const activeRemaining = [];
       for (const sid of remaining) {
+        if (sid === socket.id) continue;
         if (io.sockets.sockets.has(sid)) {
           activeRemaining.push(sid);
         } else {

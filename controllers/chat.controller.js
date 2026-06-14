@@ -59,7 +59,8 @@ export const getMessages = async (req, res) => {
     const messages = await Message.find(query)
       .sort({ createdAt: -1 })
       .limit(Number(limit))
-      .select("-__v -deletedFor");
+      .select("-__v -deletedFor")
+      .lean();
 
     res.json({
       status: true,
@@ -143,7 +144,8 @@ export const getMedia = async (req, res) => {
     const media = await Message.find(query)
       .sort({ createdAt: -1 })
       .limit(Number(limit))
-      .select("tempId type content cover thumb caption fileName fileSize createdAt from");
+      .select("tempId type content cover thumb caption fileName fileSize createdAt from")
+      .lean();
 
     res.json({ status: true, count: media.length, data: media });
 

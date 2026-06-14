@@ -35,11 +35,24 @@ function updateStatusIcon(tempId, status) {
   if (!msgEl) return;
   const wrap = msgEl.querySelector(".msg-status-wrap");
   if (!wrap) return;
-  if (status.seen) {
+
+  // Retrieve message from state to get the full merged status
+  const chatId = State.messageIndex[tempId];
+  let mergedStatus = { ...status };
+  if (chatId) {
+    const msgs = State.messages[chatId] || [];
+    const msg = msgs.find(m => m.id === tempId || m.tempId === tempId);
+    if (msg && msg.status) {
+      msg.status = { ...msg.status, ...status };
+      mergedStatus = msg.status;
+    }
+  }
+
+  if (mergedStatus.seen) {
     wrap.innerHTML = `<svg class="status-icon double seen" viewBox="0 0 16 16" style="transform:translateX(3px)"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
-  } else if (status.delivered) {
+  } else if (mergedStatus.delivered) {
     wrap.innerHTML = `<svg class="status-icon double delivered" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
-  } else if (status.sent) {
+  } else if (mergedStatus.sent) {
     wrap.innerHTML = `<svg class="status-icon single sent" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/></svg>`;
   } else {
     wrap.innerHTML = `<svg class="status-icon clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/></svg>`;
@@ -50,28 +63,44 @@ function updateStatusIcon(tempId, status) {
 // SEEN HELPERS
 // =============================================================================
 function markSeen(message) {
-  if (!message) return;
+  if (!message) {
+    console.log("[DEBUG seen] markSeen called with null message");
+    return;
+  }
+  console.log("[DEBUG seen] markSeen called for message:", message.id || message.tempId, "current status:", message.status);
   // Mark even if not yet "delivered" — seen implies delivered
-  if (message.status?.seen) return;
+  if (message.status?.seen) {
+    console.log("[DEBUG seen] message is already seen, returning");
+    return;
+  }
   if (message.status) {
     message.status.seen      = true;
     message.status.delivered = true;
     message.status.sent      = true;
   }
   const id = message.id || message.tempId;
-  const msgEl = document.querySelector(`.message[data-message-id="${id}"] .message-bubble`);
+  const selector = `.message[data-message-id="${id}"] .message-bubble`;
+  const msgEl = document.querySelector(selector);
+  console.log("[DEBUG seen] Query selector:", selector, "Found element?", !!msgEl);
   if (!msgEl) return;
   const wrap = msgEl.querySelector(".msg-status-wrap");
-  if (!wrap) return;
+  if (!wrap) {
+    console.log("[DEBUG seen] .msg-status-wrap not found in element");
+    return;
+  }
   wrap.innerHTML = `<svg class="status-icon double seen" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0px);"/></svg>`;
+  console.log("[DEBUG seen] DOM updated successfully to seen tick");
 }
 
 // chatId = the conversation partner's userId
 // tempId = optional specific message id
 function updateMessageSeenByTempId(chatId, tempId = null) {
+  console.log("[DEBUG seen] updateMessageSeenByTempId called for chatId:", chatId, "tempId:", tempId);
   const msgs = State.messages[chatId] || [];
+  console.log("[DEBUG seen] Total messages in State.messages for this chat:", msgs.length);
   // only update messages WE sent (sender = "me")
   const mine = msgs.filter(m => m.sender === "me" || m.user?.toString() === State.currentUser?.id?.toString());
+  console.log("[DEBUG seen] Filtered mine messages count:", mine.length, "State.currentUser.id:", State.currentUser?.id);
   if (tempId) {
     const msg = mine.find(m => m.id === tempId || m.tempId === tempId);
     if (msg && msg.uploadStatus !== "uploading") markSeen(msg);
@@ -367,11 +396,13 @@ function initSocket() {
 
   socket.on("message:seen", ({ by }) => {
     // "by" = the userId of the person who saw our messages
+    console.log(`[Socket Client] message:seen received. by: ${by}`);
     updateMessageSeenByTempId(by);
   });
 
   socket.on("chat:seen_sync", ({ from }) => {
     // Our own other device tells us messages FROM "from" were seen
+    console.log(`[Socket Client] chat:seen_sync received. from: ${from}`);
     updateMessageSeenByTempId(from);
   });
 
