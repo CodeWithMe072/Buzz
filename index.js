@@ -49,8 +49,18 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-/* ---------- Static files ---------- */
-app.use(express.static(path.join(__dirname, "public")));
+/* ---------- Static files with Cache-Control ---------- */
+app.use(express.static(path.join(__dirname, "public"), {
+  maxAge: "1d",
+  setHeaders: (res, filepath) => {
+    if (filepath.endsWith(".html") || filepath.endsWith(".ejs")) {
+      res.setHeader("Cache-Control", "no-cache");
+    } else {
+      res.setHeader("Cache-Control", "public, max-age=86400, must-revalidate");
+    }
+  }
+}));
+
 
 /* ---------- View engine ---------- */
 app.set("view engine", "ejs");

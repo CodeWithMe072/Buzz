@@ -145,7 +145,8 @@ export const listConnections = async (req, res) => {
     })
       .populate("sender", "_id username avatar lastSeen")
       .populate("receiver", "_id username avatar lastSeen")
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 })
+      .lean();
 
     // Normalise: always return the OTHER person, not me
     const contacts = connections.map((c) => {
@@ -259,7 +260,9 @@ export const searchUsers = async (req, res) => {
     // Get all users I already have a connection with (any status)
     const myConnections = await Connection.find({
       $or: [{ sender: req.user._id }, { receiver: req.user._id }],
-    }).select("sender receiver");
+    })
+      .select("sender receiver")
+      .lean();
 
     const connectedIds = new Set();
     myConnections.forEach((c) => {
@@ -274,7 +277,8 @@ export const searchUsers = async (req, res) => {
       isActive: true,
     })
       .select("_id username avatar")
-      .limit(20);
+      .limit(20)
+      .lean();
 
     res.json({ status: true, count: users.length, users });
 
