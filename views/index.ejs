@@ -746,6 +746,7 @@
             <!-- Video Frame / Placeholder Container -->
             <div style="flex: 1; position: relative; background: #0b0b0b; overflow: hidden; width: 100%; display: flex; align-items: center; justify-content: center;">
                 <img id="live-video-preview-frame" style="width: 100%; height: 100%; object-fit: contain; display: none;" />
+                <video id="live-video-preview-element" style="width: 100%; height: 100%; object-fit: contain; display: none;" autoplay playsinline muted></video>
                 <div id="live-video-preview-placeholder" style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; color: var(--text-secondary); padding: 15px;">
                     <div class="spinner-ring" style="width: 20px; height: 20px; border-width: 2.5px; border-top-color: #a855f7;"></div>
                     <span style="font-size: 11px; text-align: center;">Waiting for video feed...</span>

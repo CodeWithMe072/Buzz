@@ -1,19 +1,14 @@
 /**
  * voice.stream.js
- * Handles real-time one-way live voice streaming and playback.
+ * Handles real-time one-way live voice streaming and playback using WebRTC.
  */
 
 (function () {
-  // Sender / Streaming states (when we are sharing our mic)
+  // WebRTC Streamer / Receiver states
+  let voicePC = null;
   let localStream = null;
-  let captureContext = null;
-  let captureSource = null;
-  let captureProcessor = null;
   let activeRequesterId = null;
-
-  // Receiver / Listening states (when we are listening to someone else)
-  let playbackContext = null;
-  let nextPlayTime = 0;
+  let voiceIceCandidatesQueue = [];
   
   // Public state exposed to window
   window.liveVoiceState = {
@@ -43,9 +38,30 @@
     document.head.appendChild(styles);
   }
 
+  // ===========================================================================
+  // ICE SERVERS UTILITY
+  // ===========================================================================
+  async function _loadVoiceIceServers() {
+    const stun = [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun2.l.google.com:19302" },
+    ];
+    try {
+      if (typeof getICETurn === "function") {
+        const res = await getICETurn();
+        if (res.code === 200 && res.Data?.success && res.Data?.data?.length) {
+          return { iceServers: res.Data.data };
+        }
+      }
+    } catch (e) {
+      console.warn("[Voice] ICE turn fetch failed, STUN fallback:", e.message);
+    }
+    return { iceServers: stun };
+  }
 
   // ===========================================================================
-  // SENDER (MICROPHONE CAPTURE)
+  // SENDER (MICROPHONE CAPTURE & WEBRTC OFFER)
   // ===========================================================================
 
   async function startStreamingVoice(requesterId, requesterName) {
@@ -65,68 +81,56 @@
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log(`[Voice] Microphone access granted`);
 
-      captureContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (captureContext.state === "suspended") {
-        console.log(`[Voice] Capture AudioContext is suspended. Resuming...`);
-        await captureContext.resume();
-      }
-      
-      captureSource = captureContext.createMediaStreamSource(localStream);
-      // Create ScriptProcessorNode with buffer size 2048, 1 input channel, 1 output channel
-      captureProcessor = captureContext.createScriptProcessor(2048, 1, 1);
+      const iceConfig = await _loadVoiceIceServers();
+      voicePC = new RTCPeerConnection(iceConfig);
+      voiceIceCandidatesQueue = [];
 
-      captureProcessor.onaudioprocess = function (e) {
-        if (!window.liveVoiceState.isStreaming) return;
+      // Add local audio track
+      localStream.getTracks().forEach(track => {
+        voicePC.addTrack(track, localStream);
+      });
 
-        const inputData = e.inputBuffer.getChannelData(0);
-        // Convert Float32Array to Int16Array PCM
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          const s = Math.max(-1, Math.min(1, inputData[i]));
-          pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      // Emit ICE candidates to receiver
+      voicePC.onicecandidate = (e) => {
+        if (e.candidate) {
+          socket.emit("stream:ice", { to: requesterId, candidate: e.candidate, type: "voice" });
         }
-
-        // Emit raw ArrayBuffer chunk over socket
-        socket.emit("voice:chunk", {
-          to: requesterId,
-          samples: pcmData.buffer,
-          sampleRate: captureContext.sampleRate
-        });
       };
 
-      captureSource.connect(captureProcessor);
-      captureProcessor.connect(captureContext.destination);
+      voicePC.onconnectionstatechange = () => {
+        console.log(`[Voice] Streamer WebRTC Connection State: ${voicePC.connectionState}`);
+        if (voicePC.connectionState === "disconnected" || voicePC.connectionState === "failed") {
+          stopStreamingVoice();
+        }
+      };
+
+      // Create local SDP offer
+      const offer = await voicePC.createOffer();
+      await voicePC.setLocalDescription(offer);
+      socket.emit("stream:sdp", { to: requesterId, sdp: offer, type: "voice" });
 
       window.liveVoiceState.isStreaming = true;
       window.liveVoiceState.streamingToName = requesterName;
       activeRequesterId = requesterId;
 
-      console.log(`[Voice] Active microphone stream connected at sampleRate: ${captureContext.sampleRate}Hz`);
+      console.log(`[Voice] WebRTC Voice Streamer initialized and offer sent`);
     } catch (err) {
       console.error("[Voice] Failed to access microphone for live streaming:", err);
       showToast("Could not access microphone for live voice request.", "error");
       socket.emit("voice:stop", { to: requesterId });
+      stopStreamingVoice();
     }
   }
 
   function stopStreamingVoice() {
     if (!window.liveVoiceState.isStreaming) return;
 
-    console.log(`[Voice] Stopping microphone stream...`);
+    console.log(`[Voice] Stopping WebRTC microphone stream...`);
 
     try {
-      if (captureProcessor) {
-        captureProcessor.disconnect();
-        captureProcessor.onaudioprocess = null;
-        captureProcessor = null;
-      }
-      if (captureSource) {
-        captureSource.disconnect();
-        captureSource = null;
-      }
-      if (captureContext) {
-        captureContext.close();
-        captureContext = null;
+      if (voicePC) {
+        voicePC.close();
+        voicePC = null;
       }
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
@@ -136,6 +140,7 @@
       console.error("[Voice] Error clearing streaming nodes:", e);
     }
 
+    voiceIceCandidatesQueue = [];
     window.liveVoiceState.isStreaming = false;
     window.liveVoiceState.streamingToName = null;
     activeRequesterId = null;
@@ -144,7 +149,7 @@
   }
 
   // ===========================================================================
-  // RECEIVER (PLAYBACK ENGINE)
+  // RECEIVER (PLAYBACK ENGINE & WEBRTC ANSWER)
   // ===========================================================================
 
   window.startListeningToVoice = async function (friendId) {
@@ -156,16 +161,51 @@
     }
 
     try {
-      playbackContext = new (window.AudioContext || window.webkitAudioContext)();
-      if (playbackContext.state === "suspended") {
-        console.log(`[Voice] Playback AudioContext is suspended. Resuming...`);
-        await playbackContext.resume();
+      const iceConfig = await _loadVoiceIceServers();
+      voicePC = new RTCPeerConnection(iceConfig);
+      voiceIceCandidatesQueue = [];
+
+      // Create hidden voice playback element if missing
+      let audioEl = document.getElementById("voice-playback-element");
+      if (!audioEl) {
+        audioEl = document.createElement("audio");
+        audioEl.id = "voice-playback-element";
+        audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        audioEl.style.display = "none";
+        document.body.appendChild(audioEl);
       }
-      nextPlayTime = playbackContext.currentTime;
+
+      // Handle track arrival
+      voicePC.ontrack = (e) => {
+        console.log("[Voice] WebRTC voice track received!");
+        let stream = e.streams && e.streams[0];
+        if (!stream && e.track) {
+          stream = new MediaStream([e.track]);
+        }
+        if (stream) {
+          audioEl.srcObject = stream;
+          audioEl.play().catch(err => {
+            console.warn("[Voice] Auto-play prevented, user interaction required:", err);
+          });
+        }
+      };
+
+      // Emit ICE candidates to sender
+      voicePC.onicecandidate = (e) => {
+        if (e.candidate) {
+          socket.emit("stream:ice", { to: friendId, candidate: e.candidate, type: "voice" });
+        }
+      };
+
+      voicePC.onconnectionstatechange = () => {
+        console.log(`[Voice] Listener WebRTC Connection State: ${voicePC.connectionState}`);
+      };
 
       window.liveVoiceState.isListening = true;
       window.liveVoiceState.targetId = friendId;
 
+      // Ask B to start the voice streaming flow
       socket.emit("voice:request", { to: friendId });
 
       updateVoiceButtonUI(true);
@@ -191,70 +231,67 @@
     window.liveVoiceState.targetId = null;
 
     try {
-      if (playbackContext) {
-        playbackContext.close();
-        playbackContext = null;
+      if (voicePC) {
+        voicePC.close();
+        voicePC = null;
+      }
+      const audioEl = document.getElementById("voice-playback-element");
+      if (audioEl) {
+        audioEl.srcObject = null;
       }
     } catch (e) {
       console.error("[Voice] Error closing playback context:", e);
     }
 
+    voiceIceCandidatesQueue = [];
     updateVoiceButtonUI(false);
     console.log("[Voice] Stopped live voice listening session");
   };
 
-  function handleVoiceChunk(from, samplesBuffer, sampleRate) {
-    if (!window.liveVoiceState.isListening || window.liveVoiceState.targetId !== from) {
-      return;
-    }
+  // ===========================================================================
+  // SIGNALING HANDLERS
+  // ===========================================================================
 
-    if (!playbackContext) return;
-
+  window.handleVoiceStreamSDP = async function (from, sdp) {
+    if (!voicePC) return;
     try {
-      // Normalize buffer type
-      let arrayBuffer;
-      if (samplesBuffer instanceof ArrayBuffer) {
-        arrayBuffer = samplesBuffer;
-      } else if (ArrayBuffer.isView(samplesBuffer)) {
-        arrayBuffer = samplesBuffer.buffer;
-      } else if (samplesBuffer && samplesBuffer.type === "Buffer" && Array.isArray(samplesBuffer.data)) {
-        const uint8 = new Uint8Array(samplesBuffer.data);
-        arrayBuffer = uint8.buffer;
-      } else {
-        console.warn("[Voice] Received unknown samples format:", samplesBuffer);
-        return;
+      if (sdp.type === "offer") {
+        await voicePC.setRemoteDescription(new RTCSessionDescription(sdp));
+        const answer = await voicePC.createAnswer();
+        await voicePC.setLocalDescription(answer);
+        socket.emit("stream:sdp", { to: from, sdp: answer, type: "voice" });
+        await processQueuedVoiceCandidates();
+      } else if (sdp.type === "answer") {
+        await voicePC.setRemoteDescription(new RTCSessionDescription(sdp));
+        await processQueuedVoiceCandidates();
       }
+    } catch (e) {
+      console.error("[Voice] Error handling voice SDP:", e);
+    }
+  };
 
-      // Convert Int16 PCM array to float32
-      const int16Samples = new Int16Array(arrayBuffer);
-      if (int16Samples.length === 0) return;
-
-      const float32Samples = new Float32Array(int16Samples.length);
-      for (let i = 0; i < int16Samples.length; i++) {
-        float32Samples[i] = int16Samples[i] / (int16Samples[i] < 0 ? 0x8000 : 0x7FFF);
+  window.handleVoiceStreamICE = async function (from, candidate) {
+    if (!voicePC) return;
+    if (voicePC.remoteDescription && voicePC.remoteDescription.type) {
+      try {
+        await voicePC.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.error("[Voice] Error adding voice ICE candidate:", e);
       }
+    } else {
+      voiceIceCandidatesQueue.push(candidate);
+    }
+  };
 
-      // Create an AudioBuffer
-      const audioBuffer = playbackContext.createBuffer(1, float32Samples.length, sampleRate);
-      audioBuffer.getChannelData(0).set(float32Samples);
-
-      // Create BufferSourceNode
-      const source = playbackContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(playbackContext.destination);
-
-      // Schedule buffer to play gaplessly
-      const currentTime = playbackContext.currentTime;
-      const currentLatency = nextPlayTime - currentTime;
-
-      // If playback latency accumulates beyond 120ms or falls behind, snap to real-time (20ms buffer)
-      if (currentLatency > 0.12 || nextPlayTime < currentTime) {
-        nextPlayTime = currentTime + 0.02;
+  async function processQueuedVoiceCandidates() {
+    if (!voicePC) return;
+    while (voiceIceCandidatesQueue.length > 0) {
+      const candidate = voiceIceCandidatesQueue.shift();
+      try {
+        await voicePC.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.error("[Voice] Error adding queued voice ICE candidate:", e);
       }
-      source.start(nextPlayTime);
-      nextPlayTime += audioBuffer.duration;
-    } catch (err) {
-      console.error("[Voice] Playback decoding/scheduling error:", err);
     }
   }
 
@@ -318,7 +355,7 @@
       return;
     }
     
-    console.log("[Voice] Binding live voice socket events...");
+    console.log("[Voice] Binding live voice WebRTC events...");
 
     s.on("client:voice_start", ({ requesterId, requesterName }) => {
       startStreamingVoice(requesterId, requesterName);
@@ -326,10 +363,6 @@
 
     s.on("client:voice_stop", () => {
       stopStreamingVoice();
-    });
-
-    s.on("client:voice_chunk", ({ from, samples, sampleRate }) => {
-      handleVoiceChunk(from, samples, sampleRate);
     });
 
     s.on("voice:error", ({ message }) => {

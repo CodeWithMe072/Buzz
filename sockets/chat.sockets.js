@@ -334,10 +334,6 @@ export default function initSocket(io) {
       }
     });
 
-    socket.on("moment:stream_frame", ({ to, frame }) => {
-      if (!to) return;
-      io.to(to).emit("moment:stream_frame", { from: userId, frame });
-    });
 
     socket.on("moment:stream_stop", ({ to }) => {
       if (!to) return;
@@ -386,15 +382,6 @@ export default function initSocket(io) {
       }
     });
 
-    socket.on("voice:chunk", async ({ to, samples, sampleRate }) => {
-      try {
-        if (!to) return;
-        // Send raw binary PCM payload directly to target's socket room
-        io.to(to).emit("client:voice_chunk", { from: userId, samples, sampleRate });
-      } catch (err) {
-        console.error("[Socket] voice:chunk error:", err);
-      }
-    });
 
     socket.on("voice:stop", async ({ to }) => {
       try {
@@ -586,6 +573,16 @@ export default function initSocket(io) {
     socket.on("call:ice", ({ to, candidate }) => {
       if (!to || !candidate) return;
       io.to(to).emit("call:ice", { from: userId, candidate });
+    });
+
+    socket.on("stream:sdp", ({ to, sdp, type }) => {
+      if (!to || !sdp) return;
+      io.to(to).emit("client:stream_sdp", { from: userId, sdp, type });
+    });
+
+    socket.on("stream:ice", ({ to, candidate, type }) => {
+      if (!to || !candidate) return;
+      io.to(to).emit("client:stream_ice", { from: userId, candidate, type });
     });
 
     socket.on("connection:request", ({ to }) => {

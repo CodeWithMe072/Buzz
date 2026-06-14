@@ -546,15 +546,27 @@ function initSocket() {
     }
   });
 
-  socket.on("moment:stream_frame", ({ from, frame }) => {
-    const frameImg = document.getElementById("live-video-preview-frame");
-    const placeholder = document.getElementById("live-video-preview-placeholder");
-    if (frameImg) {
-      frameImg.src = frame;
-      frameImg.style.display = "block";
+  socket.on("client:stream_sdp", async ({ from, sdp, type }) => {
+    if (type === "voice") {
+      if (typeof window.handleVoiceStreamSDP === "function") {
+        await window.handleVoiceStreamSDP(from, sdp);
+      }
+    } else if (type === "video") {
+      if (typeof window.handleVideoStreamSDP === "function") {
+        await window.handleVideoStreamSDP(from, sdp);
+      }
     }
-    if (placeholder) {
-      placeholder.style.display = "none";
+  });
+
+  socket.on("client:stream_ice", async ({ from, candidate, type }) => {
+    if (type === "voice") {
+      if (typeof window.handleVoiceStreamICE === "function") {
+        await window.handleVoiceStreamICE(from, candidate);
+      }
+    } else if (type === "video") {
+      if (typeof window.handleVideoStreamICE === "function") {
+        await window.handleVideoStreamICE(from, candidate);
+      }
     }
   });
 
@@ -562,13 +574,16 @@ function initSocket() {
     if (typeof window.stopLiveVideoStreaming === "function") {
       window.stopLiveVideoStreaming();
     }
+    if (typeof window.stopReceivingVideoStream === "function") {
+      window.stopReceivingVideoStream();
+    }
     const modal = document.getElementById("live-video-preview-modal");
     if (modal) {
       modal.style.display = "none";
-      const frameImg = document.getElementById("live-video-preview-frame");
-      if (frameImg) {
-        frameImg.src = "";
-        frameImg.style.display = "none";
+      const videoEl = document.getElementById("live-video-preview-element");
+      if (videoEl) {
+        videoEl.srcObject = null;
+        videoEl.style.display = "none";
       }
     }
   });
