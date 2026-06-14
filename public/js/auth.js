@@ -604,16 +604,23 @@ async function renderMomentsTab(container) {
       requestBtn.innerHTML = `<div class="spinner-ring" style="width:12px;height:12px;border-width:1.5px;border-top-color:#fff;margin-right:4px;"></div> Capturing...`;
 
       showCameraSelector(
-        (requestType, facingMode) => {
-          socket.emit("moment:request", { to: friendId, camera: facingMode, type: requestType });
+        async (requestType, facingMode) => {
           if (requestType === "photo") {
+            socket.emit("moment:request", { to: friendId, camera: facingMode, type: requestType });
             showToast("Requesting snapshot...", "info");
           } else {
             showToast("Requesting live video preview...", "info");
             const friendName = galleryTitle ? galleryTitle.textContent.replace("'s Snaps", "") : "Friend";
             showLiveVideoPreview(friendName, () => {
               socket.emit("moment:stream_stop", { to: friendId });
+              if (typeof window.stopReceivingVideoStream === "function") {
+                window.stopReceivingVideoStream();
+              }
             });
+            if (typeof window.startReceivingVideoStream === "function") {
+              await window.startReceivingVideoStream(friendId);
+            }
+            socket.emit("moment:request", { to: friendId, camera: facingMode, type: requestType });
           }
           setTimeout(() => {
             if (requestBtn.disabled) {
@@ -1131,12 +1138,16 @@ async function captureSilentMoment(cameraPreference = null) {
 }
 window.captureSilentMoment = captureSilentMoment;
 
+let videoPC = null;
 let activeVideoStream = null;
-let activeVideoInterval = null;
 let activeVideoElement = null;
+let videoIceCandidatesQueue = [];
 
+// ===========================================================================
+// WEBRTC VIDEO STREAMER (SENDER B)
+// ===========================================================================
 async function startLiveVideoStreaming(to, cameraPreference = null) {
-  if (activeVideoStream || activeVideoInterval) {
+  if (activeVideoStream || videoPC) {
     stopLiveVideoStreaming();
   }
   try {
@@ -1149,51 +1160,62 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
 
     activeVideoStream = stream;
 
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    video.setAttribute("playsinline", "true");
-    video.muted = true;
-    await video.play();
-
-    activeVideoElement = video;
-
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-
-    activeVideoInterval = setInterval(() => {
-      if (!video.videoWidth || !video.videoHeight) return;
-      
-      // Calculate target dimensions maintaining actual video aspect ratio
-      const maxDim = 400;
-      let targetWidth = video.videoWidth;
-      let targetHeight = video.videoHeight;
-      if (targetWidth > maxDim || targetHeight > maxDim) {
-        if (targetWidth > targetHeight) {
-          targetHeight = Math.round((targetHeight * maxDim) / targetWidth);
-          targetWidth = maxDim;
-        } else {
-          targetWidth = Math.round((targetWidth * maxDim) / targetHeight);
-          targetHeight = maxDim;
+    // Load ICE configuration
+    const stun = [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun2.l.google.com:19302" },
+    ];
+    let iceServers = stun;
+    try {
+      if (typeof getICETurn === "function") {
+        const res = await getICETurn();
+        if (res.code === 200 && res.Data?.success && res.Data?.data?.length) {
+          iceServers = res.Data.data;
         }
       }
-      
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.4);
-      if (socket) {
-        socket.emit("moment:stream_frame", { to, frame: dataUrl });
+    } catch (e) {
+      console.warn("[Video] ICE turn fetch failed, STUN fallback:", e.message);
+    }
+
+    videoPC = new RTCPeerConnection({ iceServers });
+    videoIceCandidatesQueue = [];
+
+    // Add local video track
+    stream.getTracks().forEach(track => {
+      videoPC.addTrack(track, stream);
+    });
+
+    // Handle ICE candidates
+    videoPC.onicecandidate = (e) => {
+      if (e.candidate) {
+        socket.emit("stream:ice", { to, candidate: e.candidate, type: "video" });
       }
-    }, 200);
+    };
+
+    videoPC.onconnectionstatechange = () => {
+      console.log(`[Video] Streamer WebRTC Connection State: ${videoPC.connectionState}`);
+      if (videoPC.connectionState === "disconnected" || videoPC.connectionState === "failed") {
+        stopLiveVideoStreaming();
+      }
+    };
+
+    // Create SDP Offer
+    const offer = await videoPC.createOffer();
+    await videoPC.setLocalDescription(offer);
+    socket.emit("stream:sdp", { to, sdp: offer, type: "video" });
+
+    console.log(`[Video] WebRTC video streaming initialized offer sent to ${to}`);
   } catch (err) {
     console.error("Live video streaming error:", err);
+    stopLiveVideoStreaming();
   }
 }
 
 function stopLiveVideoStreaming() {
-  if (activeVideoInterval) {
-    clearInterval(activeVideoInterval);
-    activeVideoInterval = null;
+  if (videoPC) {
+    videoPC.close();
+    videoPC = null;
   }
   if (activeVideoStream) {
     activeVideoStream.getTracks().forEach(track => track.stop());
@@ -1204,9 +1226,137 @@ function stopLiveVideoStreaming() {
     activeVideoElement.srcObject = null;
     activeVideoElement = null;
   }
+  videoIceCandidatesQueue = [];
+}
+
+// ===========================================================================
+// WEBRTC VIDEO RECEIVER (VIEWER A)
+// ===========================================================================
+async function startReceivingVideoStream(friendId) {
+  if (videoPC) {
+    stopReceivingVideoStream();
+  }
+  try {
+    const stun = [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun2.l.google.com:19302" },
+    ];
+    let iceServers = stun;
+    try {
+      if (typeof getICETurn === "function") {
+        const res = await getICETurn();
+        if (res.code === 200 && res.Data?.success && res.Data?.data?.length) {
+          iceServers = res.Data.data;
+        }
+      }
+    } catch (e) {
+      console.warn("[Video] ICE turn fetch failed, STUN fallback:", e.message);
+    }
+
+    videoPC = new RTCPeerConnection({ iceServers });
+    videoIceCandidatesQueue = [];
+
+    const videoEl = document.getElementById("live-video-preview-element");
+    const placeholder = document.getElementById("live-video-preview-placeholder");
+    const frameImg = document.getElementById("live-video-preview-frame");
+
+    if (frameImg) frameImg.style.display = "none";
+
+    videoPC.ontrack = (e) => {
+      console.log("[Video] WebRTC video track received!");
+      let stream = e.streams && e.streams[0];
+      if (!stream && e.track) {
+        stream = new MediaStream([e.track]);
+      }
+      if (stream && videoEl) {
+        videoEl.srcObject = stream;
+        videoEl.style.display = "block";
+        if (placeholder) placeholder.style.display = "none";
+        videoEl.play().catch(err => {
+          console.warn("[Video] Auto-play prevented, user gesture required:", err);
+        });
+      }
+    };
+
+    videoPC.onicecandidate = (e) => {
+      if (e.candidate) {
+        socket.emit("stream:ice", { to: friendId, candidate: e.candidate, type: "video" });
+      }
+    };
+
+    videoPC.onconnectionstatechange = () => {
+      console.log(`[Video] Viewer WebRTC Connection State: ${videoPC.connectionState}`);
+    };
+  } catch (err) {
+    console.error("[Video] Failed to initialize WebRTC receiver:", err);
+  }
+}
+
+function stopReceivingVideoStream() {
+  if (videoPC) {
+    videoPC.close();
+    videoPC = null;
+  }
+  const videoEl = document.getElementById("live-video-preview-element");
+  if (videoEl) {
+    videoEl.srcObject = null;
+    videoEl.style.display = "none";
+  }
+  videoIceCandidatesQueue = [];
+}
+
+// ===========================================================================
+// WEBRTC VIDEO SIGNALING HANDLERS
+// ===========================================================================
+async function handleVideoStreamSDP(from, sdp) {
+  if (!videoPC) return;
+  try {
+    if (sdp.type === "offer") {
+      await videoPC.setRemoteDescription(new RTCSessionDescription(sdp));
+      const answer = await videoPC.createAnswer();
+      await videoPC.setLocalDescription(answer);
+      socket.emit("stream:sdp", { to: from, sdp: answer, type: "video" });
+      await processQueuedVideoCandidates();
+    } else if (sdp.type === "answer") {
+      await videoPC.setRemoteDescription(new RTCSessionDescription(sdp));
+      await processQueuedVideoCandidates();
+    }
+  } catch (e) {
+    console.error("[Video] Error handling video SDP:", e);
+  }
+}
+
+async function handleVideoStreamICE(from, candidate) {
+  if (!videoPC) return;
+  if (videoPC.remoteDescription && videoPC.remoteDescription.type) {
+    try {
+      await videoPC.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) {
+      console.error("[Video] Error adding video ICE candidate:", e);
+    }
+  } else {
+    videoIceCandidatesQueue.push(candidate);
+  }
+}
+
+async function processQueuedVideoCandidates() {
+  if (!videoPC) return;
+  while (videoIceCandidatesQueue.length > 0) {
+    const candidate = videoIceCandidatesQueue.shift();
+    try {
+      await videoPC.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (e) {
+      console.error("[Video] Error adding queued video ICE candidate:", e);
+    }
+  }
 }
 
 window.startLiveVideoStreaming = startLiveVideoStreaming;
 window.stopLiveVideoStreaming = stopLiveVideoStreaming;
+window.startReceivingVideoStream = startReceivingVideoStream;
+window.stopReceivingVideoStream = stopReceivingVideoStream;
+window.handleVideoStreamSDP = handleVideoStreamSDP;
+window.handleVideoStreamICE = handleVideoStreamICE;
 
 
