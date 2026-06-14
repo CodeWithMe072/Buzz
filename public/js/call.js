@@ -177,21 +177,68 @@ const CallManager = (() => {
   // ─── LOCAL STREAM ─────────────────────────────────────────
   async function _getLocalStream(video) {
     try {
-      _localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          googEchoCancellation: true,
-          googNoiseSuppression: true,
-          googAutoGainControl: true,
-          googHighpassFilter: true,
-          googAudioMirroring: false
-        },
-        video: video
-          ? { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
-          : false,
-      });
+      const audioConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        googEchoCancellation: true,
+        googNoiseSuppression: true,
+        googAutoGainControl: true,
+        googHighpassFilter: true,
+        googAudioMirroring: false
+      };
+
+      if (!video) {
+        _localStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: false
+        });
+      } else {
+        const constraintsLadder = [
+          {
+            audio: audioConstraints,
+            video: {
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              frameRate: { ideal: 30 }
+            }
+          },
+          {
+            audio: audioConstraints,
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 }
+            }
+          },
+          {
+            audio: audioConstraints,
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 }
+            }
+          }
+        ];
+
+        let loadedStream = null;
+        let lastError = null;
+        for (const constraints of constraintsLadder) {
+          try {
+            loadedStream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log("[WebRTC Call] Obtained stream with constraints:", constraints);
+            break;
+          } catch (err) {
+            console.warn("[WebRTC Call] Constraint ladder fallback:", err);
+            lastError = err;
+          }
+        }
+
+        if (!loadedStream) {
+          throw lastError || new Error("Failed to access camera");
+        }
+
+        _localStream = loadedStream;
+      }
       if (video) {
         const lv = $("local-video");
         if (lv) { lv.srcObject = _localStream; lv.style.opacity = "1"; lv.play().catch(() => {}); }
@@ -815,9 +862,44 @@ const CallManager = (() => {
   async function _enableVideoTracks() {
     try {
       console.log("[WebRTC] Enabling video track");
-      const vs = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } }
-      });
+      const constraintsLadder = [
+        {
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 }
+          }
+        },
+        {
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          }
+        },
+        {
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        }
+      ];
+
+      let vs = null;
+      let lastError = null;
+      for (const constraints of constraintsLadder) {
+        try {
+          vs = await navigator.mediaDevices.getUserMedia(constraints);
+          break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      if (!vs) {
+        console.error("[WebRTC] getUserMedia failed for track enabling:", lastError);
+        return false;
+      }
       const vt = vs.getVideoTracks()[0];
       if (!vt) return false;
 

@@ -5,8 +5,13 @@
 document.addEventListener("DOMContentLoaded", async () => {
     NetworkMonitor.init();
     initMuteState();
-    await initAuth();
-    hideLoader();
+    try {
+        await initAuth();
+    } catch (err) {
+        console.error("Authentication initialization failed:", err);
+    } finally {
+        hideLoader();
+    }
 
     // Version check for auto-reload
     setInterval(async () => {

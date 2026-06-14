@@ -120,30 +120,78 @@
         const videoEl = document.getElementById("camera-capture-video");
         if (!videoEl) return;
 
-        const constraints = {
-            video: {
-                facingMode: currentCameraFacing,
-                width: { ideal: 3840, max: 3840 },
-                height: { ideal: 2160, max: 2160 }
+        // Try high quality constraints ladder
+        const constraintsLadder = [
+            {
+                video: {
+                    facingMode: currentCameraFacing,
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    frameRate: { ideal: 30 }
+                },
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
             },
-            audio: true // request audio for video records
-        };
-
-        try {
-            stream = await navigator.mediaDevices.getUserMedia(constraints);
-            videoEl.srcObject = stream;
-            videoEl.style.display = "block";
-            if (currentCameraFacing === "user") {
-                videoEl.classList.add("mirrored-media");
-            } else {
-                videoEl.classList.remove("mirrored-media");
+            {
+                video: {
+                    facingMode: currentCameraFacing,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    frameRate: { ideal: 30 }
+                },
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            },
+            {
+                video: {
+                    facingMode: currentCameraFacing,
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: true
             }
-            applyFilterToCaptureVideo();
-            await videoEl.play();
-        } catch (err) {
-            console.error("Camera access failed:", err);
+        ];
+
+        let loadedStream = null;
+        let lastError = null;
+
+        for (const constraints of constraintsLadder) {
+            try {
+                loadedStream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log("[Camera] Successfully obtained stream with constraints:", constraints);
+                break;
+            } catch (err) {
+                console.warn("[Camera] Constraint selection failed, trying next fallback...", err);
+                lastError = err;
+            }
+        }
+
+        if (!loadedStream) {
+            console.error("Camera access failed:", lastError);
             showToast("Failed to access camera", "error");
             closeCameraCaptureOverlay();
+            return;
+        }
+
+        stream = loadedStream;
+        videoEl.srcObject = stream;
+        videoEl.style.display = "block";
+        if (currentCameraFacing === "user") {
+            videoEl.classList.add("mirrored-media");
+        } else {
+            videoEl.classList.remove("mirrored-media");
+        }
+        applyFilterToCaptureVideo();
+        try {
+            await videoEl.play();
+        } catch (playErr) {
+            console.warn("Camera video play failed:", playErr);
         }
     }
 
@@ -383,12 +431,24 @@
         recordedChunks = [];
         
         // Use optimal recording options
-        let options = { mimeType: "video/webm;codecs=vp9,opus" };
+        let options = { 
+            mimeType: "video/webm;codecs=vp9,opus",
+            videoBitsPerSecond: 3000000,
+            audioBitsPerSecond: 128000
+        };
         if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-            options = { mimeType: "video/webm;codecs=vp8,opus" };
+            options = { 
+                mimeType: "video/webm;codecs=vp8,opus",
+                videoBitsPerSecond: 3000000,
+                audioBitsPerSecond: 128000
+            };
         }
         if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-            options = { mimeType: "video/mp4" };
+            options = { 
+                mimeType: "video/mp4",
+                videoBitsPerSecond: 3000000,
+                audioBitsPerSecond: 128000
+            };
         }
 
         try {

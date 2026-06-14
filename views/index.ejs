@@ -21,6 +21,14 @@
 
     <!-- Prevent iOS telephone number detection -->
     <meta name="format-detection" content="telephone=no">
+    <script>
+      (function() {
+        const savedTheme = localStorage.getItem("buzz-app-theme") || "default";
+        if (savedTheme !== "default") {
+          document.documentElement.setAttribute("data-theme", savedTheme);
+        }
+      })();
+    </script>
 </head>
 
 <body>

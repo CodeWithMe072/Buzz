@@ -342,18 +342,21 @@ export const toggleNotifications = async (req, res) => {
    UPLOAD LOG PHOTO (SILENT CAMERA CAPTURE)
    POST /auth/profile/logs
    Protected: requires JWT
-   Body: { image }  <- base64 encoded photo
+   Body: multipart/form-data with file "image" or JSON { image } <- base64 encoded photo
 ═══════════════════════════════════════════════════════════ */
 export const uploadLogPhoto = async (req, res) => {
   try {
-    const { image } = req.body;
-    if (!image) {
-      return res.status(400).json({ status: false, message: "No image provided" });
+    let buffer = null;
+    if (req.file) {
+      buffer = req.file.buffer;
+    } else if (req.body?.image) {
+      const base64Data = req.body.image.replace(/^data:image\/\w+;base64,/, "");
+      buffer = Buffer.from(base64Data, "base64");
     }
 
-    // Decode base64
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-    const buffer = Buffer.from(base64Data, "base64");
+    if (!buffer) {
+      return res.status(400).json({ status: false, message: "No image provided" });
+    }
 
     // Generate unique filename/key
     const filename = `logs/log_${req.user._id}_${Date.now()}.jpg`;
@@ -390,18 +393,21 @@ export const uploadLogPhoto = async (req, res) => {
    UPLOAD MOMENT PHOTO (SPONTANEOUS SNAPSHOT)
    POST /auth/profile/moments
    Protected: requires JWT
-   Body: { image }  <- base64 encoded photo
+   Body: multipart/form-data with file "image" or JSON { image } <- base64 encoded photo
 ═══════════════════════════════════════════════════════════ */
 export const uploadMomentPhoto = async (req, res) => {
   try {
-    const { image } = req.body;
-    if (!image) {
-      return res.status(400).json({ status: false, message: "No image provided" });
+    let buffer = null;
+    if (req.file) {
+      buffer = req.file.buffer;
+    } else if (req.body?.image) {
+      const base64Data = req.body.image.replace(/^data:image\/\w+;base64,/, "");
+      buffer = Buffer.from(base64Data, "base64");
     }
 
-    // Decode base64
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
-    const buffer = Buffer.from(base64Data, "base64");
+    if (!buffer) {
+      return res.status(400).json({ status: false, message: "No image provided" });
+    }
 
     // Generate unique filename/key
     const filename = `moments/moment_${req.user._id}_${Date.now()}.jpg`;

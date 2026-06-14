@@ -79,9 +79,45 @@ async function toggleNotifications() {
   return { Data: res?.data, code: res?.status };
 }
 
+function dataURLtoBlob(dataurl) {
+  const arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
 async function uploadCapturedPhoto(image) {
-  const res = await apiRequest("POST", "/auth/profile/logs", { image });
-  return { Data: res?.data, code: res?.status };
+  try {
+    const blob = dataURLtoBlob(image);
+    const formData = new FormData();
+    formData.append("image", blob, "photo.jpg");
+
+    const token = TokenStore.getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch("/auth/profile/logs", {
+      method: "POST",
+      headers,
+      body: formData
+    });
+    
+    const data = await res.json();
+    if (res.status === 401 && (data.code === "TOKEN_EXPIRED" || data.code === "TOKEN_INVALID")) {
+      TokenStore.clear();
+      localStorage.removeItem("SSC_USER");
+      window.location.reload();
+      return null;
+    }
+    return { Data: data, code: res.status };
+  } catch (err) {
+    console.error("Failed to upload captured photo:", err);
+    return null;
+  }
 }
 
 // ─── Connections ─────────────────────────────────────────────
@@ -160,8 +196,33 @@ async function getSearchGif(query) {
 window.TokenStore = TokenStore;
 
 async function uploadMomentPhoto(image) {
-  const res = await apiRequest("POST", "/auth/profile/moments", { image });
-  return { Data: res?.data, code: res?.status };
+  try {
+    const blob = dataURLtoBlob(image);
+    const formData = new FormData();
+    formData.append("image", blob, "photo.jpg");
+
+    const token = TokenStore.getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch("/auth/profile/moments", {
+      method: "POST",
+      headers,
+      body: formData
+    });
+    
+    const data = await res.json();
+    if (res.status === 401 && (data.code === "TOKEN_EXPIRED" || data.code === "TOKEN_INVALID")) {
+      TokenStore.clear();
+      localStorage.removeItem("SSC_USER");
+      window.location.reload();
+      return null;
+    }
+    return { Data: data, code: res.status };
+  } catch (err) {
+    console.error("Failed to upload moment photo:", err);
+    return null;
+  }
 }
 
 async function getFriendMoments(friendId) {

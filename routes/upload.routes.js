@@ -393,7 +393,7 @@ router.post("/api/upload-chunk",
 // Complete Upload
 // =============================================================================
 
-router.post("/api/complete-upload", protect, express.json(),
+router.post("/api/complete-upload", protect, express.json({ limit: "50mb" }),
     async (req, res) => {
         const { fileId, fileName, mimeType, } = req.body;
         const chunkDir = path.join(os.tmpdir(), "chunks", fileId);

