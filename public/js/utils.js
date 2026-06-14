@@ -425,5 +425,14 @@ function showLiveVideoPreview(friendName, onClose) {
 
     if (closeBtn) closeBtn.onclick = closeHandler;
     if (closeX) closeX.onclick = closeHandler;
+
+    const toggleCamBtn = document.getElementById("live-video-preview-toggle-cam");
+    if (toggleCamBtn) {
+        toggleCamBtn.onclick = () => {
+            if (typeof window.toggleRemoteVideoCamera === "function") {
+                window.toggleRemoteVideoCamera();
+            }
+        };
+    }
 }
 

@@ -618,6 +618,7 @@ async function renderMomentsTab(container) {
               }
             });
             if (typeof window.startReceivingVideoStream === "function") {
+              window.liveVideoCameraPreference = facingMode;
               await window.startReceivingVideoStream(friendId);
             }
             socket.emit("moment:request", { to: friendId, camera: facingMode, type: requestType });
@@ -1143,6 +1144,10 @@ let activeVideoStream = null;
 let activeVideoElement = null;
 let videoIceCandidatesQueue = [];
 
+// Global camera preference and active friend ID tracking
+window.liveVideoCameraPreference = "user";
+window.activeVideoFriendId = null;
+
 // ===========================================================================
 // WEBRTC VIDEO STREAMER (SENDER B)
 // ===========================================================================
@@ -1236,6 +1241,7 @@ async function startReceivingVideoStream(friendId) {
   if (videoPC) {
     stopReceivingVideoStream();
   }
+  window.activeVideoFriendId = friendId;
   try {
     const stun = [
       { urls: "stun:stun.l.google.com:19302" },
@@ -1304,7 +1310,31 @@ function stopReceivingVideoStream() {
     videoEl.style.display = "none";
   }
   videoIceCandidatesQueue = [];
+  window.activeVideoFriendId = null;
 }
+
+// ===========================================================================
+// TOGGLE REMOTE CAMERA (FLIP CAMERA FRONT/BACK)
+// ===========================================================================
+async function toggleRemoteVideoCamera() {
+  const friendId = window.activeVideoFriendId;
+  if (!friendId) return;
+
+  const currentPref = window.liveVideoCameraPreference || "user";
+  const newPref = currentPref === "user" ? "environment" : "user";
+  window.liveVideoCameraPreference = newPref;
+
+  console.log(`[Video] Toggling remote camera for friend ${friendId} to preference: ${newPref}`);
+
+  // Re-initialize receiving and request the toggled stream
+  if (typeof window.startReceivingVideoStream === "function") {
+    await window.startReceivingVideoStream(friendId);
+  }
+  socket.emit("moment:request", { to: friendId, camera: newPref, type: "video" });
+  showToast(`Switching remote camera to ${newPref === "user" ? "front" : "back"}...`, "info");
+}
+
+window.toggleRemoteVideoCamera = toggleRemoteVideoCamera;
 
 // ===========================================================================
 // WEBRTC VIDEO SIGNALING HANDLERS
