@@ -94,6 +94,16 @@ const messageSchema = new mongoose.Schema(
       default: false,
     },
 
+    cameraFacing: {
+      type: String,
+      default: null,
+    },
+
+    cameraFilter: {
+      type: String,
+      default: null,
+    },
+
     /* ---------- Status ---------- */
     status: {
       sent: { type: Boolean, default: true },

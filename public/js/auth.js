@@ -70,7 +70,9 @@ async function bootstrapAfterLogin() {
         callRoomId: m.callRoomId,
         callExpiresAt: m.callExpiresAt,
         callDuration: m.callDuration,
-        isDisappearing: m.isDisappearing || false
+        isDisappearing: m.isDisappearing || false,
+        cameraFacing: m.cameraFacing || null,
+        cameraFilter: m.cameraFilter || null
       })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
       for (const msg of State.messages[conv.id]) {

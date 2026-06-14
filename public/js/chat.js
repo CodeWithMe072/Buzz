@@ -417,10 +417,67 @@ function createMessageElement(message) {
   if (message.isDisappearing) {
     bubbleEl.classList.add("disappearing-bubble");
     const isVideo = message.type === "video";
+    const isMirrored = message.cameraFacing === "user";
+    const filterClass = message.cameraFilter ? `filter-${message.cameraFilter}` : "";
+    const videoClass = [isMirrored ? "mirrored-media" : "", filterClass].filter(Boolean).join(" ");
     
     const mediaPreviewHTML = isVideo
-      ? `<video src="${message.content}" muted autoplay loop playsinline style="width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; border-radius: inherit;"></video>`
+      ? `<video src="${message.content}" muted autoplay loop playsinline class="${videoClass}" style="width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; border-radius: inherit;"></video>`
       : `<img src="${message.content}" alt="Disappearing Photo" style="width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;" />`;
+
+    // Calculate overlay html for special Snapchat/Instagram filters
+    let overlayHTML = "";
+    if (isVideo && message.cameraFilter === "glasses") {
+      overlayHTML = `
+        <div style="position: absolute; z-index: 6; top: 40%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; width: 90px; height: 27px;">
+            <svg viewBox="0 0 200 60" width="100%" height="100%">
+                <path d="M10 25 C10 10, 80 10, 85 25 C90 40, 15 40, 10 25 Z" fill="#181818" stroke="#d4af37" stroke-width="2.5" />
+                <text x="47" y="30" fill="#fff" font-size="9" font-family="sans-serif" text-anchor="middle" font-weight="bold" letter-spacing="1.5">vibes</text>
+                <path d="M115 25 C120 10, 190 10, 190 25 C185 40, 110 40, 115 25 Z" fill="#181818" stroke="#d4af37" stroke-width="2.5" />
+                <text x="152" y="30" fill="#fff" font-size="9" font-family="sans-serif" text-anchor="middle" font-weight="bold" letter-spacing="1.5">vibes</text>
+                <path d="M85 22 Q100 15 115 22" fill="none" stroke="#d4af37" stroke-width="3" />
+                <path d="M10 22 C3 22, 1 12, 1 12" fill="none" stroke="#d4af37" stroke-width="2" />
+                <path d="M190 22 C197 22, 199 12, 199 12" fill="none" stroke="#d4af37" stroke-width="2" />
+            </svg>
+        </div>
+      `;
+    } else if (isVideo && message.cameraFilter === "retro8mm") {
+      overlayHTML = `
+        <div style="position: absolute; inset: 0; pointer-events: none; z-index: 6; box-sizing: border-box; border: 8px solid #000; box-shadow: inset 0 0 15px rgba(0,0,0,0.85);">
+            <div style="position: absolute; left: 2px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: space-around; align-items: center; width: 4px; opacity: 0.8;">
+                <div style="width: 3px; height: 5px; background: #222; border-radius: 0.5px;"></div>
+                <div style="width: 3px; height: 5px; background: #222; border-radius: 0.5px;"></div>
+                <div style="width: 3px; height: 5px; background: #222; border-radius: 0.5px;"></div>
+            </div>
+            <div style="position: absolute; right: 2px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: space-around; align-items: center; width: 4px; opacity: 0.8;">
+                <div style="width: 3px; height: 5px; background: #222; border-radius: 0.5px;"></div>
+                <div style="width: 3px; height: 5px; background: #222; border-radius: 0.5px;"></div>
+                <div style="width: 3px; height: 5px; background: #222; border-radius: 0.5px;"></div>
+            </div>
+        </div>
+      `;
+    } else if (isVideo && message.cameraFilter === "time") {
+      const now = new Date(message.timestamp || Date.now());
+      let hours = now.getHours();
+      const ampm = hours >= 12 ? 'pm' : 'am';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      const timeStr = `${hours}:${minutes} ${ampm}`;
+      overlayHTML = `
+        <div style="position: absolute; z-index: 6; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-family: 'Georgia', serif; font-size: 10px; font-style: italic; text-shadow: 0 1px 2px rgba(0,0,0,0.8); text-align: center; pointer-events: none; width: 100%;">
+            life at ${timeStr} 🤍
+        </div>
+      `;
+    } else if (isVideo && message.cameraFilter === "day") {
+      const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayStr = days[new Date(message.timestamp || Date.now()).getDay()];
+      overlayHTML = `
+        <div style="position: absolute; z-index: 6; bottom: 45px; left: 50%; transform: translateX(-50%); color: #fff; font-family: 'Arial Black', sans-serif; font-size: 13px; font-weight: 900; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); text-transform: uppercase; text-align: center; pointer-events: none; width: 100%;">
+            ${dayStr}
+        </div>
+      `;
+    }
 
     const badgeIconHTML = isVideo
       ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 4px; vertical-align: middle;">
@@ -436,6 +493,7 @@ function createMessageElement(message) {
       ${replyHTML}
       <div class="disappearing-preview-content" style="cursor: pointer; position: relative; width: 200px; height: 266px; border-radius: 16px; overflow: hidden; background: #0b0b0b; border: 1px solid rgba(255,255,255,0.08);">
          ${mediaPreviewHTML}
+         ${overlayHTML}
          
          <!-- Disappearing Overlay Badge -->
          <div style="position: absolute; bottom: 8px; left: 8px; background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); color: white; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; display: flex; align-items: center; gap: 2px; border: 1px solid rgba(255,255,255,0.15); pointer-events: none; z-index: 5; text-transform: uppercase; letter-spacing: 0.5px;">
@@ -456,7 +514,10 @@ function createMessageElement(message) {
             src: message.content,
             type: message.type,
             username: username,
-            avatar: avatar
+            avatar: avatar,
+            cameraFacing: message.cameraFacing,
+            cameraFilter: message.cameraFilter,
+            timestamp: message.timestamp || message.clientTime
           });
         } else {
           showToast("Story viewer loading...", "info");
