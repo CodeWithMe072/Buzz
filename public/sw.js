@@ -30,11 +30,6 @@ self.addEventListener('push', function(event) {
     ]
   };
 
-  if (self.Notification.permission !== 'granted') {
-    console.warn('[Service Worker] Push event received, but notification permission is not granted.');
-    return;
-  }
-
   event.waitUntil(
     self.registration.showNotification(title, options)
   );
