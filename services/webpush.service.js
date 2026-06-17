@@ -35,7 +35,7 @@ if (!publicKey || !privateKey) {
 }
 
 webpush.setVapidDetails(
-  'mailto:admin@buzzchat.app',
+  process.env.VAPID_SUBJECT || 'mailto:admin@buzzchat.app',
   publicKey,
   privateKey
 );

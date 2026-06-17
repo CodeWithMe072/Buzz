@@ -183,7 +183,9 @@ export default function initSocket(io) {
               senderName, type, preview
             );
             const result = await webpushService.sendNotification(receiver.pushSubscription, notification);
-            if (result && !result.success && result.shouldRemove) {
+            if (result && result.success) {
+              console.log(`[WebPush] Push notification sent successfully to user ${to} (offline)`);
+            } else if (result && !result.success && result.shouldRemove) {
               console.log(`[WebPush] Subscription expired (status ${result.statusCode}), removing for user ${to}`);
               await User.findByIdAndUpdate(to, { $set: { pushSubscription: null, notificationsEnabled: false } });
             }
@@ -480,7 +482,9 @@ export default function initSocket(io) {
               const senderName = senderUser?.username || "Someone";
               const notification = webpushService.formatCallNotification(senderName, type);
               const result = await webpushService.sendNotification(receiverUser.pushSubscription, notification);
-              if (result && !result.success && result.shouldRemove) {
+              if (result && result.success) {
+                console.log(`[WebPush] Call push notification sent successfully to user ${to} (offline)`);
+              } else if (result && !result.success && result.shouldRemove) {
                 console.log(`[WebPush] Subscription expired (status ${result.statusCode}), removing for user ${to}`);
                 await User.findByIdAndUpdate(to, { $set: { pushSubscription: null, notificationsEnabled: false } });
               }
