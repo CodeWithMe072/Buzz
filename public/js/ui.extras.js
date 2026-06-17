@@ -28,9 +28,9 @@ async function unlockScreen() {
             btn.disabled = false;
             btn.classList.remove("loading");
             btn.textContent = "submit";
-            
+
             input.value = "";
-            
+
             if (typeof bootstrapAfterLogin === "function") {
                 await bootstrapAfterLogin();
             }
@@ -180,7 +180,7 @@ async function fetchAndShowAllMedia() {
 
 
         loaderOverlay.style.display = "none";
-        viewer = new MediaViewer(State.activeChat,items);
+        viewer = new MediaViewer(State.activeChat, items);
         console.log(viewer)
         console.log(items)
         viewer.open(0);
@@ -201,7 +201,8 @@ const secretButton = document.getElementById('secretButton');
 const dashboard = document.getElementById('ssc-dashboard');
 const chatContainer = document.getElementById('chat-container');
 
-secretButton.addEventListener('click', () => {
+secretButton.addEventListener('click', (e) => {
+    e.stopPropagation()
     clickCount++;
     secretButton.classList.add('clicked');
     setTimeout(() => secretButton.classList.remove('clicked'), 300);
@@ -213,13 +214,16 @@ secretButton.addEventListener('click', () => {
         clickCount = 0;
     }
 
-    clickTimer = setTimeout(() => { clickCount = 0; }, 1000);
+    clickTimer = setTimeout(() => { clickCount = 0; }, 2000);
 });
 
 function handleEmblemClickTrigger() {
     const savedToken = TokenStore.getToken();
     if (savedToken) {
         document.getElementById("passwordOverlay").classList.add("active");
+        if (typeof activateChatMode === "function") {
+            activateChatMode();
+        }
     } else {
         toggleChatMode();
     }
