@@ -5,6 +5,7 @@ import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
 import { generateToken } from "../middleware/auth.middleware.js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { webpushService } from "../services/webpush.service.js";
 
 // Configure Cloudflare R2 client
 const s3 = new S3Client({
@@ -182,7 +183,7 @@ export const me = async (req, res) => {
   try {
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
-      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt lastSeen createdAt"
+      "_id username email avatar phoneNumber notificationsEnabled pushSubscription livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt lastSeen createdAt"
     );
 
     if (!user) {
@@ -223,7 +224,7 @@ export const me = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const updateProfile = async (req, res) => {
   try {
-    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends } = req.body;
+    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends, notificationsEnabled, pushSubscription } = req.body;
 
     const updates = {};
     if (avatar !== undefined) updates.avatar = avatar;
@@ -233,12 +234,14 @@ export const updateProfile = async (req, res) => {
     if (randomSnapshotAllowedFriends !== undefined) updates.randomSnapshotAllowedFriends = randomSnapshotAllowedFriends;
     if (liveVoiceEnabled !== undefined) updates.liveVoiceEnabled = liveVoiceEnabled;
     if (liveVoiceAllowedFriends !== undefined) updates.liveVoiceAllowedFriends = liveVoiceAllowedFriends;
+    if (notificationsEnabled !== undefined) updates.notificationsEnabled = notificationsEnabled;
+    if (pushSubscription !== undefined) updates.pushSubscription = pushSubscription;
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
       { returnDocument: "after", runValidators: true }
-    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends");
+    ).select("_id username email avatar phoneNumber notificationsEnabled pushSubscription livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends");
 
     res.json({ status: true, message: "Profile updated", user });
 
@@ -304,31 +307,65 @@ export const changePassword = async (req, res) => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   LINK TELEGRAM
-   POST /auth/telegram/link
+   GET VAPID PUBLIC KEY
+   GET /auth/push/vapid-public-key
    Protected: requires JWT
-   Body: { telegramChatId }
 ═══════════════════════════════════════════════════════════ */
-export const linkTelegram = async (req, res) => {
+export const getVapidPublicKey = async (req, res) => {
   try {
-    const { telegramChatId } = req.body;
+    const publicKey = webpushService.getPublicKey();
+    res.json({ status: true, publicKey });
+  } catch (err) {
+    console.error("[GetVapidPublicKey]", err);
+    res.status(500).json({ status: false, message: "Failed to get VAPID key" });
+  }
+};
 
-    if (!telegramChatId) {
-      return res.status(400).json({
-        status: false,
-        message: "telegramChatId is required",
-      });
+
+/* ═══════════════════════════════════════════════════════════
+   SUBSCRIBE PUSH NOTIFICATIONS
+   POST /auth/push/subscribe
+   Protected: requires JWT
+   Body: { subscription }
+═══════════════════════════════════════════════════════════ */
+export const subscribePush = async (req, res) => {
+  try {
+    const { subscription } = req.body;
+    if (!subscription) {
+      return res.status(400).json({ status: false, message: "Subscription object is required" });
     }
 
-    await User.findByIdAndUpdate(req.user._id, {
-      $set: { telegramChatId, notificationsEnabled: true },
-    });
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { pushSubscription: subscription, notificationsEnabled: true } },
+      { returnDocument: "after" }
+    ).select("_id username email avatar notificationsEnabled pushSubscription");
 
-    res.json({ status: true, message: "Telegram linked successfully" });
-
+    res.json({ status: true, message: "Subscribed to push notifications successfully", user });
   } catch (err) {
-    console.error("[LinkTelegram]", err);
-    res.status(500).json({ status: false, message: "Failed to link Telegram" });
+    console.error("[SubscribePush]", err);
+    res.status(500).json({ status: false, message: "Failed to subscribe to push notifications" });
+  }
+};
+
+
+/* ═══════════════════════════════════════════════════════════
+   UNSUBSCRIBE PUSH NOTIFICATIONS
+   POST /auth/push/unsubscribe
+   Protected: requires JWT
+═══════════════════════════════════════════════════════════ */
+export const unsubscribePush = async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: { pushSubscription: null, notificationsEnabled: false } },
+      { returnDocument: "after" }
+    ).select("_id username email avatar notificationsEnabled pushSubscription");
+
+    res.json({ status: true, message: "Unsubscribed from push notifications successfully", user });
+  } catch (err) {
+    console.error("[UnsubscribePush]", err);
+    res.status(500).json({ status: false, message: "Failed to unsubscribe from push notifications" });
   }
 };
 
@@ -340,13 +377,17 @@ export const linkTelegram = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const toggleNotifications = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select("notificationsEnabled");
+    const user = await User.findById(req.user._id).select("notificationsEnabled pushSubscription");
     user.notificationsEnabled = !user.notificationsEnabled;
+    if (!user.notificationsEnabled) {
+      user.pushSubscription = null;
+    }
     await user.save({ validateBeforeSave: false });
 
     res.json({
       status: true,
       notificationsEnabled: user.notificationsEnabled,
+      user
     });
 
   } catch (err) {

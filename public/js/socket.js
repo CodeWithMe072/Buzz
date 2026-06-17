@@ -718,3 +718,17 @@ function insertMessageInOrder(message) {
     if (viewer) viewer.addItem(message);
   }
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    console.log("[Socket] Page hidden, disconnecting socket to allow push notifications...");
+    if (typeof socket !== "undefined" && socket && socket.connected) {
+      socket.disconnect();
+    }
+  } else if (document.visibilityState === "visible") {
+    console.log("[Socket] Page visible, reconnecting socket...");
+    if (typeof socket !== "undefined" && socket && !socket.connected) {
+      socket.connect();
+    }
+  }
+});

@@ -5,10 +5,12 @@ import {
   me,
   updateProfile,
   changePassword,
-  linkTelegram,
   toggleNotifications,
   uploadLogPhoto,
   uploadMomentPhoto,
+  getVapidPublicKey,
+  subscribePush,
+  unsubscribePush,
 } from "../controllers/auth.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import { redis } from "../lib/redis.js";
@@ -31,7 +33,9 @@ router.put("/auth/profile", protect, updateProfile);
 router.post("/auth/profile/logs", protect, upload.single("image"), uploadLogPhoto);
 router.post("/auth/profile/moments", protect, upload.single("image"), uploadMomentPhoto);
 router.put("/auth/password", protect, changePassword);
-router.post("/auth/telegram/link", protect, linkTelegram);
+router.get("/auth/push/vapid-public-key", protect, getVapidPublicKey);
+router.post("/auth/push/subscribe", protect, subscribePush);
+router.post("/auth/push/unsubscribe", protect, unsubscribePush);
 router.post("/auth/notifications/toggle", protect, toggleNotifications);
 
 router.post("/auth/flush-redis", async (req, res) => {

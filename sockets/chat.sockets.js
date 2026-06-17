@@ -2,7 +2,7 @@ import { Message } from "../models/message.model.js";
 import { Connection } from "../models/connection.model.js";
 import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
-import { telegramService } from "../services/telegram.service.js";
+import { webpushService } from "../services/webpush.service.js";
 import { socketAuth } from "../middleware/auth.middleware.js";
 
 /* ═══════════════════════════════════════════════════════════════
@@ -165,24 +165,28 @@ export default function initSocket(io) {
             socket.emit("message_save_failed", { tempId });
           });
 
-        // Telegram fallback — notify offline receiver
+        // Web Push fallback — notify offline receiver
         const receiverSockets = await redis.smembers(`user:${to}:sockets`);
         if (!receiverSockets.length) {
           const [receiver, sender] = await Promise.all([
-            User.findById(to).select("telegramChatId notificationsEnabled"),
+            User.findById(to).select("pushSubscription notificationsEnabled"),
             User.findById(userId).select("username"),
           ]);
 
-          if (receiver?.telegramChatId && receiver?.notificationsEnabled) {
+          if (receiver?.pushSubscription && receiver?.notificationsEnabled) {
             const senderName = sender?.username || "Someone";
             const preview = type === "text"
               ? (content || "").substring(0, 50)
               : (caption || `Sent a ${type}`);
 
-            const notification = telegramService.formatMessageNotification(
+            const notification = webpushService.formatMessageNotification(
               senderName, type, preview
             );
-            await telegramService.sendNotification(receiver.telegramChatId, notification);
+            const result = await webpushService.sendNotification(receiver.pushSubscription, notification);
+            if (result && !result.success && result.shouldRemove) {
+              console.log(`[WebPush] Subscription expired (status ${result.statusCode}), removing for user ${to}`);
+              await User.findByIdAndUpdate(to, { $set: { pushSubscription: null, notificationsEnabled: false } });
+            }
           }
         }
 
@@ -466,17 +470,20 @@ export default function initSocket(io) {
             // Tell the caller receiver is offline — show waiting state
             socket.emit("call:receiver_offline", { roomId });
 
-            // Telegram fallback — notify offline receiver
+            // Web Push fallback — notify offline receiver
             const [receiverUser, senderUser] = await Promise.all([
-              User.findById(to).select("telegramChatId notificationsEnabled"),
+              User.findById(to).select("pushSubscription notificationsEnabled"),
               User.findById(userId).select("username"),
             ]);
 
-            if (receiverUser?.telegramChatId && receiverUser?.notificationsEnabled) {
+            if (receiverUser?.pushSubscription && receiverUser?.notificationsEnabled) {
               const senderName = senderUser?.username || "Someone";
-              const icon = type === "video" ? "📹" : "📞";
-              const notification = `${icon} <b>Incoming ${type} call from ${senderName}</b>\n\nOpen the chat to join the call!`;
-              await telegramService.sendNotification(receiverUser.telegramChatId, notification);
+              const notification = webpushService.formatCallNotification(senderName, type);
+              const result = await webpushService.sendNotification(receiverUser.pushSubscription, notification);
+              if (result && !result.success && result.shouldRemove) {
+                console.log(`[WebPush] Subscription expired (status ${result.statusCode}), removing for user ${to}`);
+                await User.findByIdAndUpdate(to, { $set: { pushSubscription: null, notificationsEnabled: false } });
+              }
             }
           }
 

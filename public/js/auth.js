@@ -113,6 +113,11 @@ async function bootstrapAfterLogin() {
   if (typeof EmojiPanel !== "undefined" && EmojiPanel.loadCustomGifsAndTrending) {
     EmojiPanel.loadCustomGifsAndTrending(null, true);
   }
+
+  // Register service worker if push notifications enabled
+  if (State.currentUser?.notificationsEnabled) {
+    registerServiceWorker().catch(err => console.error("SW init error:", err));
+  }
 }
 
 // =============================================================================
@@ -417,6 +422,29 @@ function renderPeopleTab(tab) {
             </label>
           </div>
         </div>
+        <div class="profile-content-card">
+          <h3>Notification Settings</h3>
+          <div class="settings-row">
+            <div class="settings-label-wrap">
+              <span class="settings-label-main">Web Push Notifications</span>
+              <span class="settings-label-sub">Receive native alerts on new messages</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="profile-modal-push-toggle" ${user.notificationsEnabled ? "checked" : ""}>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="profile-content-card" id="pwa-install-card" style="display: none;">
+          <h3>App Installation</h3>
+          <div class="settings-row">
+            <div class="settings-label-wrap">
+              <span class="settings-label-main">Install Buzz Chat</span>
+              <span class="settings-label-sub">Install application for offline support and quick access</span>
+            </div>
+            <button class="gov-btn" id="pwa-install-btn" style="margin: 0; padding: 8px 16px; font-size: 12px; width: auto; background: var(--primary-color, #f58529);">Install</button>
+          </div>
+        </div>
       </div>
     `;
 
@@ -431,6 +459,39 @@ function renderPeopleTab(tab) {
         e.target.checked = !enabled;
         showToast("Failed to update profile setting", "error");
       }
+    });
+
+    container.querySelector("#profile-modal-push-toggle").addEventListener("change", async (e) => {
+      const enabled = e.target.checked;
+      if (enabled) {
+        const sub = await subscribeUserToPush();
+        if (sub) {
+          State.currentUser.notificationsEnabled = true;
+          State.currentUser.pushSubscription = sub;
+          localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        } else {
+          e.target.checked = false;
+        }
+      } else {
+        await unsubscribeUserFromPush();
+        State.currentUser.notificationsEnabled = false;
+        State.currentUser.pushSubscription = null;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+      }
+    });
+
+    const installCard = container.querySelector("#pwa-install-card");
+    const installBtn = container.querySelector("#pwa-install-btn");
+    if (window.deferredPrompt) {
+      installCard.style.display = "block";
+    }
+    installBtn.addEventListener("click", async () => {
+      if (!window.deferredPrompt) return;
+      window.deferredPrompt.prompt();
+      const { outcome } = await window.deferredPrompt.userChoice;
+      console.log(`PWA install prompt outcome: ${outcome}`);
+      window.deferredPrompt = null;
+      installCard.style.display = "none";
     });
 
   } else if (tab === "whitelist") {
@@ -1046,10 +1107,8 @@ function handelAuthForm() {
         }
       }
 
-      // Link Telegram if running inside Telegram
-      const tg = window.Telegram?.WebApp;
-      if (tg?.initDataUnsafe?.user?.id) {
-        await linkTelegramAccount(tg.initDataUnsafe.user.id);
+      if (State.currentUser?.notificationsEnabled) {
+        registerServiceWorker().catch(err => console.error("SW init error:", err));
       }
 
       await bootstrapAfterLogin();
@@ -1527,5 +1586,124 @@ window.startReceivingVideoStream = startReceivingVideoStream;
 window.stopReceivingVideoStream = stopReceivingVideoStream;
 window.handleVideoStreamSDP = handleVideoStreamSDP;
 window.handleVideoStreamICE = handleVideoStreamICE;
+
+// =============================================================================
+// WEB PUSH UTILITIES
+// =============================================================================
+function urlB64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+async function registerServiceWorker() {
+  if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    console.warn('Service workers require a secure context (HTTPS or localhost).');
+    return null;
+  }
+  if (!('serviceWorker' in navigator)) {
+    console.warn('Service workers are not supported in this browser.');
+    return null;
+  }
+  try {
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    console.log('[ServiceWorker] Registered successfully with scope:', registration.scope);
+    return registration;
+  } catch (error) {
+    console.error('[ServiceWorker] Registration failed:', error);
+    return null;
+  }
+}
+
+async function subscribeUserToPush() {
+  if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    showToast("Push notifications require a secure context (HTTPS) on mobile. Please access via HTTPS or localhost.", "error");
+    return null;
+  }
+  
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    showToast("Notification permission denied. Please allow notifications in browser settings.", "error");
+    return null;
+  }
+
+  const registration = await registerServiceWorker();
+  if (!registration) {
+    showToast("Service Worker registration failed. Cannot enable notifications.", "error");
+    return null;
+  }
+
+  try {
+    const res = await apiRequest("GET", "/auth/push/vapid-public-key");
+    if (!res?.ok || !res.data?.publicKey) {
+      throw new Error("Failed to retrieve VAPID public key");
+    }
+
+    const applicationServerKey = urlB64ToUint8Array(res.data.publicKey);
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: applicationServerKey
+    });
+
+    console.log("[PushManager] Subscribed successfully:", subscription);
+
+    // Call toJSON() to avoid empty object serialization issues on some browsers
+    const subscriptionJson = subscription.toJSON ? subscription.toJSON() : JSON.parse(JSON.stringify(subscription));
+
+    const subRes = await apiRequest("POST", "/auth/push/subscribe", { subscription: subscriptionJson });
+    if (subRes?.ok) {
+      showToast("Push notifications enabled!", "success");
+      return subscription;
+    } else {
+      throw new Error(subRes?.data?.message || "Failed to sync subscription with server");
+    }
+  } catch (error) {
+    console.error("[PushManager] Subscription error:", error);
+    showToast("Failed to enable push notifications", "error");
+    return null;
+  }
+}
+
+async function unsubscribeUserFromPush() {
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (registration) {
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await subscription.unsubscribe();
+        console.log("[PushManager] Unsubscribed successfully from browser service");
+      }
+    }
+
+    const res = await apiRequest("POST", "/auth/push/unsubscribe");
+    if (res?.ok) {
+      showToast("Push notifications disabled", "success");
+    } else {
+      showToast("Failed to clean up notification subscription on server", "warning");
+    }
+  } catch (error) {
+    console.error("[PushManager] Unsubscribe error:", error);
+    showToast("Error disabling notifications", "error");
+  }
+}
+
+window.deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.deferredPrompt = e;
+  const installCard = document.getElementById('pwa-install-card');
+  if (installCard) {
+    installCard.style.display = 'block';
+  }
+});
 
 
