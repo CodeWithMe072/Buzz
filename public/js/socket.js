@@ -719,16 +719,28 @@ function insertMessageInOrder(message) {
   }
 }
 
+function handleAppBackground() {
+  console.log("[Socket] App backgrounded/blurred, disconnecting socket for instant push notifications...");
+  if (typeof socket !== "undefined" && socket && socket.connected) {
+    socket.disconnect();
+  }
+}
+
+function handleAppForeground() {
+  console.log("[Socket] App foregrounded/focused, reconnecting socket...");
+  if (typeof socket !== "undefined" && socket && !socket.connected) {
+    socket.connect();
+  }
+}
+
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
-    console.log("[Socket] Page hidden, disconnecting socket to allow push notifications...");
-    if (typeof socket !== "undefined" && socket && socket.connected) {
-      socket.disconnect();
-    }
+    handleAppBackground();
   } else if (document.visibilityState === "visible") {
-    console.log("[Socket] Page visible, reconnecting socket...");
-    if (typeof socket !== "undefined" && socket && !socket.connected) {
-      socket.connect();
-    }
+    handleAppForeground();
   }
 });
+
+window.addEventListener("pagehide", handleAppBackground);
+window.addEventListener("blur", handleAppBackground);
+window.addEventListener("focus", handleAppForeground);

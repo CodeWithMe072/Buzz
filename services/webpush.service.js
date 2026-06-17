@@ -5,6 +5,9 @@ import path from 'path';
 let publicKey = process.env.VAPID_PUBLIC_KEY;
 let privateKey = process.env.VAPID_PRIVATE_KEY;
 
+if (publicKey) publicKey = publicKey.trim().replace(/^['"]|['"]$/g, '');
+if (privateKey) privateKey = privateKey.trim().replace(/^['"]|['"]$/g, '');
+
 if (!publicKey || !privateKey) {
   console.log('[WebPush] VAPID keys not found in environment. Generating new keys...');
   const keys = webpush.generateVAPIDKeys();
