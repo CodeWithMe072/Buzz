@@ -423,6 +423,19 @@ function renderPeopleTab(tab) {
           </div>
         </div>
         <div class="profile-content-card">
+          <h3>Camouflage Settings</h3>
+          <div class="settings-row">
+            <div class="settings-label-wrap">
+              <span class="settings-label-main">Show SSC Dashboard Mask</span>
+              <span class="settings-label-sub">Show restricted government dashboard mask on startup</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="profile-modal-dashboard-toggle" ${user.showDashboard !== false ? "checked" : ""}>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="profile-content-card">
           <h3>Notification Settings</h3>
           <div class="settings-row">
             <div class="settings-label-wrap">
@@ -477,6 +490,19 @@ function renderPeopleTab(tab) {
         State.currentUser.notificationsEnabled = false;
         State.currentUser.pushSubscription = null;
         localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+      }
+    });
+
+    container.querySelector("#profile-modal-dashboard-toggle").addEventListener("change", async (e) => {
+      const enabled = e.target.checked;
+      const res = await updateProfile({ showDashboard: enabled });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.showDashboard = enabled;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        showToast(`Dashboard mask ${enabled ? "enabled" : "disabled"}`, "success");
+      } else {
+        e.target.checked = !enabled;
+        showToast("Failed to update profile setting", "error");
       }
     });
 
@@ -1209,11 +1235,25 @@ async function initAuth() {
   const savedUser = localStorage.getItem("SSC_USER");
   const savedToken = TokenStore.getToken();
   if (savedUser && savedToken) {
-    document.getElementById("passwordOverlay").classList.add("active");
     State.currentUser = JSON.parse(savedUser);
-    await bootstrapAfterLogin();
-    showChatScreen();
-    startTimeTicker();
+
+    // Sync profile details in background
+    getMyProfile().then(profileRes => {
+      if (profileRes.code === 200 && profileRes.Data?.user) {
+        const user = profileRes.Data.user;
+        if (user._id && !user.id) user.id = user._id.toString();
+        State.currentUser = { ...State.currentUser, ...user };
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+      }
+    }).catch(err => console.warn("Startup profile sync failed:", err));
+
+    if (State.currentUser.showDashboard === false) {
+      // Bypasses the fake website portal and opens the password overlay immediately
+      document.getElementById("passwordOverlay").classList.add("active");
+      if (typeof activateChatMode === "function") {
+        activateChatMode();
+      }
+    }
   }
 }
 

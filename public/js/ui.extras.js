@@ -28,6 +28,21 @@ async function unlockScreen() {
             btn.disabled = false;
             btn.classList.remove("loading");
             btn.textContent = "submit";
+            
+            input.value = "";
+            
+            if (typeof bootstrapAfterLogin === "function") {
+                await bootstrapAfterLogin();
+            }
+            if (typeof activateChatMode === "function") {
+                activateChatMode();
+            }
+            if (typeof showChatScreen === "function") {
+                showChatScreen();
+            }
+            if (typeof startTimeTicker === "function") {
+                startTimeTicker();
+            }
             return;
         }
         remainingAttempts--;
@@ -193,10 +208,22 @@ secretButton.addEventListener('click', () => {
 
     if (clickTimer) clearTimeout(clickTimer);
 
-    if (clickCount === 5) { toggleChatMode(); clickCount = 0; }
+    if (clickCount === 5) {
+        handleEmblemClickTrigger();
+        clickCount = 0;
+    }
 
     clickTimer = setTimeout(() => { clickCount = 0; }, 1000);
 });
+
+function handleEmblemClickTrigger() {
+    const savedToken = TokenStore.getToken();
+    if (savedToken) {
+        document.getElementById("passwordOverlay").classList.add("active");
+    } else {
+        toggleChatMode();
+    }
+}
 
 function toggleChatMode() {
     chatMode ? deactivateChatMode() : activateChatMode();
@@ -207,12 +234,14 @@ function activateChatMode() {
     dashboard.classList.add('hidden');
     chatContainer.classList.add('active');
     document.body.style.overflow = 'hidden';
+    chatMode = true;
 }
 
 function deactivateChatMode() {
     dashboard.classList.remove('hidden');
     chatContainer.classList.remove('active');
     document.body.style.overflow = '';
+    chatMode = false;
 }
 
 // =============================================================================

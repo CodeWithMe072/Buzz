@@ -48,6 +48,10 @@ const userSchema = new mongoose.Schema(
       type: Object,
       default: null,
     },
+    showDashboard: {
+      type: Boolean,
+      default: true,
+    },
 
     // Last seen timestamp — updated on disconnect
     lastSeen: {

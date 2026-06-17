@@ -183,7 +183,7 @@ export const me = async (req, res) => {
   try {
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
-      "_id username email avatar phoneNumber notificationsEnabled pushSubscription livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt lastSeen createdAt"
+      "_id username email avatar phoneNumber notificationsEnabled pushSubscription livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt lastSeen createdAt showDashboard"
     );
 
     if (!user) {
@@ -224,7 +224,7 @@ export const me = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const updateProfile = async (req, res) => {
   try {
-    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends, notificationsEnabled, pushSubscription } = req.body;
+    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends, notificationsEnabled, pushSubscription, showDashboard } = req.body;
 
     const updates = {};
     if (avatar !== undefined) updates.avatar = avatar;
@@ -236,12 +236,13 @@ export const updateProfile = async (req, res) => {
     if (liveVoiceAllowedFriends !== undefined) updates.liveVoiceAllowedFriends = liveVoiceAllowedFriends;
     if (notificationsEnabled !== undefined) updates.notificationsEnabled = notificationsEnabled;
     if (pushSubscription !== undefined) updates.pushSubscription = pushSubscription;
+    if (showDashboard !== undefined) updates.showDashboard = showDashboard;
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
       { returnDocument: "after", runValidators: true }
-    ).select("_id username email avatar phoneNumber notificationsEnabled pushSubscription livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends");
+    ).select("_id username email avatar phoneNumber notificationsEnabled pushSubscription livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends showDashboard");
 
     res.json({ status: true, message: "Profile updated", user });
 
