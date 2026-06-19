@@ -15,7 +15,7 @@ import uploadRoutes from "./routes/upload.routes.js";
 import initSocket from "./sockets/chat.sockets.js";
 import { startMessageStatusSyncJob } from "./jobs/messageStatusSync.js";
 import webrtcRoutes from "./routes/webrtc.routes.js";
-import { protect } from "./middleware/auth.middleware.js";
+import { protect, readUserFromCookie } from "./middleware/auth.middleware.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,7 +68,16 @@ app.set("views", path.join(__dirname, "views"));
 
 /* ---------- Page routes ---------- */
 // All pages are served from index.ejs — client-side JS handles screens
-app.get("/", (req, res) => res.render("index"));
+app.get("/", readUserFromCookie, (req, res) => {
+  const user = req.user
+  let isServerLogin = true
+  if (!user) {
+    isServerLogin = false
+  }
+  console.log("user?.showDashboard:", user?.showDashboard,isServerLogin)
+  res.render("index", { isShowDashboard: user?.showDashboard ?? true, isServerLogin })
+
+});
 
 // Redirect any other page hit back to "/" so the SPA handles it
 app.get("/app", (req, res) => res.redirect("/"));

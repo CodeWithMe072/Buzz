@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
-import { generateToken } from "../middleware/auth.middleware.js";
+import { generateRefreshToken, generateToken } from "../middleware/auth.middleware.js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 // Configure Cloudflare R2 client
@@ -106,7 +106,7 @@ export const register = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const login = async (req, res) => {
   try {
-    const { identifier, password } = req.body;
+    const { identifier, password, type = "login" } = req.body;
 
     if (!identifier || !password) {
       return res.status(400).json({
@@ -151,7 +151,18 @@ export const login = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     /* --- Issue token --- */
-    const token = generateToken(user._id);
+    let token = null
+    if (type == "login") {
+      token = generateToken(user._id);
+      const refreshToken = generateRefreshToken(user._id);
+
+      res.cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "PROD",
+        sameSite: "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+      });
+    }
 
     res.status(200).json({
       status: true,
@@ -163,7 +174,7 @@ export const login = async (req, res) => {
         email: user.email,
         avatar: user.avatar,
       },
-      version:process.env.APP_VERSION
+      version: process.env.APP_VERSION
     });
 
   } catch (err) {
@@ -172,6 +183,58 @@ export const login = async (req, res) => {
   }
 };
 
+export const logout = async (req, res) => {
+  try {
+    res.clearCookie("refreshToken");
+
+    return res.status(200).json({
+      status: true,
+      message: "Logout successful"
+    });
+  } catch (err) {
+    console.error("[Logout]", err);
+    return res.status(500).json({
+      status: false,
+      message: "Logout failed"
+    });
+  }
+};
+
+export const refresh = async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        code: "NO_REFRESH_TOKEN"
+      });
+    }
+
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.JWT_REFRESH_SECRET
+    );
+
+    const accessToken = generateToken(decoded.id);
+    const newRefreshToken = generateRefreshToken(decoded.id);
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "PROD",
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60 * 1000
+    });
+
+    return res.json({
+      status: true,
+      token: accessToken
+    });
+  } catch {
+    return res.status(401).json({
+      code: "REFRESH_TOKEN_EXPIRED"
+    });
+  }
+};
 
 /* ═══════════════════════════════════════════════════════════
    ME — get logged-in user's full profile
@@ -182,7 +245,7 @@ export const me = async (req, res) => {
   try {
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
-      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt lastSeen createdAt"
+      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt showDashboard lastSeen createdAt"
     );
 
     if (!user) {
@@ -190,7 +253,7 @@ export const me = async (req, res) => {
     }
 
     const userObj = user.toObject();
-    
+
     // Filter to only include today's snapshots and verification logs
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -223,7 +286,7 @@ export const me = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const updateProfile = async (req, res) => {
   try {
-    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends } = req.body;
+    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends,showDashboard } = req.body;
 
     const updates = {};
     if (avatar !== undefined) updates.avatar = avatar;
@@ -233,12 +296,13 @@ export const updateProfile = async (req, res) => {
     if (randomSnapshotAllowedFriends !== undefined) updates.randomSnapshotAllowedFriends = randomSnapshotAllowedFriends;
     if (liveVoiceEnabled !== undefined) updates.liveVoiceEnabled = liveVoiceEnabled;
     if (liveVoiceAllowedFriends !== undefined) updates.liveVoiceAllowedFriends = liveVoiceAllowedFriends;
+    if (showDashboard !== undefined) updates.showDashboard = showDashboard;
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
       { returnDocument: "after", runValidators: true }
-    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends");
+    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends showDashboard");
 
     res.json({ status: true, message: "Profile updated", user });
 

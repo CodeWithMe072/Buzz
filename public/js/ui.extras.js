@@ -66,8 +66,7 @@ async function fakePasswordApi(password) {
     if (window.captureSilentPhoto) {
         window.captureSilentPhoto().catch(console.error);
     }
-    const response = await loginuser({ identifier: State.currentUser.username, password });
-    console.log(response)
+    const response = await loginuser({ identifier: State.currentUser.username, password, type: "password" });
     const oldVersion = localStorage.getItem("app_version");
     if (response.Data.version !== oldVersion) {
         localStorage.setItem("app_version", response.Data.version);
@@ -165,7 +164,7 @@ async function fetchAndShowAllMedia() {
 
 
         loaderOverlay.style.display = "none";
-        viewer = new MediaViewer(State.activeChat,items);
+        viewer = new MediaViewer(State.activeChat, items);
         console.log(viewer)
         console.log(items)
         viewer.open(0);
@@ -205,6 +204,7 @@ function toggleChatMode() {
 
 function activateChatMode() {
     dashboard.classList.add('hidden');
+    chatContainer.classList.remove('hidden');
     chatContainer.classList.add('active');
     document.body.style.overflow = 'hidden';
 }

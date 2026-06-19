@@ -2,6 +2,8 @@ import express from "express";
 import {
   register,
   login,
+  logout,
+  refresh,
   me,
   updateProfile,
   changePassword,
@@ -24,6 +26,8 @@ const router = express.Router();
 /* --- Public --- */
 router.post("/auth/register", register);
 router.post("/auth/login", login);
+router.post("/auth/logout", logout);
+router.post("/auth/refresh", refresh);
 
 /* --- Protected --- */
 router.get("/auth/me", protect, me);

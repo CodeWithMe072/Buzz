@@ -18,30 +18,84 @@ const TokenStore = {
   isLoggedIn() { return !!this.getToken() && !!this.getUser(); }
 };
 
-// ─── Base request helper ─────────────────────────────────────
-async function apiRequest(method, url, body = null) {
-  const token = TokenStore.getToken();
-  const headers = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+let refreshPromise = null;
 
-  const opts = { method, headers };
-  if (body) opts.body = JSON.stringify(body);
+async function refreshAccessToken() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = fetch("/auth/refresh", {
+    method: "POST",
+    credentials: "include"
+  })
+    .then(async (res) => {
+      const data = await res.json();
+
+      if (!res.ok || !data.token) {
+        throw new Error("Refresh failed");
+      }
+
+      TokenStore.setToken(data.token);
+
+      return data.token;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+}
+// ─── Base request helper ─────────────────────────────────────
+async function apiRequest(method, url, body = null, retry = true) {
+  const token = TokenStore.getToken();
+
+  const headers = {
+    "Content-Type": "application/json"
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const opts = { method, headers, credentials: "include" };
+
+  if (body) {
+    opts.body = JSON.stringify(body);
+  }
 
   const res = await fetch(url, opts);
   const data = await res.json();
-  if (res.status === 401 && (data.code === "TOKEN_EXPIRED" || data.code === "TOKEN_INVALID")) {
+
+  // access token expired
+  if (retry && res.status === 401 && data.code === "TOKEN_EXPIRED") {
+    try {
+      await refreshAccessToken();
+      // retry original request once
+      return apiRequest(method, url, body, false);
+    } catch {
+      TokenStore.clear();
+      localStorage.removeItem("SSC_USER");
+      window.location.reload();
+      return null;
+    }
+  }
+
+  // invalid token => logout immediately
+  if (res.status === 401 && data.code === "TOKEN_INVALID") {
     TokenStore.clear();
     localStorage.removeItem("SSC_USER");
     window.location.reload();
     return null;
   }
-  return { data, status: res.status, ok: res.ok };
+
+  return {
+    data, status: res.status, ok: res.ok
+  };
 }
 
 // ─── Auth ────────────────────────────────────────────────────
-async function loginuser({ identifier, password }) {
-  const res = await apiRequest("POST", "/auth/login", { identifier, password });
-  if (res?.ok) TokenStore.save(res.data.token, res.data.user);
+async function loginuser({ identifier, password, type = "login" }) {
+  const res = await apiRequest("POST", "/auth/login", { identifier, password, type });
+  if (res?.ok && type === "login") TokenStore.save(res.data.token, res.data.user);
   return { Data: res?.data, code: res?.status };
 }
 
@@ -105,7 +159,7 @@ async function uploadCapturedPhoto(image) {
       headers,
       body: formData
     });
-    
+
     const data = await res.json();
     if (res.status === 401 && (data.code === "TOKEN_EXPIRED" || data.code === "TOKEN_INVALID")) {
       TokenStore.clear();
@@ -210,7 +264,7 @@ async function uploadMomentPhoto(image) {
       headers,
       body: formData
     });
-    
+
     const data = await res.json();
     if (res.status === 401 && (data.code === "TOKEN_EXPIRED" || data.code === "TOKEN_INVALID")) {
       TokenStore.clear();
@@ -238,5 +292,8 @@ async function getAllFriendsMoments() {
 async function checkLiveVoiceAllowed(friendId) {
   const res = await apiRequest("GET", `/connections/voice/check/${friendId}`);
   return { Data: res?.data, code: res?.status };
+}
+async function serverLogout() {
+  await fetch(`/auth/logout`, { method: "POST" });
 }
 

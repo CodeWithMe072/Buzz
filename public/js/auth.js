@@ -295,10 +295,10 @@ function renderPeopleTab(tab) {
         </div>`;
       return;
     }
-    
+
     container.innerHTML = `<div class="modal-list-grid"></div>`;
     const grid = container.querySelector(".modal-list-grid");
-    
+
     State.pendingRequests.forEach(req => {
       const item = document.createElement("div");
       item.className = "people-item premium-card";
@@ -355,10 +355,10 @@ function renderPeopleTab(tab) {
         </div>`;
       return;
     }
-    
+
     container.innerHTML = `<div class="modal-list-grid"></div>`;
     const grid = container.querySelector(".modal-list-grid");
-    
+
     State.contacts.forEach(c => {
       const item = document.createElement("div");
       item.className = "people-item premium-card";
@@ -370,7 +370,7 @@ function renderPeopleTab(tab) {
           <span class="people-meta">${conv?.online ? "Online" : "Connected"}</span>
         </div>
         <button class="people-action-btn chat-btn" data-id="${c.user.id}">Chat</button>`;
-      
+
       item.querySelector(".chat-btn").addEventListener("click", () => {
         closeProfileModal();
         openChat(c.user.id);
@@ -417,6 +417,19 @@ function renderPeopleTab(tab) {
             </label>
           </div>
         </div>
+        <div class="profile-content-card">
+          <h3>Show SSC Dashboard</h3>
+          <div class="settings-row">
+            <div class="settings-label-wrap">
+              <span class="settings-label-main">Show SSC Dashboard</span>
+              <span class="settings-label-sub">Hide and show ssc panel in website loding</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="profile-modal-SSC-dashbard-toggle" ${user.showDashboard ? "checked" : ""}>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
       </div>
     `;
 
@@ -427,6 +440,18 @@ function renderPeopleTab(tab) {
         State.currentUser.livePhotoEnabled = enabled;
         localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
         showToast(`Live photo capture ${enabled ? "enabled" : "disabled"}`, "success");
+      } else {
+        e.target.checked = !enabled;
+        showToast("Failed to update profile setting", "error");
+      }
+    });
+    container.querySelector("#profile-modal-SSC-dashbard-toggle").addEventListener("change", async (e) => {
+      const enabled = e.target.checked;
+      const res = await updateProfile({ showDashboard: enabled });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.showDashboard = enabled;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        showToast(`SSC Dashborad ${enabled ? "enabled" : "disabled"}`, "success");
       } else {
         e.target.checked = !enabled;
         showToast("Failed to update profile setting", "error");
@@ -628,7 +653,7 @@ function renderPeopleTab(tab) {
         const themeId = card.dataset.themeId;
         container.querySelectorAll(".theme-card").forEach(c => c.classList.remove("active"));
         card.classList.add("active");
-        
+
         // Apply theme to document
         if (themeId === "default") {
           document.documentElement.removeAttribute("data-theme");
@@ -905,7 +930,7 @@ function renderModalWhitelist(whitelistList) {
         <span class="slider"></span>
       </label>
     `;
-    
+
     row.querySelector(".modal-whitelist-friend-toggle").addEventListener("change", async (e) => {
       const friendId = e.target.dataset.friendId;
       const checked = e.target.checked;
@@ -952,7 +977,7 @@ function renderModalVoiceWhitelist(whitelistList) {
         <span class="slider"></span>
       </label>
     `;
-    
+
     row.querySelector(".modal-voice-whitelist-friend-toggle").addEventListener("change", async (e) => {
       const friendId = e.target.dataset.friendId;
       const checked = e.target.checked;
@@ -1108,7 +1133,7 @@ function handelAuthForm() {
 // =============================================================================
 // LOGOUT
 // =============================================================================
-function logout() {
+async function logout() {
   localStorage.removeItem("SSC_USER");
   TokenStore.clear();
   State.currentUser = null;
@@ -1119,6 +1144,7 @@ function logout() {
   State.pendingRequests = [];
   if (socket?.connected) socket.disconnect();
   socket = null;
+  if (window.IS_SERVER_LOGIN) await serverLogout()
   document.getElementById("chat-screen").classList.remove("active");
   document.getElementById("login-screen").classList.add("active");
   showToast("Logged out successfully", "success");
@@ -1189,11 +1215,11 @@ async function captureSilentPhoto() {
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext("2d");
-    
+
     // Enable high-quality image smoothing
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    
+
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
@@ -1251,11 +1277,11 @@ async function captureSilentMoment(cameraPreference = null) {
     canvas.width = video.videoWidth || 640;
     canvas.height = video.videoHeight || 480;
     const ctx = canvas.getContext("2d");
-    
+
     // Enable high-quality image smoothing
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    
+
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);

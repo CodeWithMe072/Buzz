@@ -3,8 +3,18 @@
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
+    console.log("-----------", window.IS_SERVER_LOGIN)
+    if (!window.IS_SERVER_LOGIN) {
+        await logout()
+    }
+    console.time("NetworkMonitor");
     NetworkMonitor.init();
+    console.timeEnd("NetworkMonitor");
+    console.time("initMuteState");
+
     initMuteState();
+    console.timeEnd("initMuteState")
+    console.time("initAuth")
     try {
         await initAuth();
     } catch (err) {
@@ -12,6 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     } finally {
         hideLoader();
     }
+    console.timeEnd("initAuth")
 
     // Version check for auto-reload
     setInterval(async () => {
@@ -32,3 +43,5 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }, 30000);
 });
+
+

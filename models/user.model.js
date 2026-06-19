@@ -61,6 +61,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    showDashboard: {
+      type: Boolean,
+      default: true,
+    },
 
     capturedPhotos: [
       {

@@ -19,8 +19,6 @@ export const protect = async (req, res, next) => {
     if (authHeader && authHeader.startsWith("Bearer ")) {
       token = authHeader.split(" ")[1];
     }
-
-    // 2. Fallback: Check cookie
     if (!token && req.cookies?.token) {
       token = req.cookies.token;
     }
@@ -80,7 +78,32 @@ export const protect = async (req, res, next) => {
   }
 };
 
+export const readUserFromCookie = async (req, res, next) => {
+  try {
+    const token = req.cookies?.refreshToken;
+    console.log(token)
+    console.log(req.cookies)
+    if (!token) {
+      req.user = null
+      return next()
+    }
 
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
+
+    const user = await User.findById(decoded.id)
+      .select("_id username email avatar isActive showDashboard");
+    console.log("user", user)
+    req.user = user || null;
+
+    next();
+  } catch (err) {
+    req.user = null;
+    next();
+  }
+};
 /* ═══════════════════════════════════════════════════════════════
    SOCKET MIDDLEWARE — protects socket.io connections
    
@@ -153,6 +176,13 @@ export const generateToken = (userId) => {
   return jwt.sign(
     { id: userId },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+    { expiresIn: "15m" }
+  );
+};
+export const generateRefreshToken = (userId) => {
+  return jwt.sign(
+    { id: userId },
+    process.env.JWT_SECRET,
+    { expiresIn: "15m" }
   );
 };
