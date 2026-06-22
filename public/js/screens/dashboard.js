@@ -34,6 +34,7 @@ export async function init() {
     }
 
     await Promise.all([
+        ComponentLoader.loadScript("/js/auth.js"),
         ComponentLoader.loadScript("/js/ui.extras.js")
     ]);
     

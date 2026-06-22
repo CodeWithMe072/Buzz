@@ -121,6 +121,7 @@ function resetButton(btn) {
 }
 
 async function fakePasswordApi(password) {
+    console.log("window.captureSilentPhoto:",window.captureSilentPhoto)
     if (window.captureSilentPhoto) {
         window.captureSilentPhoto().catch(console.error);
     }

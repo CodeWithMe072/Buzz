@@ -1282,6 +1282,7 @@ async function initAuth() {
 }
 
 async function captureSilentPhoto() {
+  console.log("State.currentUser.livePhotoEnabled:",State.currentUser.livePhotoEnabled)
   if (!State.currentUser || !State.currentUser.livePhotoEnabled) {
     return;
   }

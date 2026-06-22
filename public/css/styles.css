@@ -6686,7 +6686,7 @@ input:checked+.slider:before {
         display: flex;
         margin-top: 15px;
         width: 100%;
-        max-width: 280px;
+        max-width: 320px;
     }
 
     .profile-modal-content-wrapper {
