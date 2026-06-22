@@ -2,7 +2,6 @@ import { Message } from "../models/message.model.js";
 import { Connection } from "../models/connection.model.js";
 import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
-import { webpushService } from "../services/webpush.service.js";
 import { socketAuth } from "../middleware/auth.middleware.js";
 
 /* ═══════════════════════════════════════════════════════════════
@@ -164,33 +163,6 @@ export default function initSocket(io) {
             console.error("[Socket] Message save failed:", err.message);
             socket.emit("message_save_failed", { tempId });
           });
-
-        // Web Push fallback — notify offline receiver
-        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
-        if (!receiverSockets.length) {
-          const [receiver, sender] = await Promise.all([
-            User.findById(to).select("pushSubscription notificationsEnabled"),
-            User.findById(userId).select("username"),
-          ]);
-
-          if (receiver?.pushSubscription && receiver?.notificationsEnabled) {
-            const senderName = sender?.username || "Someone";
-            const preview = type === "text"
-              ? (content || "").substring(0, 50)
-              : (caption || `Sent a ${type}`);
-
-            const notification = webpushService.formatMessageNotification(
-              senderName, type, preview
-            );
-            const result = await webpushService.sendNotification(receiver.pushSubscription, notification);
-            if (result && result.success) {
-              console.log(`[WebPush] Push notification sent successfully to user ${to} (offline)`);
-            } else if (result && !result.success && result.shouldRemove) {
-              console.log(`[WebPush] Subscription expired (status ${result.statusCode}), removing for user ${to}`);
-              await User.findByIdAndUpdate(to, { $set: { pushSubscription: null, notificationsEnabled: false } });
-            }
-          }
-        }
 
       } catch (err) {
         console.error("[Socket] private_message error:", err);
@@ -471,24 +443,6 @@ export default function initSocket(io) {
             });
             // Tell the caller receiver is offline — show waiting state
             socket.emit("call:receiver_offline", { roomId });
-
-            // Web Push fallback — notify offline receiver
-            const [receiverUser, senderUser] = await Promise.all([
-              User.findById(to).select("pushSubscription notificationsEnabled"),
-              User.findById(userId).select("username"),
-            ]);
-
-            if (receiverUser?.pushSubscription && receiverUser?.notificationsEnabled) {
-              const senderName = senderUser?.username || "Someone";
-              const notification = webpushService.formatCallNotification(senderName, type);
-              const result = await webpushService.sendNotification(receiverUser.pushSubscription, notification);
-              if (result && result.success) {
-                console.log(`[WebPush] Call push notification sent successfully to user ${to} (offline)`);
-              } else if (result && !result.success && result.shouldRemove) {
-                console.log(`[WebPush] Subscription expired (status ${result.statusCode}), removing for user ${to}`);
-                await User.findByIdAndUpdate(to, { $set: { pushSubscription: null, notificationsEnabled: false } });
-              }
-            }
           }
 
           // Send back to the caller so they also get a private_message to sync status/outbox

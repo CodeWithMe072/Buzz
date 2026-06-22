@@ -35,7 +35,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Telegram notifications (deprecated/removed, but keep fields/comments for migration safety if needed, or add pushSubscription)
+    // Telegram notifications (deprecated/removed, but keep fields/comments for migration safety if needed)
     telegramChatId: {
       type: String,
       default: null,
@@ -43,10 +43,6 @@ const userSchema = new mongoose.Schema(
     notificationsEnabled: {
       type: Boolean,
       default: true,
-    },
-    pushSubscription: {
-      type: Object,
-      default: null,
     },
     showDashboard: {
       type: Boolean,
