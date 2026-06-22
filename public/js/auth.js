@@ -44,75 +44,96 @@ async function bootstrapAfterLogin() {
     }));
   }
 
-  // Load pending requests badge
-  await refreshPendingRequests();
-
-  // Sync full profile (livePhotoEnabled and capturedPhotos)
-  const profileRes = await getMyProfile();
-  if (profileRes.code === 200 && profileRes.Data?.user) {
-    const user = profileRes.Data.user;
-    if (user._id && !user.id) {
-      user.id = user._id.toString();
-    }
-    State.currentUser = {
-      ...State.currentUser,
-      ...user
-    };
-    localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-  }
-
+  // Open the chat screen instantly so the user sees it without waiting for messages or logs!
   initChatList();
-
-  // Load messages for each connection
-  for (const conv of State.conversations) {
-    const msgRes = await getMessages(conv.id, 50);
-    if (msgRes.code === 200 && msgRes.Data?.messages?.length) {
-      const msgs = msgRes.Data.messages;
-      State.messages[conv.id] = msgs.map(m => ({
-        id: m._id?.toString() || m.tempId,
-        tempId: m.tempId,
-        type: m.type,
-        content: m.content,
-        cover: m.cover || null,
-        thumb: m.thumb || null,
-        fileName: m.fileName || null,
-        fileSize: m.fileSize || null,
-        caption: m.caption || null,
-        replyTo: m.replyTo || null,
-        sender: m.from?.toString() === (State.currentUser.id || State.currentUser._id)?.toString() ? "me" : "other",
-        user: m.from?.toString(),
-        timestamp: m.createdAt || m.clientTime,
-        reactions: m.reactions || {},
-        status: m.status || { sent: true, delivered: false, seen: false },
-        callType: m.callType,
-        callStatus: m.callStatus,
-        callRoomId: m.callRoomId,
-        callExpiresAt: m.callExpiresAt,
-        callDuration: m.callDuration,
-        isDisappearing: m.isDisappearing || false,
-        cameraFacing: m.cameraFacing || null,
-        cameraFilter: m.cameraFilter || null
-      })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-      for (const msg of State.messages[conv.id]) {
-        if (msg.id) State.messageIndex[msg.id] = conv.id;
-      }
-
-      const last = msgs[msgs.length - 1];
-      conv.lastMessage = formatLastMessage(last);
-      conv.timestamp = last.createdAt || last.clientTime || Date.now();
-    }
+  if (typeof showChatScreen === "function") {
+    showChatScreen();
   }
 
-  State.apiMessagesLoaded = true;
+  // 1. Load pending requests badge in background
+  refreshPendingRequests().catch(console.error);
 
-  // Disconnect any existing socket before creating a new one
+  // 2. Sync full profile details in background
+  getMyProfile().then(profileRes => {
+    if (profileRes && profileRes.code === 200 && profileRes.Data?.user) {
+      const user = profileRes.Data.user;
+      if (user._id && !user.id) {
+        user.id = user._id.toString();
+      }
+      State.currentUser = {
+        ...State.currentUser,
+        ...user
+      };
+      localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+      
+      // Update UI with fresh user details
+      const currentUsername = document.getElementById("current-username");
+      if (currentUsername) currentUsername.textContent = State.currentUser.username;
+      const currentUserAvatar = document.getElementById("current-user-avatar");
+      if (currentUserAvatar) {
+        currentUserAvatar.innerHTML = `<span>${State.currentUser.avatar || State.currentUser.username.charAt(0).toUpperCase()}</span>`;
+      }
+    }
+  }).catch(console.error);
+
+  // 3. Load messages for each connection concurrently in the background
+  const messagePromises = State.conversations.map(async (conv) => {
+    try {
+      const msgRes = await getMessages(conv.id, 50);
+      if (msgRes.code === 200 && msgRes.Data?.messages?.length) {
+        const msgs = msgRes.Data.messages;
+        State.messages[conv.id] = msgs.map(m => ({
+          id: m._id?.toString() || m.tempId,
+          tempId: m.tempId,
+          type: m.type,
+          content: m.content,
+          cover: m.cover || null,
+          thumb: m.thumb || null,
+          fileName: m.fileName || null,
+          fileSize: m.fileSize || null,
+          caption: m.caption || null,
+          replyTo: m.replyTo || null,
+          sender: m.from?.toString() === (State.currentUser.id || State.currentUser._id)?.toString() ? "me" : "other",
+          user: m.from?.toString(),
+          timestamp: m.createdAt || m.clientTime,
+          reactions: m.reactions || {},
+          status: m.status || { sent: true, delivered: false, seen: false },
+          callType: m.callType,
+          callStatus: m.callStatus,
+          callRoomId: m.callRoomId,
+          callExpiresAt: m.callExpiresAt,
+          callDuration: m.callDuration,
+          isDisappearing: m.isDisappearing || false,
+          cameraFacing: m.cameraFacing || null,
+          cameraFilter: m.cameraFilter || null
+        })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        for (const msg of State.messages[conv.id]) {
+          if (msg.id) State.messageIndex[msg.id] = conv.id;
+        }
+
+        const last = msgs[msgs.length - 1];
+        conv.lastMessage = formatLastMessage(last);
+        conv.timestamp = last.createdAt || last.clientTime || Date.now();
+      }
+    } catch (err) {
+      console.error(`Failed to fetch messages for connection ${conv.id}:`, err);
+    }
+  });
+
+  Promise.all(messagePromises).then(() => {
+    State.apiMessagesLoaded = true;
+    // Sort conversations by last message timestamp
+    State.conversations.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    renderChatList();
+  }).catch(console.error);
+
+  // 4. Connect socket with JWT in background
   if (socket && socket.connected) {
     socket.removeAllListeners();
     socket.disconnect();
   }
 
-  // Connect socket with JWT
   const token = TokenStore.getToken();
   socket = io(BACKEND_URL, {
     auth: { token },
@@ -129,12 +150,9 @@ async function bootstrapAfterLogin() {
   NetworkMonitor.isSocketConnected = socket.connected;
   renderChatList();
 
+  // 5. Load Custom GIFs in background
   if (typeof EmojiPanel !== "undefined" && EmojiPanel.loadCustomGifsAndTrending) {
     EmojiPanel.loadCustomGifsAndTrending(null, true);
-  }
-
-  if (typeof showChatScreen === "function") {
-    showChatScreen();
   }
 }
 

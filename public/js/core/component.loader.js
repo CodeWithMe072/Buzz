@@ -33,7 +33,7 @@ class ComponentLoaderClass {
                         headers.Authorization = `Bearer ${token}`;
                     }
                 }
-                const response = await fetch(`/api/components/${name}`, { headers });
+                const response = await fetch(`/api/components/${name}?v=${Date.now()}`, { headers });
                 if (!response.ok) {
                     throw new Error(`Component fetch failed with status ${response.status}`);
                 }
@@ -61,15 +61,16 @@ class ComponentLoaderClass {
      */
     loadScript(src) {
         return new Promise((resolve, reject) => {
+            const cacheBusterSrc = src + "?v=" + Date.now();
             // Check if already loaded
-            if (this.loadedScripts.has(src) || document.querySelector(`script[src="${src}"]`)) {
+            if (this.loadedScripts.has(src) || document.querySelector(`script[src^="${src}"]`)) {
                 this.loadedScripts.add(src);
                 resolve();
                 return;
             }
 
             const script = document.createElement("script");
-            script.src = src;
+            script.src = cacheBusterSrc;
             script.async = true;
 
             script.onload = () => {
@@ -91,12 +92,12 @@ class ComponentLoaderClass {
      * @param {string} href - The stylesheet href path
      */
     loadStyle(href) {
-        if (document.querySelector(`link[href="${href}"]`)) {
+        if (document.querySelector(`link[href^="${href}"]`)) {
             return;
         }
         const link = document.createElement("link");
         link.rel = "stylesheet";
-        link.href = href;
+        link.href = href + "?v=" + Date.now();
         document.head.appendChild(link);
     }
 }
