@@ -81,8 +81,6 @@ export const protect = async (req, res, next) => {
 export const readUserFromCookie = async (req, res, next) => {
   try {
     const token = req.cookies?.refreshToken;
-    console.log(token)
-    console.log(req.cookies)
     if (!token) {
       req.user = null
       return next()

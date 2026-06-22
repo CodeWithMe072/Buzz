@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import fs from "fs";
+import jwt from "jsonwebtoken";
 import path from "path";
 import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
@@ -202,17 +203,17 @@ export const logout = async (req, res) => {
 
 export const refresh = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
-
+    const refreshToken = req.cookies?.refreshToken;
+    console.log(refreshToken)
     if (!refreshToken) {
       return res.status(401).json({
         code: "NO_REFRESH_TOKEN"
       });
     }
-
+    console.log(process.env.JWT_REFRESH_SECRET, process.env.JWT_SECRET)
     const decoded = jwt.verify(
       refreshToken,
-      process.env.JWT_REFRESH_SECRET
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
     );
 
     const accessToken = generateToken(decoded.id);
@@ -230,6 +231,7 @@ export const refresh = async (req, res) => {
       token: accessToken
     });
   } catch {
+    console.log()
     return res.status(401).json({
       code: "REFRESH_TOKEN_EXPIRED"
     });
@@ -286,7 +288,7 @@ export const me = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const updateProfile = async (req, res) => {
   try {
-    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends,showDashboard } = req.body;
+    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends, showDashboard } = req.body;
 
     const updates = {};
     if (avatar !== undefined) updates.avatar = avatar;
