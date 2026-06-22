@@ -48,7 +48,7 @@ async function refreshAccessToken() {
   return refreshPromise;
 }
 // ─── Base request helper ─────────────────────────────────────
-async function apiRequest(method, url, body = null, retry = true) {
+async function apiRequest(method, url, body = null, resType = "json", retry = true) {
   const token = TokenStore.getToken();
 
   const headers = {
@@ -59,22 +59,33 @@ async function apiRequest(method, url, body = null, retry = true) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const opts = { method, headers, credentials: "include" };
+  const opts = {
+    method, headers, credentials: "include"
+  };
 
   if (body) {
     opts.body = JSON.stringify(body);
   }
 
   const res = await fetch(url, opts);
-  const data = await res.json();
 
-  // access token expired
-  if (retry && res.status === 401 && data.code === "TOKEN_EXPIRED") {
+  const contentType = res.headers.get("content-type") || "";
+
+  let data;
+
+  if (contentType.includes("application/json")) {
+    data = await res.json();
+  } else {
+    data = await res.text();
+  }
+
+  // Access token expired
+  if (retry && res.status === 401 && typeof data === "object" && data?.code === "TOKEN_EXPIRED") {
     try {
       await refreshAccessToken();
-      // retry original request once
-      return apiRequest(method, url, body, false);
-    } catch {
+      return apiRequest(method, url, body, resType, false);
+    } catch (err) {
+      console.error("Token refresh failed:", err);
       TokenStore.clear();
       localStorage.removeItem("SSC_USER");
       window.location.reload();
@@ -82,17 +93,15 @@ async function apiRequest(method, url, body = null, retry = true) {
     }
   }
 
-  // invalid token => logout immediately
-  if (res.status === 401 && data.code === "TOKEN_INVALID") {
+  // Invalid token
+  if (res.status === 401 && typeof data === "object" && data?.code === "TOKEN_INVALID") {
     TokenStore.clear();
     localStorage.removeItem("SSC_USER");
     window.location.reload();
     return null;
   }
 
-  return {
-    data, status: res.status, ok: res.ok
-  };
+  return { data, status: res.status, ok: res.ok, contentType };
 }
 
 // ─── Auth ────────────────────────────────────────────────────

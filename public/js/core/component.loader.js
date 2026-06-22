@@ -26,18 +26,11 @@ class ComponentLoaderClass {
 
         const promise = (async () => {
             try {
-                const headers = {};
-                if (window.TokenStore) {
-                    const token = TokenStore.getToken();
-                    if (token) {
-                        headers.Authorization = `Bearer ${token}`;
-                    }
-                }
-                const response = await fetch(`/api/components/${name}?v=${Date.now()}`, { headers });
+                const response = await apiRequest("GET", `/api/components/${name}?v=${Date.now()}`, null, "text");
                 if (!response.ok) {
                     throw new Error(`Component fetch failed with status ${response.status}`);
                 }
-                const html = await response.text();
+                const html = response.data
                 this.componentCache[name] = html;
                 return html;
             } catch (err) {
