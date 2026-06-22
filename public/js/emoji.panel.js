@@ -585,6 +585,8 @@ const EmojiPanel = (() => {
     const btn = $("emoji-panel-btn");
     const panel = $("custom-emoji-panel");
     if (!btn || !panel) return;
+    if (btn.dataset.initialized) return;
+    btn.dataset.initialized = "true";
 
     // Build tabs and grid
     buildTabs();

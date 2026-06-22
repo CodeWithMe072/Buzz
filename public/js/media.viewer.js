@@ -127,12 +127,15 @@ class MediaViewer {
     }
 
     getIndexByMessageId(messageId) {
-        return this.mediaItems.findIndex(m => String(m.id) === String(messageId));
+        const idx = this.mediaItems.findIndex(m => String(m.id) === String(messageId));
+        console.log("[DEBUG MediaViewer] getIndexByMessageId messageId:", messageId, "found index:", idx, "items:", this.mediaItems.map(x => ({ id: x.id, type: x.type })));
+        return idx;
     }
 
     /* ─── LIFECYCLE ─── */
 
     open(indexOrId, initialItems = null) {
+        console.log("[DEBUG MediaViewer] open called with:", indexOrId, "initialItems:", initialItems);
         if (initialItems && initialItems.length) {
             this.mediaItems = initialItems.map((m, index) => ({
                 ...m,
@@ -144,6 +147,7 @@ class MediaViewer {
             this.collectMediaItems();
             this.hasMore = true;
         }
+        console.log("[DEBUG MediaViewer] collected items:", this.mediaItems.map(x => ({ id: x.id, type: x.type })));
         this.isLoading = false;
         this.lastCreatedAt = this.mediaItems[this.mediaItems.length - 1]?.createdAt || null;
 
@@ -153,7 +157,11 @@ class MediaViewer {
         } else {
             index = this.getIndexByMessageId(indexOrId);
         }
-        if (index < 0 || index >= this.mediaItems.length) return;
+        console.log("[DEBUG MediaViewer] resolved index:", index);
+        if (index < 0 || index >= this.mediaItems.length) {
+            console.warn("[DEBUG MediaViewer] resolved index out of bounds or not found!", index);
+            return;
+        }
         this.currentIndex = index;
         this.overlay.classList.add('active');
         document.body.style.overflow = 'hidden';

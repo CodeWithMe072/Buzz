@@ -1,0 +1,187 @@
+<!-- ═══ CALL MODAL ═══ -->
+<div class="call-modal" id="call-modal">
+    <!-- MINIMIZE BUTTON -->
+    <button class="call-minimize-btn" id="call-minimize-btn" title="Minimize">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="4 14 10 14 10 20" />
+            <polyline points="20 10 14 10 14 4" />
+            <line x1="14" y1="10" x2="21" y2="3" />
+            <line x1="10" y1="14" x2="3" y2="21" />
+        </svg>
+    </button>
+
+    <!-- VIDEO CALL SCREEN -->
+    <div class="call-screen" id="video-call-screen">
+        <div class="call-videos">
+            <video class="remote-video" id="remote-video" autoplay playsinline></video>
+            <video class="local-video" id="local-video" autoplay playsinline muted></video>
+            <div class="call-info-overlay">
+                <div class="call-peer-name" id="video-peer-name">Username</div>
+                <div class="call-status" id="video-call-status">Calling...</div>
+            </div>
+        </div>
+        <div class="call-controls">
+            <button class="call-ctrl-btn mute-btn" id="vc-mute-btn" title="Mute mic">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+            </button>
+            <button class="call-ctrl-btn cam-btn" id="vc-cam-btn" title="Camera">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <polygon points="23 7 16 12 23 17 23 7" />
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg>
+            </button>
+            <button class="call-ctrl-btn switch-btn" id="vc-switch-btn" title="Switch to audio call">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path
+                        d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.57a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+            </button>
+            <button class="call-ctrl-btn end-btn" id="vc-end-btn" title="End call">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path
+                        d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91" />
+                    <line x1="23" y1="1" x2="1" y2="23" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- AUDIO CALL SCREEN -->
+    <div class="call-screen" id="audio-call-screen">
+        <div class="audio-call-body">
+            <div class="audio-avatar-ring">
+                <div class="audio-avatar-pulse"></div>
+                <div class="audio-avatar" id="audio-peer-avatar">A</div>
+            </div>
+            <div class="audio-peer-name" id="audio-peer-name">Username</div>
+            <div class="audio-call-status" id="audio-call-status">Calling...</div>
+            <div class="audio-waves" id="audio-waves">
+                <span></span><span></span><span></span><span></span><span></span>
+            </div>
+        </div>
+        <div class="call-controls">
+            <button class="call-ctrl-btn mute-btn" id="ac-mute-btn" title="Mute mic">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+            </button>
+            <button class="call-ctrl-btn speaker-btn" id="ac-speaker-btn" title="Speaker">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>
+            </button>
+            <button class="call-ctrl-btn switch-btn" id="ac-switch-btn" title="Switch to video call">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <polygon points="23 7 16 12 23 17 23 7" />
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg>
+            </button>
+            <button class="call-ctrl-btn end-btn" id="ac-end-btn" title="End call">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path
+                        d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91" />
+                    <line x1="23" y1="1" x2="1" y2="23" />
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- INCOMING CALL POPUP -->
+<div class="incoming-call-popup" id="incoming-call-popup">
+    <div class="incoming-call-ring-anim">
+        <span></span><span></span><span></span>
+    </div>
+    <div class="incoming-caller-avatar" id="incoming-caller-avatar">A</div>
+    <div class="incoming-caller-name" id="incoming-caller-name">Caller</div>
+    <div class="incoming-call-type" id="incoming-call-type">📞 Voice call</div>
+    <div class="incoming-call-actions">
+        <button class="incoming-btn reject-call" id="call-reject-btn">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.5">
+                <path
+                    d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91" />
+                <line x1="23" y1="1" x2="1" y2="23" />
+            </svg>
+            <span>Decline</span>
+        </button>
+        <button class="incoming-btn accept-call" id="call-accept-btn">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2.5">
+                <path
+                    d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.57a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+            </svg>
+            <span>Accept</span>
+        </button>
+    </div>
+</div>
+
+<!-- Live Video Preview Modal (Floating, Draggable, Resizable Widget) -->
+<div id="live-video-preview-modal"
+    style="display:none; position: fixed; z-index: 2500; right: 20px; top: 80px; width: 280px; height: 220px; min-width: 200px; max-width: 600px; min-height: 180px; max-height: 480px; border-radius: 12px; background: rgba(0, 0, 0, 0.9); border: 1px solid var(--border-color); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); flex-direction: column; overflow: hidden;">
+    <!-- Header (Drag Handle) -->
+    <div id="live-video-preview-header"
+        style="padding: 10px 15px; background: rgba(255,255,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.07); cursor: move; display: flex; justify-content: space-between; align-items: center; user-select: none; flex-shrink: 0; height: 38px;">
+        <span id="live-video-preview-title"
+            style="font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%;">Live
+            Camera Preview</span>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <button type="button" id="live-video-preview-toggle-cam"
+                style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; padding: 0 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s; outline: none;"
+                title="Switch Camera" onmouseover="this.style.color='var(--text-primary)'"
+                onmouseout="this.style.color='var(--text-secondary)'">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 4v6h-6"></path>
+                    <path d="M1 20v-6h6"></path>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            </button>
+            <button type="button" id="live-video-preview-close-x"
+                style="background: transparent; border: none; color: var(--text-secondary); font-size: 18px; font-weight: bold; cursor: pointer; padding: 0 4px; line-height: 1; transition: color 0.2s;"
+                title="Close">&times;</button>
+        </div>
+    </div>
+
+    <!-- Video Frame / Placeholder Container -->
+    <div
+        style="flex: 1; position: relative; background: #0b0b0b; overflow: hidden; width: 100%; display: flex; align-items: center; justify-content: center;">
+        <img id="live-video-preview-frame"
+            style="width: 100%; height: 100%; object-fit: contain; display: none;" />
+        <video id="live-video-preview-element"
+            style="width: 100%; height: 100%; object-fit: contain; display: none;" autoplay playsinline
+            muted></video>
+        <div id="live-video-preview-placeholder"
+            style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; color: var(--text-secondary); padding: 15px;">
+            <div class="spinner-ring"
+                style="width: 20px; height: 20px; border-width: 2.5px; border-top-color: #a855f7;"></div>
+            <span style="font-size: 11px; text-align: center;">Waiting for video feed...</span>
+        </div>
+    </div>
+
+    <!-- Hidden Close Button to maintain JS compatibility -->
+    <button type="button" id="live-video-preview-close-btn" style="display: none;"></button>
+
+    <!-- Interactive Resize Handle -->
+    <div id="live-video-preview-resize-handle"
+        style="position: absolute; bottom: 0; right: 0; width: 20px; height: 20px; cursor: se-resize; z-index: 2501; background: linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.3) 50%); border-bottom-right-radius: 12px;">
+    </div>
+</div>

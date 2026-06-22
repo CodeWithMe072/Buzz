@@ -7,6 +7,9 @@
 // =============================================================================
 function initChatWindow() {
     const messageInput = document.getElementById('message-input');
+    if (!messageInput || messageInput.dataset.chatInitialized) return;
+    messageInput.dataset.chatInitialized = "true";
+
     const sendBtn = document.getElementById('send-btn');
     const mediaBtn = document.getElementById('media-btn');
     const mediaInput = document.getElementById('media-input');
@@ -16,6 +19,8 @@ function initChatWindow() {
     // Chat actions popup menu handling
     const actionsBtn = document.getElementById('chat-actions-btn');
     const actionsPopup = document.getElementById('chat-actions-popup');
+    
+    console.log("[initChatWindow Debug] actionsBtn:", !!actionsBtn, "actionsPopup:", !!actionsPopup, "DOM contains button:", !!document.getElementById('chat-actions-btn'));
     
     const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
     if (snapshotBtn) {
@@ -230,7 +235,17 @@ async function handelMedia(file) {
     State.messages[to].unshift(message);
     State.messageIndex[message.tempId] = to;
     document.getElementById('messages').appendChild(createMessageElement(message));
+    if (typeof attactEventOnMedia === "function") attactEventOnMedia();
     document.getElementById('messages-container').scrollTop = 99999;
+
+    const conv = State.conversations.find(c => c.id === to);
+    if (conv) {
+        conv.lastMessage = formatLastMessage(message);
+        conv.timestamp = message.timestamp;
+    }
+    if (typeof renderChatList === "function") {
+        renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    }
 
     if (file.type.startsWith("image/")) {
         file = await imageCompression(file, {
@@ -581,8 +596,13 @@ async function sendVoiceMessage(audioBlob) {
     document.getElementById("messages-container").scrollTop = 99999;
 
     const conv = State.conversations.find(c => c.id === to);
-    if (conv) { conv.lastMessage = "🎤 Voice message"; conv.timestamp = message.timestamp; }
-    renderChatList();
+    if (conv) {
+        conv.lastMessage = formatLastMessage(message);
+        conv.timestamp = message.timestamp;
+    }
+    if (typeof renderChatList === "function") {
+        renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    }
 
     State.replyingTo = null;
     document.getElementById("reply-preview").style.display = "none";

@@ -1,0 +1,122 @@
+<!-- Emoji Picker Modal -->
+<div class="modal-overlay" id="emoji-modal" style="display:none;">
+    <div class="emoji-picker">
+        <div class="emoji-header">
+            <h3>React with an emoji</h3>
+            <button class="icon-btn" id="close-emoji">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <line x1="15" y1="5" x2="5" y2="15" />
+                    <line x1="5" y1="5" x2="15" y2="15" />
+                </svg>
+            </button>
+        </div>
+        <div class="emoji-grid" id="emoji-grid"></div>
+    </div>
+</div>
+
+<!-- Custom GIF/ZIP Upload Modal -->
+<div class="modal-overlay" id="custom-gif-upload-modal" style="display:none;">
+    <div class="emoji-picker" style="max-width: 400px; padding: 20px;">
+        <div class="emoji-header">
+            <h3>Create Custom GIF Section</h3>
+            <button class="icon-btn" id="close-gif-upload-modal">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <line x1="15" y1="5" x2="5" y2="15" />
+                    <line x1="5" y1="5" x2="15" y2="15" />
+                </svg>
+            </button>
+        </div>
+        <div class="custom-gif-upload-panel" style="margin-top: 15px;">
+            <div style="margin-bottom: 15px;">
+                <label for="custom-gif-section-select"
+                    style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">Upload
+                    to Existing Tab/Section</label>
+                <select id="custom-gif-section-select"
+                    style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: #0c0c0c; color: var(--text-primary);">
+                    <option value="new">-- Create New Tab/Section --</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 15px;" id="custom-gif-section-input-container">
+                <label for="custom-gif-section-input"
+                    style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">New
+                    Section Name</label>
+                <input type="text" id="custom-gif-section-input" placeholder="e.g. Reactions" autocomplete="off"
+                    style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.05); color: var(--text-primary);">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label
+                    style="display: block; margin-bottom: 5px; font-size: 13px; color: var(--text-secondary);">Select
+                    GIF, WebP, Video or ZIP containing them</label>
+                <div class="custom-gif-upload-row" style="display: flex; flex-direction: column; gap: 10px;">
+                    <input type="file" id="custom-gif-file-input"
+                        accept="image/gif,image/webp,video/mp4,video/x-m4v,application/zip,application/x-zip-compressed"
+                        style="display: none;">
+                    <button type="button" class="custom-gif-btn select-btn" id="custom-gif-select-btn"
+                        style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.1); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer;">
+                        Select File (.gif, .webp, .m4v, .m4bb, .mp4 or .zip)
+                    </button>
+                    <span class="custom-gif-file-name" id="custom-gif-file-name"
+                        style="font-size: 12px; color: var(--text-secondary); text-align: center; display: block; word-break: break-all;">No
+                        file chosen</span>
+                </div>
+            </div>
+            <button type="button" class="custom-gif-btn upload-btn" id="custom-gif-upload-btn" disabled
+                style="width: 100%; padding: 12px; border-radius: 8px; background: var(--accent-blue); border: none; color: white; font-weight: bold; cursor: pointer;">
+                Upload
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Confirm Modal -->
+<div class="modal-overlay" id="custom-confirm-modal" style="display:none; z-index: 2000;">
+    <div class="emoji-picker"
+        style="max-width: 350px; padding: 25px; text-align: center; border-radius: 12px; background: rgba(0, 0, 0, 0.95); border: 1px solid var(--border-color); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+        <h3 id="confirm-modal-title"
+            style="margin-bottom: 10px; color: var(--text-primary); font-size: 16px; font-weight: 600;">Confirm
+            Action</h3>
+        <p id="confirm-modal-message"
+            style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;"></p>
+        <div style="display: flex; gap: 10px; justify-content: center; width: 100%;">
+            <button type="button" id="confirm-modal-cancel-btn"
+                style="flex: 1; padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 500; cursor: pointer; transition: all 0.2s;">Cancel</button>
+            <button type="button" id="confirm-modal-ok-btn"
+                style="flex: 1; padding: 10px; border-radius: 8px; background: #ef4444; border: none; color: white; font-weight: 500; cursor: pointer; transition: all 0.2s;">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- Camera Selection Modal (Unified with Photo/Video Tabs) -->
+<div class="modal-overlay" id="camera-select-modal" style="display:none; z-index: 2100;">
+    <div class="emoji-picker"
+        style="max-width: 350px; padding: 25px; text-align: center; border-radius: 12px; background: rgba(0, 0, 0, 0.95); border: 1px solid var(--border-color); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);">
+
+        <!-- Tab Headers -->
+        <div
+            style="display: flex; background: rgba(255,255,255,0.05); border-radius: 8px; padding: 4px; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.05);">
+            <button type="button" id="camera-select-tab-photo"
+                style="flex: 1; padding: 8px; border: none; border-radius: 6px; background: var(--accent-blue); color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;">Photo</button>
+            <button type="button" id="camera-select-tab-video"
+                style="flex: 1; padding: 8px; border: none; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;">Video</button>
+        </div>
+
+        <h3 id="camera-select-title"
+            style="margin-bottom: 10px; color: var(--text-primary); font-size: 16px; font-weight: 600;">Request
+            Photo</h3>
+        <p id="camera-select-description"
+            style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">Choose
+            which camera the other user should capture their snapshot with.</p>
+        <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+            <button type="button" id="camera-select-front-btn"
+                style="padding: 12px; border-radius: 8px; background: var(--accent-blue); border: none; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;">Front
+                Camera (Selfie)</button>
+            <button type="button" id="camera-select-back-btn"
+                style="padding: 12px; border-radius: 8px; background: var(--accent-blue); border: none; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;">Back
+                Camera (Environment)</button>
+            <button type="button" id="camera-select-cancel-btn"
+                style="padding: 10px; border-radius: 8px; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-primary); font-weight: 500; cursor: pointer; transition: all 0.2s;">Cancel</button>
+        </div>
+    </div>
+</div>

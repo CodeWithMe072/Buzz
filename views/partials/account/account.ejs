@@ -1,0 +1,99 @@
+<div class="profile-modal-overlay" id="profile-modal" style="display: none;">
+    <div class="profile-modal-container animate-scale">
+        <button class="profile-modal-close-btn" id="profile-modal-close-btn">&times;</button>
+        <div class="profile-modal-layout">
+            <!-- Left Sidebar Navigation -->
+            <div class="profile-modal-sidebar">
+                <div class="profile-modal-avatar-wrap">
+                    <div class="profile-modal-avatar-ring"></div>
+                    <div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter">U</div>
+                </div>
+                <h3 class="profile-modal-username" id="profile-modal-username">Username</h3>
+                <p class="profile-modal-email" id="profile-modal-email">email@example.com</p>
+
+                <div class="profile-modal-nav">
+                    <button class="profile-nav-btn active" data-section="search">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        Discover
+                    </button>
+                    <button class="profile-nav-btn" data-section="pending">
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                            </svg>
+                            <span class="tab-badge" id="requests-badge-profile"
+                                style="display:none">0</span>
+                        </div>
+                        Requests
+                    </button>
+                    <button class="profile-nav-btn" data-section="contacts">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        Contacts
+                    </button>
+                    <button class="profile-nav-btn" data-section="moments">
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                            <span class="tab-badge" id="modal-moments-badge" style="display:none"></span>
+                        </div>
+                        Moments
+                    </button>
+                    <button class="profile-nav-btn" data-section="account">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Account Settings
+                    </button>
+                    <button class="profile-nav-btn" data-section="whitelist">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Moments Whitelist
+                    </button>
+                    <button class="profile-nav-btn" data-section="logs">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                            <circle cx="12" cy="13" r="4" />
+                        </svg>
+                        Security Logs
+                    </button>
+                    <button class="profile-modal-logout-btn" id="profile-modal-logout-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                            <polyline points="16 17 21 12 16 7" />
+                            <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                        Log Out
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Content Panels Container -->
+            <div class="profile-modal-content-wrapper" id="people-tab-content">
+                <!-- Loaded dynamically -->
+            </div>
+        </div>
+    </div>
+</div>

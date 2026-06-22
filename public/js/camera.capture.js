@@ -36,10 +36,11 @@
         { name: "day", label: "Day 📅", css: "brightness(1.05) contrast(0.95) saturate(1.1) hue-rotate(5deg)" }
     ];
 
-    document.addEventListener("DOMContentLoaded", () => {
-        // Wire custom camera button in actions menu
+    function initCameraCapture() {
         const cameraBtn = document.getElementById("camera-btn-custom");
         if (cameraBtn) {
+            if (cameraBtn.dataset.listenerAttached === "true") return;
+            cameraBtn.dataset.listenerAttached = "true";
             cameraBtn.addEventListener("click", () => {
                 // Close action options menu
                 const actionsPopup = document.getElementById("chat-actions-popup");
@@ -49,58 +50,72 @@
                 openCameraCaptureOverlay();
             });
         }
+    }
+    window.initCameraCapture = initCameraCapture;
 
+    function bindStaticCameraEvents() {
         // Overlay Close Button
         const closeBtn = document.getElementById("camera-capture-close-btn");
-        if (closeBtn) {
+        if (closeBtn && closeBtn.dataset.listenerAttached !== "true") {
+            closeBtn.dataset.listenerAttached = "true";
             closeBtn.addEventListener("click", closeCameraCaptureOverlay);
         }
 
         // Camera Flip Toggle Button
         const flipBtn = document.getElementById("camera-capture-flip-btn");
-        if (flipBtn) {
+        if (flipBtn && flipBtn.dataset.listenerAttached !== "true") {
+            flipBtn.dataset.listenerAttached = "true";
             flipBtn.addEventListener("click", toggleCameraFacing);
         }
 
         // PHOTO Mode Tab Button
         const tabPhoto = document.getElementById("camera-capture-tab-photo");
-        if (tabPhoto) {
+        if (tabPhoto && tabPhoto.dataset.listenerAttached !== "true") {
+            tabPhoto.dataset.listenerAttached = "true";
             tabPhoto.addEventListener("click", () => setCaptureMode("photo"));
         }
 
         // VIDEO Mode Tab Button
         const tabVideo = document.getElementById("camera-capture-tab-video");
-        if (tabVideo) {
+        if (tabVideo && tabVideo.dataset.listenerAttached !== "true") {
+            tabVideo.dataset.listenerAttached = "true";
             tabVideo.addEventListener("click", () => setCaptureMode("video"));
         }
 
         // Trigger Button Action (Capture / Record)
         const triggerBtn = document.getElementById("camera-capture-trigger");
-        if (triggerBtn) {
+        if (triggerBtn && triggerBtn.dataset.listenerAttached !== "true") {
+            triggerBtn.dataset.listenerAttached = "true";
             triggerBtn.addEventListener("click", handleTriggerAction);
         }
 
         // Retake Preview Action Button
         const retakeBtn = document.getElementById("camera-preview-retake-btn");
-        if (retakeBtn) {
+        if (retakeBtn && retakeBtn.dataset.listenerAttached !== "true") {
+            retakeBtn.dataset.listenerAttached = "true";
             retakeBtn.addEventListener("click", resetCameraCaptureToLive);
         }
 
         // Send Captured File to Chat Action Button
         const sendBtn = document.getElementById("camera-preview-send-btn");
-        if (sendBtn) {
+        if (sendBtn && sendBtn.dataset.listenerAttached !== "true") {
+            sendBtn.dataset.listenerAttached = "true";
             sendBtn.addEventListener("click", sendCapturedMedia);
         }
 
         // Disappearing Story Viewer Close Actions
         const storyCloseX = document.getElementById("story-viewer-close");
-        if (storyCloseX) {
+        if (storyCloseX && storyCloseX.dataset.listenerAttached !== "true") {
+            storyCloseX.dataset.listenerAttached = "true";
             storyCloseX.addEventListener("click", closeDisappearingStoryViewer);
         }
 
         // Initialize Filter Selector Options
         initCameraFilters();
-    });
+    }
+
+    // Call static bindings immediately on script execution
+    bindStaticCameraEvents();
 
     /* =============================================================================
        CAMERA CONTROL LIFECYCLE
@@ -650,6 +665,15 @@
 
         document.getElementById("messages").appendChild(createMessageElement(message));
         document.getElementById("messages-container").scrollTop = 99999;
+
+        const conv = State.conversations.find(c => c.id === to);
+        if (conv) {
+            conv.lastMessage = formatLastMessage(message);
+            conv.timestamp = message.timestamp;
+        }
+        if (typeof renderChatList === "function") {
+            renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+        }
 
         // Start upload
         UploadManager.add(async () => {

@@ -1,0 +1,42 @@
+<div id="signup-screen" class="auth-screen">
+    <div class="auth-container">
+        <div class="auth-logo">
+            <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+                <rect width="60" height="60" rx="15" fill="url(#gradient2)" />
+                <path d="M30 18L42 26V42L30 50L18 42V26L30 18Z" stroke="white" stroke-width="3" fill="none" />
+                <circle cx="30" cy="34" r="8" stroke="white" stroke-width="3" fill="none" />
+                <defs>
+                    <linearGradient id="gradient2" x1="0" y1="0" x2="60" y2="60">
+                        <stop offset="0%" stop-color="#f58529" />
+                        <stop offset="50%" stop-color="#dd2a7b" />
+                        <stop offset="100%" stop-color="#8134af" />
+                    </linearGradient>
+                </defs>
+            </svg>
+            <h1>InstaChat</h1>
+        </div>
+        <form class="auth-form" id="signup-form">
+            <div class="input-group">
+                <input type="text" id="signup-username" placeholder="Username" required autocomplete="username">
+                <span class="input-focus-border"></span>
+            </div>
+            <div class="input-group">
+                <input type="email" id="signup-email" placeholder="Email" required autocomplete="email">
+                <span class="input-focus-border"></span>
+            </div>
+            <div class="input-group">
+                <input type="password" id="signup-password" placeholder="Password" required
+                    autocomplete="new-password">
+                <span class="input-focus-border"></span>
+            </div>
+            <div class="input-group">
+                <input type="password" id="signup-confirm-password" placeholder="Confirm Password" required
+                    autocomplete="new-password">
+                <span class="input-focus-border"></span>
+            </div>
+            <button type="submit" class="btn-primary">Sign Up</button>
+            <div class="auth-divider"><span>OR</span></div>
+            <button type="button" class="btn-secondary" id="to-login">Log In</button>
+        </form>
+    </div>
+</div>

@@ -1287,6 +1287,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
+    pointer-events: none;
 }
 
 .toast {
@@ -4586,6 +4587,7 @@ body {
     position: relative;
     display: flex;
     flex-direction: column;
+    z-index: 20;
 }
 
 /* Inline Keyboard-Style Emoji Panel container */

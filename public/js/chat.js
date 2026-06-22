@@ -7,11 +7,19 @@
 // CHAT SCREEN
 // =============================================================================
 function showChatScreen() {
-  document.getElementById("login-screen").classList.remove("active");
-  document.getElementById("signup-screen").classList.remove("active");
-  document.getElementById("chat-screen").classList.add("active");
-  document.getElementById("current-username").textContent = State.currentUser.username;
-  document.getElementById("current-user-avatar").innerHTML = `<span>${State.currentUser.avatar || State.currentUser.username.charAt(0).toUpperCase()}</span>`;
+  const loginScreen = document.getElementById("login-screen");
+  if (loginScreen) loginScreen.classList.remove("active");
+  const signupScreen = document.getElementById("signup-screen");
+  if (signupScreen) signupScreen.classList.remove("active");
+  const chatScreen = document.getElementById("chat-screen");
+  if (chatScreen) chatScreen.classList.add("active");
+  
+  const currentUsername = document.getElementById("current-username");
+  if (currentUsername) currentUsername.textContent = State.currentUser.username;
+  const currentUserAvatar = document.getElementById("current-user-avatar");
+  if (currentUserAvatar) {
+    currentUserAvatar.innerHTML = `<span>${State.currentUser.avatar || State.currentUser.username.charAt(0).toUpperCase()}</span>`;
+  }
   initChatWindow();
   initMobileNavigation();
 }
@@ -271,21 +279,9 @@ function renderMessages(chatId) {
 }
 
 function attactEventOnMedia() {
-  document.querySelectorAll(".message-media").forEach(media => {
-    if (media.dataset.listenerAttached === "true") return;
-    media.dataset.listenerAttached = "true";
-    media.addEventListener("click", () => {
-      const msgEl = media.closest(".message");
-      if (!msgEl) return;
-      if (!viewer && State.activeChat) {
-        viewer = new MediaViewer(State.activeChat);
-      }
-      if (viewer) {
-        viewer.open(msgEl.dataset.messageId);
-      }
-    });
-  });
+  // Handled globally via event delegation in chat.js
 }
+window.attactEventOnMedia = attactEventOnMedia;
 
 function playVideoInline(mediaContainer, videoUrl) {
   if (!videoUrl) return;
@@ -772,6 +768,8 @@ function createMessageElement(message) {
     });
   }
 
+  // Handled globally via event delegation
+
   return msgEl;
 }
 
@@ -812,7 +810,7 @@ function showMessageOptions(message, msgEl, event) {
   popup.querySelector(".reply-opt").addEventListener("click", (e) => {
     e.stopPropagation();
     State.replyingTo = message.id || message.tempId;
-    const preview = message.type === "text" ? message.content : `📷 ${message.type}`;
+    const preview = formatLastMessage(message);
     document.getElementById("reply-text").textContent = preview;
     document.getElementById("reply-preview").style.display = "flex";
     document.getElementById("message-input").focus();
@@ -1031,6 +1029,31 @@ document.addEventListener("click", (e) => {
     if (!chatOption.contains(e.target) && chatInfoBtn && !chatInfoBtn.contains(e.target)) {
       console.log("[DEBUG] removing active class from chatOption due to click outside");
       chatOption.classList.remove("active");
+    }
+  }
+});
+
+// Global delegate click handler for media messages (open MediaViewer)
+document.addEventListener("click", (e) => {
+  const media = e.target.closest(".message-media");
+  if (media) {
+    console.log("[DEBUG Click] Clicked on media:", media, "target:", e.target);
+    // If inside a disappearing story preview, handle separately (it has its own listener on disappearing-preview-content)
+    if (media.closest(".disappearing-preview-content")) {
+      console.log("[DEBUG Click] Disappearing story preview click, ignoring.");
+      return;
+    }
+
+    const msgEl = media.closest(".message");
+    console.log("[DEBUG Click] closest message element:", msgEl, "messageId:", msgEl?.dataset?.messageId);
+    if (!msgEl) return;
+    if ((!viewer || viewer.chatId !== State.activeChat) && State.activeChat) {
+      console.log("[DEBUG Click] Instantiating MediaViewer for activeChat:", State.activeChat);
+      viewer = new MediaViewer(State.activeChat);
+    }
+    if (viewer) {
+      console.log("[DEBUG Click] Calling viewer.open with:", msgEl.dataset.messageId);
+      viewer.open(msgEl.dataset.messageId);
     }
   }
 });

@@ -6,6 +6,25 @@
 // BOOTSTRAP — runs after successful login
 // =============================================================================
 async function bootstrapAfterLogin() {
+  // Ensure chat layout is loaded and mounted before doing anything
+  const chatScreen = document.getElementById("chat-screen");
+  if (!chatScreen) {
+    if (window.showLoader) window.showLoader();
+    try {
+      const html = await ComponentLoader.load("chat");
+      const rootEl = document.getElementById("app-root");
+      if (rootEl) {
+        rootEl.innerHTML = html;
+      }
+      const { init } = await import("/js/screens/chat.js");
+      await init();
+    } catch (err) {
+      console.error("Failed to load chat component during bootstrap:", err);
+    } finally {
+      if (window.hideLoader) window.hideLoader();
+    }
+  }
+
   // Load connections (accepted contacts only for chat list)
   const connRes = await getMyConnections();
   if (connRes.code === 200) {
@@ -80,7 +99,7 @@ async function bootstrapAfterLogin() {
       }
 
       const last = msgs[msgs.length - 1];
-      conv.lastMessage = last.type === "text" ? last.content : `📷 ${last.type}`;
+      conv.lastMessage = formatLastMessage(last);
       conv.timestamp = last.createdAt || last.clientTime || Date.now();
     }
   }
@@ -112,6 +131,10 @@ async function bootstrapAfterLogin() {
 
   if (typeof EmojiPanel !== "undefined" && EmojiPanel.loadCustomGifsAndTrending) {
     EmojiPanel.loadCustomGifsAndTrending(null, true);
+  }
+
+  if (typeof showChatScreen === "function") {
+    showChatScreen();
   }
 }
 
@@ -150,17 +173,17 @@ function initPeoplePanel() {
   const userProfileHeader = document.querySelector(".user-profile");
   if (userProfileHeader) {
     userProfileHeader.style.cursor = "pointer";
-    userProfileHeader.addEventListener("click", () => {
+    userProfileHeader.onclick = () => {
       openProfileModal("account");
-    });
+    };
   }
 
   // Add People button opens the Account & People Hub modal
   const addPeopleBtn = document.getElementById("add-people-btn");
   if (addPeopleBtn) {
-    addPeopleBtn.addEventListener("click", () => {
+    addPeopleBtn.onclick = () => {
       openProfileModal("search");
-    });
+    };
   }
 
   // Initialize the profile modal events
@@ -264,6 +287,12 @@ function renderPeopleTab(tab) {
 
     const searchInput = container.querySelector("#people-search-input");
     const resultsEl = container.querySelector("#people-search-results");
+    const searchBox = container.querySelector(".modal-search-box");
+    if (searchBox && searchInput) {
+      searchBox.addEventListener("click", () => {
+        searchInput.focus();
+      });
+    }
 
     searchInput.addEventListener("input", () => {
       clearTimeout(searchTimeout);
@@ -847,36 +876,53 @@ function openPeoplePanel() {
 function initProfileModal() {
   const closeBtn = document.getElementById("profile-modal-close-btn");
   if (closeBtn) {
-    closeBtn.addEventListener("click", closeProfileModal);
+    closeBtn.onclick = closeProfileModal;
   }
 
   const modalOverlay = document.getElementById("profile-modal");
   if (modalOverlay) {
-    modalOverlay.addEventListener("click", (e) => {
+    modalOverlay.onclick = (e) => {
       if (e.target === modalOverlay) {
         closeProfileModal();
       }
-    });
+    };
   }
 
   document.querySelectorAll(".profile-nav-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.onclick = () => {
       switchProfileModalSection(btn.dataset.section);
-    });
+    };
   });
 
   const logoutBtn = document.getElementById("profile-modal-logout-btn");
   if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
+    logoutBtn.onclick = () => {
       closeProfileModal();
       if (typeof logout === "function") logout();
-    });
+    };
   }
 }
 
-function openProfileModal(defaultSection = "search") {
-  const modal = document.getElementById("profile-modal");
-  if (!modal) return;
+async function openProfileModal(defaultSection = "search") {
+  let modal = document.getElementById("profile-modal");
+  if (!modal) {
+    if (window.showLoader) window.showLoader();
+    try {
+      const html = await ComponentLoader.load("account");
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = html;
+      modal = wrapper.firstElementChild;
+      document.body.appendChild(modal);
+      
+      const { init } = await import("/js/screens/account.js");
+      await init();
+    } catch (err) {
+      console.error("Failed to load profile modal:", err);
+      return;
+    } finally {
+      if (window.hideLoader) window.hideLoader();
+    }
+  }
 
   const user = State.currentUser || {};
   document.getElementById("profile-modal-avatar-letter").textContent = user.username?.charAt(0).toUpperCase() || "U";
@@ -1040,94 +1086,98 @@ function handelAuthForm() {
   const signupForm = document.getElementById("signup-form");
 
   /* ─── LOGIN ─── */
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const identifier = document.getElementById("login-username").value.trim();
-    const password = document.getElementById("login-password").value;
-    const submitBtn = loginForm.querySelector(".btn-primary");
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const identifier = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+      const submitBtn = loginForm.querySelector(".btn-primary");
 
-    if (!identifier || !password) { showToast("Please fill in all fields", "error"); return; }
+      if (!identifier || !password) { showToast("Please fill in all fields", "error"); return; }
 
-    setButtonLoading(submitBtn, "Verifying...");
-    try {
-      const response = await loginuser({ identifier, password });
-      if (response.code !== 200) {
-        showToast(response.Data?.message || "Login failed", "error");
-        resetButtonLoading(submitBtn);
-        return;
-      }
-      State.currentUser = {
-        id: response.Data.user.id,
-        username: response.Data.user.username,
-        avatar: response.Data.user.avatar,
-        email: response.Data.user.email,
-      };
-      localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-      const oldVersion = localStorage.getItem("app_version");
-      if (response.Data.version !== oldVersion) {
-        localStorage.setItem("app_version", response.Data.version);
-        if (oldVersion !== null) {
-          await fetch("/auth/flush-redis", { method: "POST" });
+      setButtonLoading(submitBtn, "Verifying...");
+      try {
+        const response = await loginuser({ identifier, password });
+        if (response.code !== 200) {
+          showToast(response.Data?.message || "Login failed", "error");
+          resetButtonLoading(submitBtn);
+          return;
         }
-      }
+        State.currentUser = {
+          id: response.Data.user.id,
+          username: response.Data.user.username,
+          avatar: response.Data.user.avatar,
+          email: response.Data.user.email,
+        };
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        const oldVersion = localStorage.getItem("app_version");
+        if (response.Data.version !== oldVersion) {
+          localStorage.setItem("app_version", response.Data.version);
+          if (oldVersion !== null) {
+            await fetch("/auth/flush-redis", { method: "POST" });
+          }
+        }
 
-      // Link Telegram if running inside Telegram
-      const tg = window.Telegram?.WebApp;
-      if (tg?.initDataUnsafe?.user?.id) {
-        await linkTelegramAccount(tg.initDataUnsafe.user.id);
-      }
+        // Link Telegram if running inside Telegram
+        const tg = window.Telegram?.WebApp;
+        if (tg?.initDataUnsafe?.user?.id) {
+          await linkTelegramAccount(tg.initDataUnsafe.user.id);
+        }
 
-      await bootstrapAfterLogin();
-      resetButtonLoading(submitBtn);
-      showToast("Logged in successfully!", "success");
-      showChatScreen();
-      startTimeTicker();
-    } catch (err) {
-      resetButtonLoading(submitBtn);
-      showToast("Server error. Please try again.", "error");
-    }
-  });
+        await bootstrapAfterLogin();
+        resetButtonLoading(submitBtn);
+        showToast("Logged in successfully!", "success");
+        showChatScreen();
+        startTimeTicker();
+      } catch (err) {
+        resetButtonLoading(submitBtn);
+        showToast("Server error. Please try again.", "error");
+      }
+    });
+  }
 
   /* ─── SIGNUP ─── */
-  signupForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const username = document.getElementById("signup-username").value.trim();
-    const email = document.getElementById("signup-email").value.trim();
-    const password = document.getElementById("signup-password").value;
-    const confirmPassword = document.getElementById("signup-confirm-password").value;
-    const submitBtn = signupForm.querySelector(".btn-primary");
+  if (signupForm) {
+    signupForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = document.getElementById("signup-username").value.trim();
+      const email = document.getElementById("signup-email").value.trim();
+      const password = document.getElementById("signup-password").value;
+      const confirmPassword = document.getElementById("signup-confirm-password").value;
+      const submitBtn = signupForm.querySelector(".btn-primary");
 
-    if (!username || !email || !password || !confirmPassword) {
-      showToast("Please fill in all fields", "error"); return;
-    }
-    if (password !== confirmPassword) { showToast("Passwords do not match", "error"); return; }
-    if (password.length < 6) { showToast("Password must be at least 6 characters", "error"); return; }
-
-    setButtonLoading(submitBtn, "Submitting...");
-    try {
-      const response = await createUser({ username, email, password });
-      if (response.code !== 201) {
-        showToast(response.Data?.message || "Signup failed", "error");
-        resetButtonLoading(submitBtn);
-        return;
+      if (!username || !email || !password || !confirmPassword) {
+        showToast("Please fill in all fields", "error"); return;
       }
-      State.currentUser = {
-        id: response.Data.user.id,
-        username: response.Data.user.username,
-        avatar: response.Data.user.avatar,
-        email: response.Data.user.email,
-      };
-      localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-      await bootstrapAfterLogin();
-      resetButtonLoading(submitBtn);
-      showToast("Account created successfully!", "success");
-      showChatScreen();
-      startTimeTicker();
-    } catch (err) {
-      resetButtonLoading(submitBtn);
-      showToast("Server error. Please try again.", "error");
-    }
-  });
+      if (password !== confirmPassword) { showToast("Passwords do not match", "error"); return; }
+      if (password.length < 6) { showToast("Password must be at least 6 characters", "error"); return; }
+
+      setButtonLoading(submitBtn, "Submitting...");
+      try {
+        const response = await createUser({ username, email, password });
+        if (response.code !== 201) {
+          showToast(response.Data?.message || "Signup failed", "error");
+          resetButtonLoading(submitBtn);
+          return;
+        }
+        State.currentUser = {
+          id: response.Data.user.id,
+          username: response.Data.user.username,
+          avatar: response.Data.user.avatar,
+          email: response.Data.user.email,
+        };
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        await bootstrapAfterLogin();
+        resetButtonLoading(submitBtn);
+        showToast("Account created successfully!", "success");
+        showChatScreen();
+        startTimeTicker();
+      } catch (err) {
+        resetButtonLoading(submitBtn);
+        showToast("Server error. Please try again.", "error");
+      }
+    });
+  }
 }
 
 // =============================================================================
@@ -1157,26 +1207,55 @@ async function initAuth() {
   handelAuthForm();
   initPeoplePanel();
 
-  document.getElementById("to-signup").addEventListener("click", () => {
-    document.getElementById("login-screen").classList.remove("active");
-    document.getElementById("signup-screen").classList.add("active");
-  });
-  document.getElementById("to-login").addEventListener("click", () => {
-    document.getElementById("signup-screen").classList.remove("active");
-    document.getElementById("login-screen").classList.add("active");
-  });
+  const toSignup = document.getElementById("to-signup");
+  if (toSignup) {
+    toSignup.addEventListener("click", async () => {
+      const rootEl = document.getElementById("app-root");
+      const html = await ComponentLoader.load("signup");
+      if (rootEl) {
+        rootEl.innerHTML = html;
+      }
+      await initAuth();
+    });
+  }
+
+  const toLogin = document.getElementById("to-login");
+  if (toLogin) {
+    toLogin.addEventListener("click", async () => {
+      const rootEl = document.getElementById("app-root");
+      const html = await ComponentLoader.load("login");
+      if (rootEl) {
+        rootEl.innerHTML = html;
+      }
+      await initAuth();
+    });
+  }
 
   // People panel button
-  document.getElementById("add-people-btn").addEventListener("click", openPeoplePanel);
-
-  // Socket-based real-time request notification
-  // (wired up in socket.js after socket init)
+  const addPeopleBtn = document.getElementById("add-people-btn");
+  if (addPeopleBtn) {
+    addPeopleBtn.addEventListener("click", openPeoplePanel);
+  }
 
   // Auto-login from saved session
   const savedUser = localStorage.getItem("SSC_USER");
   const savedToken = TokenStore.getToken();
-  if (savedUser && savedToken) {
-    document.getElementById("passwordOverlay").classList.add("active");
+  if (window.IS_SERVER_LOGIN && savedUser && savedToken) {
+    let passwordOverlay = document.getElementById("passwordOverlay");
+    if (!passwordOverlay) {
+      try {
+        const html = await ComponentLoader.load("password-overlay");
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = html;
+        passwordOverlay = wrapper.firstElementChild;
+        document.body.appendChild(passwordOverlay);
+      } catch (err) {
+        console.error("Failed to load password overlay during auto-login:", err);
+      }
+    }
+    if (passwordOverlay) {
+      passwordOverlay.classList.add("active");
+    }
     State.currentUser = JSON.parse(savedUser);
     await bootstrapAfterLogin();
     showChatScreen();

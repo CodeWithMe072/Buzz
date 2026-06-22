@@ -366,10 +366,9 @@ function initSocket() {
       socket.emit("chat:seen", { from: message.user });
     }
 
-    // Update chat list last message
     const conv = State.conversations.find(c => c.id === message.user);
     if (conv) {
-      conv.lastMessage = message.type === "text" ? message.content : `📷 ${message.type}`;
+      conv.lastMessage = formatLastMessage(message);
       conv.timestamp   = message.timestamp;
       conv.unread = message.user !== State.activeChat ? (conv.unread || 0) + 1 : 0;
     }
@@ -526,7 +525,7 @@ function initSocket() {
 
     const conv = State.conversations.find(c => c.id === chatPartner);
     if (conv) {
-      conv.lastMessage = message.type === "text" ? message.content : `📷 ${message.type}`;
+      conv.lastMessage = formatLastMessage(message);
       conv.timestamp   = message.timestamp;
     }
     renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");

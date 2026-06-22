@@ -71,7 +71,13 @@ function getFileIcon(fileName) {
 }
 
 function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
@@ -435,4 +441,20 @@ function showLiveVideoPreview(friendName, onClose) {
         };
     }
 }
+
+function formatLastMessage(message) {
+    if (!message) return "";
+    if (message.type === "text") return message.content || "";
+    if (message.type === "image") return "📷 Image";
+    if (message.type === "video") return "🎥 Video";
+    if (message.type === "audio") return "🎤 Voice message";
+    if (message.type === "document") return `📁 ${message.fileName || "Document"}`;
+    if (message.type === "gif") return "🎬 GIF";
+    if (message.type === "sticker") return "🖼️ Sticker";
+    if (message.type === "call") {
+        return message.callType === "video" ? "📹 Video call" : "📞 Voice call";
+    }
+    return message.content || `📷 ${message.type}`;
+}
+
 

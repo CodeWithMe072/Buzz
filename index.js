@@ -15,6 +15,7 @@ import uploadRoutes from "./routes/upload.routes.js";
 import initSocket from "./sockets/chat.sockets.js";
 import { startMessageStatusSyncJob } from "./jobs/messageStatusSync.js";
 import webrtcRoutes from "./routes/webrtc.routes.js";
+import componentRoutes from "./routes/component.routes.js";
 import { protect, readUserFromCookie } from "./middleware/auth.middleware.js";
 
 
@@ -51,12 +52,16 @@ app.use(cookieParser());
 
 /* ---------- Static files with Cache-Control ---------- */
 app.use(express.static(path.join(__dirname, "public"), {
-  maxAge: "1d",
+  maxAge: process.env.NODE_ENV === "PROD" ? "1d" : 0,
   setHeaders: (res, filepath) => {
-    if (filepath.endsWith(".html") || filepath.endsWith(".ejs")) {
-      res.setHeader("Cache-Control", "no-cache");
+    if (process.env.NODE_ENV === "PROD") {
+      if (filepath.endsWith(".html") || filepath.endsWith(".ejs")) {
+        res.setHeader("Cache-Control", "no-cache");
+      } else {
+        res.setHeader("Cache-Control", "public, max-age=86400, must-revalidate");
+      }
     } else {
-      res.setHeader("Cache-Control", "public, max-age=86400, must-revalidate");
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     }
   }
 }));
@@ -89,6 +94,7 @@ app.use((req, res, next) => {
 });
 
 /* ---------- API routes ---------- */
+app.use(componentRoutes);
 app.use("/api/webrtc", webrtcRoutes);
 app.use(authRoutes);
 app.use(connectionRoutes);
@@ -123,7 +129,7 @@ if (process.env.NODE_ENV === "PROD") {
     console.log(`[Server] Running on port ${process.env.PORT || 8080}`);
   });
 } else {
-  server.listen(PORT, () => {
+  server.listen(PORT, "127.0.0.1", () => {
     console.log(`[Server] Running on http://127.0.0.1:${PORT}`);
   });
 }

@@ -1,0 +1,40 @@
+<div id="chat-screen" class="chat-screen active">
+    <div class="chat-layout">
+        <!-- Chat List Sidebar -->
+        <aside class="chat-list-sidebar" id="chat-list-sidebar">
+            <div class="chat-list-header">
+                <div class="user-profile">
+                    <div class="avatar" id="current-user-avatar"><span>U</span></div>
+                    <span id="current-username">User</span>
+                </div>
+                <div class="header-actions">
+                    <!-- Add People Button with badge -->
+                    <button class="icon-btn people-btn" id="add-people-btn" title="Account & People Hub">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <span class="requests-badge" id="requests-badge" style="display:none">0</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-list-search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input type="text" placeholder="Search conversations..." id="chat-search">
+            </div>
+
+            <div class="chat-list" id="chat-list"></div>
+        </aside>
+
+        <!-- Chat Window Placeholder -->
+        <main class="chat-window" id="chat-window">
+            <!-- Dynamic message window or empty state will load here -->
+        </main>
+    </div>
+</div>

@@ -1,0 +1,278 @@
+<div class="chat-empty-state" id="chat-empty-state">
+    <div class="empty-icon">
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+            <circle cx="40" cy="40" r="35" stroke="#dbdbdb" stroke-width="3" />
+            <path d="M25 40L35 50L55 30" stroke="#dbdbdb" stroke-width="3" stroke-linecap="round"
+                stroke-linejoin="round" />
+        </svg>
+    </div>
+    <h2>Your Messages</h2>
+    <p>Select a conversation to start messaging</p>
+    <button class="btn-secondary" onclick="openPeoplePanel()" style="margin-top:12px">
+        Find People to Chat With
+    </button>
+</div>
+
+<div class="active-chat" id="active-chat" style="display: none;">
+    <div class="chat-header">
+        <div class="chatOption" id="chatOption">
+            <div class="chatOption-button call-option" id="chatOption-AudioCall">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path
+                        d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.57a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg> Voice Call
+            </div>
+            <div class="chatOption-button call-option" id="chatOption-VideoCall">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <polygon points="23 7 16 12 23 17 23 7" />
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg> Video Call
+            </div>
+            <div class="chatOption-button delete" id="chatOption-button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ed4956"
+                    stroke-width="2">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path
+                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg> Clear Chat
+            </div>
+            <div class="chatOption-button" id="chatOption-Mute" data-playTune="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>Mute
+            </div>
+            <div class="chatOption-button" id="chatOption-ShowMedia">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                </svg>Show Media
+            </div>
+            <div class="chatOption-button" id="chatOption-LiveVoice">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                </svg><span id="chatOption-LiveVoice-text">Live Voice</span>
+            </div>
+        </div>
+        <button class="icon-btn back-btn" id="back-btn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <polyline points="15 18 9 12 15 6" />
+            </svg>
+        </button>
+        <div class="chat-header-info">
+            <div class="avatar" id="chat-avatar"><span>A</span></div>
+            <div class="chat-header-text">
+                <h3 id="chat-username">Username</h3>
+                <span class="online-status" id="online-status">Active now</span>
+            </div>
+        </div>
+        <button class="icon-btn" id="audio-call-btn" title="Voice call">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path
+                    d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.57a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+            </svg>
+        </button>
+        <button class="icon-btn" id="video-call-btn" title="Video call">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <polygon points="23 7 16 12 23 17 23 7" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            </svg>
+        </button>
+        <button class="icon-btn" id="chat-capture-snapshot-btn" title="Click Snapshot"
+            style="display: none;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path
+                    d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+            </svg>
+        </button>
+        <button class="icon-btn" id="chat-live-voice-btn" title="Live Voice">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+        </button>
+        <button class="icon-btn" id="chat-info-btn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <circle cx="12" cy="12" r="1" />
+                <circle cx="12" cy="5" r="1" />
+                <circle cx="12" cy="19" r="1" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="messages-container" id="messages-container">
+        <div class="messages" id="messages"></div>
+    </div>
+
+    <div class="chat-input-container">
+        <div class="reply-preview" id="reply-preview" style="display: none;">
+            <div class="reply-content">
+                <span class="reply-label">Replying to</span>
+                <p id="reply-text"></p>
+            </div>
+            <button class="icon-btn" id="cancel-reply">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <line x1="15" y1="5" x2="5" y2="15" />
+                    <line x1="5" y1="5" x2="15" y2="15" />
+                </svg>
+            </button>
+        </div>
+        <div class="typing-indicator" id="typing-indicator" style="display: none;">
+            <span></span><span></span><span></span>
+        </div>
+        <div class="chat-actions-popup" id="chat-actions-popup">
+            <button class="action-menu-item" id="emoji-panel-btn" type="button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                    <line x1="9" y1="9" x2="9.01" y2="9" />
+                    <line x1="15" y1="9" x2="15.01" y2="9" />
+                </svg>
+                <span>Emojis</span>
+            </button>
+            <button class="action-menu-item" id="media-btn" type="button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                </svg>
+                <span>Photo & Document</span>
+            </button>
+            <button class="action-menu-item" id="mic-btn" type="button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+                <span>Voice Message</span>
+            </button>
+            <button class="action-menu-item" id="camera-btn-custom" type="button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <path
+                        d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                </svg>
+                <span>Camera</span>
+            </button>
+        </div>
+        <div class="chat-input">
+            <button class="icon-btn" id="chat-actions-btn" type="button" title="More options">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.5">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+            </button>
+            <input type="file" id="media-input"
+                accept="image/*,video/*,application/pdf,application/msword,.docx,.xls,.xlsx,.csv,.txt"
+                style="display:none;">
+            <div class="voice-recording-ui" id="voiceRecordingUI" style="display:none;">
+                <button class="voice-cancel-btn" id="voiceCancelBtn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+                <div class="voice-waveform-container">
+                    <canvas id="voiceWaveformCanvas"></canvas>
+                    <span class="voice-timer" id="voiceTimer">0:00</span>
+                </div>
+                <button class="voice-send-btn" id="voiceSendBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                </button>
+            </div>
+            <input type="text" id="message-input" placeholder="Message..." autocomplete="off">
+            <button class="icon-btn send-btn" id="send-btn" disabled>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+            </button>
+        </div>
+        <div class="custom-emoji-panel" id="custom-emoji-panel">
+            <!-- Top Navigation Tabs -->
+            <div class="emoji-panel-nav" id="emoji-panel-nav">
+                <button type="button" class="panel-nav-btn active" data-panel-tab="emojis">😃
+                    Emojis</button>
+                <button type="button" class="panel-nav-btn" data-panel-tab="stickers">🖼️
+                    Stickers</button>
+                <button type="button" class="panel-nav-btn" data-panel-tab="gifs">🎬 GIFs</button>
+            </div>
+
+            <div class="emoji-search-container" id="emoji-search-container">
+                <input type="text" id="emoji-search-input" placeholder="Search emojis..."
+                    autocomplete="off">
+            </div>
+
+            <!-- Emojis Container -->
+            <div class="emoji-tab-content active" id="emoji-tab-content-emojis">
+                <div class="emoji-categories-tabs" id="emoji-categories-tabs"></div>
+                <div class="emoji-grid-container" id="emoji-grid-container"></div>
+            </div>
+
+            <!-- Stickers Container -->
+            <div class="emoji-tab-content" id="emoji-tab-content-stickers" style="display: none;">
+                <div class="sticker-grid-container" id="sticker-grid-container"></div>
+            </div>
+
+            <!-- GIFs Container (Giphy) -->
+            <div class="emoji-tab-content" id="emoji-tab-content-gifs" style="display: none;">
+                <div class="gif-grid-container" id="gif-grid-container"></div>
+            </div>
+
+            <!-- Custom Section Container -->
+            <div class="emoji-tab-content" id="emoji-tab-content-custom-section"
+                style="display: none; flex-direction: column; width: 100%;">
+                <div class="custom-section-header" id="custom-section-header"
+                    style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border-color); width: 100%;">
+                    <span class="custom-section-title" id="custom-section-title"
+                        style="font-weight: 600; font-size: 13px; color: var(--text-primary);">Section
+                        Name</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="add-to-section-btn" id="add-to-section-btn"
+                            style="background: rgba(255, 255, 255, 0.1); border: 1px solid var(--border-color); color: var(--text-primary); padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s;">Add
+                            More</button>
+                        <button type="button" class="delete-section-btn" id="delete-section-btn"
+                            onmouseover="this.style.background='rgba(239, 68, 68, 0.2)'"
+                            onmouseout="this.style.background='rgba(239, 68, 68, 0.1)'"
+                            style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s;">Delete
+                            Tab</button>
+                    </div>
+                </div>
+                <div class="gif-grid-container" id="custom-section-grid-container"
+                    style="flex: 1; width: 100%;"></div>
+            </div>
+        </div>
+    </div>
+</div>
