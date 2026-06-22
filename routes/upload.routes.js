@@ -393,7 +393,7 @@ router.post("/api/upload-chunk",
 // Complete Upload
 // =============================================================================
 
-router.post("/api/complete-upload", protect, express.json({ limit: "50mb" }),
+router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
     async (req, res) => {
         const { fileId, fileName, mimeType, } = req.body;
         const chunkDir = path.join(os.tmpdir(), "chunks", fileId);
@@ -446,6 +446,9 @@ router.post("/api/complete-upload", protect, express.json({ limit: "50mb" }),
                 "text/csv",
             ].includes(mimeType);
             const key = generateFileKey(fileName, mimeType);
+            console.log(mergedPath)
+            console.log(key)
+            console.log(mimeType)
             const url = await uploadToR2(mergedPath, key, mimeType);
             // =========================================================================
             // Cleanup
