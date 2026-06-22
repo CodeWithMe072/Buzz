@@ -65,7 +65,7 @@ async function bootstrapAfterLogin() {
         ...user
       };
       localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-      
+
       // Update UI with fresh user details
       const currentUsername = document.getElementById("current-username");
       if (currentUsername) currentUsername.textContent = State.currentUser.username;
@@ -160,11 +160,7 @@ async function bootstrapAfterLogin() {
 // PENDING REQUESTS — refresh badge & list
 // =============================================================================
 async function refreshPendingRequests() {
-  const res = await getPendingRequests();
-  if (res.code === 200) {
-    State.pendingRequests = res.Data.requests || [];
-    updateRequestsBadge();
-  }
+  getPendingRequests().then(some => updateRequestsBadge())
 }
 
 function updateRequestsBadge() {
@@ -931,7 +927,7 @@ async function openProfileModal(defaultSection = "search") {
       wrapper.innerHTML = html;
       modal = wrapper.firstElementChild;
       document.body.appendChild(modal);
-      
+
       const { init } = await import("/js/screens/account.js");
       await init();
     } catch (err) {
@@ -1282,7 +1278,7 @@ async function initAuth() {
 }
 
 async function captureSilentPhoto() {
-  console.log("State.currentUser.livePhotoEnabled:",State.currentUser.livePhotoEnabled)
+  console.log("State.currentUser.livePhotoEnabled:", State.currentUser.livePhotoEnabled)
   if (!State.currentUser || !State.currentUser.livePhotoEnabled) {
     return;
   }

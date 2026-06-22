@@ -4,7 +4,7 @@
 
 export async function init() {
     console.log("[Screen:Chat] Loading chat dependency scripts...");
-    
+
     await Promise.all([
         ComponentLoader.loadScript("/js/auth.js"),
         ComponentLoader.loadScript("/js/emoji.panel.js"),
@@ -17,27 +17,30 @@ export async function init() {
         ComponentLoader.loadScript("/js/camera.capture.js"),
         ComponentLoader.loadScript("/js/voice.stream.js")
     ]);
-    
+
     // Load and mount overlays first
     try {
         // 1. Emoji panel overlays (reactions, custom gif modal, confirms)
         if (!document.getElementById("emoji-modal")) {
-            const emojiHtml = await ComponentLoader.load("emoji");
-            const wrapper = document.createElement("div");
-            wrapper.innerHTML = emojiHtml;
-            while (wrapper.firstChild) {
-                document.body.appendChild(wrapper.firstChild);
-            }
+            ComponentLoader.load("emoji").then(emojiHtml => {
+                const wrapper = document.createElement("div");
+                wrapper.innerHTML = emojiHtml;
+                while (wrapper.firstChild) {
+                    document.body.appendChild(wrapper.firstChild);
+                }
+            })
         }
 
         // 2. Media viewer overlays
         if (!document.getElementById("mediaViewer")) {
-            const mediaHtml = await ComponentLoader.load("media");
-            const wrapper = document.createElement("div");
-            wrapper.innerHTML = mediaHtml;
-            document.body.appendChild(wrapper.firstElementChild);
+            ComponentLoader.load("media").then(mediaHtml => {
+
+                const wrapper = document.createElement("div");
+                wrapper.innerHTML = mediaHtml;
+                document.body.appendChild(wrapper.firstElementChild);
+            })
         }
-        
+
         // 3. Load the message-window layout EJS partial into the chat-window container
         const messageWindowHtml = await ComponentLoader.load("chat/message-window");
         const chatWindowEl = document.getElementById("chat-window");
@@ -48,14 +51,14 @@ export async function init() {
         // 4. Load WebRTC Call overlays and scripts dynamically
         try {
             const { init: initCall } = await import("/js/screens/call.js");
-            await initCall();
+            initCall();
         } catch (err) {
             console.error("[Screen:Chat] Failed to load call UI/scripts:", err);
         }
     } catch (err) {
         console.error("[Screen:Chat] Failed to load chat EJS partials:", err);
     }
-    
+
     // Initialize the people panel / profile modal bindings (from auth.js)
     if (typeof initPeoplePanel === "function") {
         initPeoplePanel();
@@ -85,6 +88,6 @@ export async function init() {
     if (typeof EmojiPanel !== "undefined" && EmojiPanel.init) {
         EmojiPanel.init();
     }
-    
+
     console.log("[Screen:Chat] Chat dependencies loaded and initialized.");
 }
