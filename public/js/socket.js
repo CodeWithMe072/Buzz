@@ -718,9 +718,9 @@ function insertMessageInOrder(message) {
   }
 }
 
-window.addEventListener("pagehide", () => {
-  console.log("[Socket] Page unloading, disconnecting socket...");
-  if (typeof socket !== "undefined" && socket && socket.connected) {
-    socket.disconnect();
-  }
-});
+// window.addEventListener("pagehide", () => {
+//   console.log("[Socket] Page unloading, disconnecting socket...");
+//   if (typeof socket !== "undefined" && socket && socket.connected) {
+//     socket.disconnect();
+//   }
+// });
