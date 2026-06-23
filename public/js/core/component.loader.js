@@ -12,11 +12,11 @@ class ComponentLoaderClass {
     /**
      * Loads a component's rendered HTML from the server.
      * @param {string} name - Name of the component (e.g., 'dashboard', 'chat/layout')
-     * @param {boolean} [force=false] - If true, bypasses cache and triggers a reload
+     * @param {boolean} [force=true] - If true, bypasses cache and triggers a reload
      * @returns {Promise<string>} The rendered HTML string
      */
-    async load(name, force = false) {
-        if (this.componentCache[name] && !force) {
+    async load(name, force = true) {
+        if (!force && this.componentCache[name]) {
             return this.componentCache[name];
         }
 

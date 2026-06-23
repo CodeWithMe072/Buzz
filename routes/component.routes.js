@@ -38,6 +38,11 @@ router.get(/^\/api\/components\/(.+)$/, (req, res, next) => {
     const componentName = req.params[0];
     const ejsPath = componentMap[componentName] || `partials/${componentName}`;
     
+    // Set headers to prevent caching of templates
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
     // Render the EJS partial
     res.render(ejsPath, {
         isServerLogin: !!req.user,

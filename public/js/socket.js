@@ -478,6 +478,7 @@ function initSocket() {
         lastMessage: "",
         unread: 0,
         online: (State.onlineUsers && State.onlineUsers.includes(c.user.id)) || false,
+        messagesLoaded: true,
       }));
       renderChatList();
     }

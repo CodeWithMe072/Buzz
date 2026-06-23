@@ -38,9 +38,10 @@ async function bootstrapAfterLogin() {
         : c.user.username.charAt(0).toUpperCase(),
       lastSeen: c.user.lastSeen,
       timestamp: 0,
-      lastMessage: "",
+      lastMessage: "Loading...",
       unread: 0,
       online: (State.onlineUsers && State.onlineUsers.includes(c.user.id)) || false,
+      messagesLoaded: false,
     }));
   }
 
@@ -48,6 +49,16 @@ async function bootstrapAfterLogin() {
   initChatList();
   if (typeof showChatScreen === "function") {
     showChatScreen();
+  }
+
+  // Hide loader immediately so screen is visible
+  if (window.hideLoader) {
+    window.hideLoader();
+  }
+
+  // Start background loading of non-critical modules (emoji, media, calls)
+  if (typeof window.startBackgroundLoading === "function") {
+    window.startBackgroundLoading();
   }
 
   // 1. Load pending requests badge in background
@@ -77,6 +88,7 @@ async function bootstrapAfterLogin() {
   }).catch(console.error);
 
   // 3. Load messages for each connection concurrently in the background
+  State.apiMessagesLoaded = false;
   const messagePromises = State.conversations.map(async (conv) => {
     try {
       const msgRes = await getMessages(conv.id, 50);
@@ -115,17 +127,30 @@ async function bootstrapAfterLogin() {
         const last = msgs[msgs.length - 1];
         conv.lastMessage = formatLastMessage(last);
         conv.timestamp = last.createdAt || last.clientTime || Date.now();
+      } else {
+        conv.lastMessage = "";
+        conv.timestamp = 0;
       }
     } catch (err) {
       console.error(`Failed to fetch messages for connection ${conv.id}:`, err);
+      conv.lastMessage = "";
+      conv.timestamp = 0;
+    } finally {
+      conv.messagesLoaded = true;
+      // Re-render the chat list sidebar to show the updated last message for this user
+      renderChatList(document.getElementById("chat-search")?.value?.trim()?.toLowerCase() || "");
+      // If the user currently has this chat open, re-render its messages pane to dismiss the loading spinner
+      if (State.activeChat === conv.id) {
+        renderMessages(conv.id);
+      }
     }
   });
 
   Promise.all(messagePromises).then(() => {
     State.apiMessagesLoaded = true;
-    // Sort conversations by last message timestamp
+    // Sort conversations by last message timestamp once all have loaded
     State.conversations.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    renderChatList();
+    renderChatList(document.getElementById("chat-search")?.value?.trim()?.toLowerCase() || "");
   }).catch(console.error);
 
   // 4. Connect socket with JWT in background

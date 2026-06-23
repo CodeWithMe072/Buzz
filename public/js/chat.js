@@ -78,7 +78,7 @@ function renderChatList(filter = "") {
           <span class="chat-item-username">${sanitizeInput(conv.username)}</span>
           <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) : ""}</span>
         </div>
-        <div class="chat-item-preview ${conv.unread > 0 ? "unread" : ""}">
+        <div class="chat-item-preview ${conv.unread > 0 ? "unread" : ""} ${conv.messagesLoaded === false ? "loading-preview" : ""}">
           <span>${conv.lastMessage ? sanitizeInput(conv.lastMessage) : ""}</span>
         </div>
       </div>
@@ -268,13 +268,30 @@ function renderMessages(chatId) {
   const messagesContainer = document.getElementById("messages");
   messagesContainer.innerHTML = "";
 
+  const conv = State.conversations.find(c => c.id === chatId);
+  if (conv && conv.messagesLoaded === false) {
+    const loadingEl = document.createElement("div");
+    loadingEl.className = "chat-messages-loading";
+    loadingEl.innerHTML = `
+      <div class="spinner"></div>
+      <p>Loading messages...</p>
+    `;
+    messagesContainer.appendChild(loadingEl);
+    return;
+  }
+
   const messages = State.messages[chatId] || [];
   for (let i = messages.length - 1; i >= 0; i--) {
     messagesContainer.appendChild(createMessageElement(messages[i]));
   }
 
-  document.getElementById("messages-container").scrollTop = 99999;
-  viewer = new MediaViewer(chatId);
+  const messagesContainerEl = document.getElementById("messages-container");
+  if (messagesContainerEl) {
+    messagesContainerEl.scrollTop = 99999;
+  }
+  if (typeof MediaViewer !== "undefined") {
+    viewer = new MediaViewer(chatId);
+  }
   attactEventOnMedia();
 }
 

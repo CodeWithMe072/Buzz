@@ -7372,3 +7372,30 @@ input:checked+.slider:before {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Incrementally loading chat list preview styles */
+.chat-item-preview.loading-preview {
+    font-style: italic;
+    opacity: 0.65;
+}
+
+/* Messaging loading placeholder spinner styles */
+.chat-messages-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+    gap: 16px;
+    color: var(--text-secondary);
+}
+
+.chat-messages-loading .spinner {
+    width: 36px;
+    height: 36px;
+    border: 3.5px solid rgba(255, 255, 255, 0.1);
+    border-top: 3.5px solid var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
