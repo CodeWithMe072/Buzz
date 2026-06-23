@@ -97,7 +97,10 @@ function hideLoader() {
 }
 
 function startTimeTicker() {
-    setInterval(() => {
+    if (window.timeTickerInterval) {
+        clearInterval(window.timeTickerInterval);
+    }
+    window.timeTickerInterval = setInterval(() => {
         document.querySelectorAll('.chat-item-time').forEach(el => {
             const convId = el.closest('.chat-item')?.dataset?.convId;
             if (!convId) return;

@@ -61,6 +61,11 @@ async function bootstrapAfterLogin() {
     window.startBackgroundLoading();
   }
 
+  // Start the time ticker interval
+  if (typeof startTimeTicker === "function") {
+    startTimeTicker();
+  }
+
   // 1. Load pending requests badge in background
   refreshPendingRequests().catch(console.error);
 
@@ -1167,7 +1172,6 @@ function handelAuthForm() {
         resetButtonLoading(submitBtn);
         showToast("Logged in successfully!", "success");
         showChatScreen();
-        startTimeTicker();
       } catch (err) {
         resetButtonLoading(submitBtn);
         showToast("Server error. Please try again.", "error");
@@ -1210,7 +1214,6 @@ function handelAuthForm() {
         resetButtonLoading(submitBtn);
         showToast("Account created successfully!", "success");
         showChatScreen();
-        startTimeTicker();
       } catch (err) {
         resetButtonLoading(submitBtn);
         showToast("Server error. Please try again.", "error");
@@ -1298,7 +1301,6 @@ async function initAuth() {
     State.currentUser = JSON.parse(savedUser);
     await bootstrapAfterLogin();
     showChatScreen();
-    startTimeTicker();
   }
 }
 
