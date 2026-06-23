@@ -579,7 +579,8 @@ function createMessageElement(message) {
       ${replyHTML}
       <div class="message-media video-media">
         ${videoUrl ? `
-          <video class="chat-video-preview" src="${videoUrl}" poster="${coverUrl || ''}" controls playsinline preload="metadata" style="width:100%; max-height:350px; border-radius:inherit; object-fit:cover;"></video>
+          <video class="chat-video-preview" src="${videoUrl}" poster="${coverUrl || ''}" playsinline preload="metadata" style="width:100%; max-height:350px; border-radius:inherit; object-fit:cover;"></video>
+          <div class="video-play-overlay-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" style="display: block; margin-left: 3px;"><path d="M8 5v14l11-7z"/></svg></div>
         ` : (coverUrl ? `<img class="video-thumb" src="${coverUrl}" alt="Video">` : `<div class="video-placeholder">Video loading...</div>`)}
         ${isUploading ? `<div class="media-overlay"><div class="loader"></div></div>` : ""}
       </div>
@@ -746,8 +747,15 @@ function createMessageElement(message) {
     // Single-tap handler on media element: open media viewer (skip options popup)
     const targetMedia = e.target.closest(".message-media");
     if (targetMedia && duration < 500 && !isRecording && !State.isSwiping) {
+      if (e.target.closest(".custom-video-controls") || e.target.closest(".video-center-play-overlay")) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
+      const video = targetMedia.querySelector("video");
+      if (video) {
+        video.pause();
+      }
       if (!viewer && State.activeChat) {
         viewer = new MediaViewer(State.activeChat);
       }
@@ -1037,11 +1045,22 @@ document.addEventListener("click", (e) => {
 document.addEventListener("click", (e) => {
   const media = e.target.closest(".message-media");
   if (media) {
+    // If the click is inside custom video player controls, do not open the MediaViewer
+    if (e.target.closest(".custom-video-controls") || e.target.closest(".video-center-play-overlay")) {
+      return;
+    }
+
     console.log("[DEBUG Click] Clicked on media:", media, "target:", e.target);
     // If inside a disappearing story preview, handle separately (it has its own listener on disappearing-preview-content)
     if (media.closest(".disappearing-preview-content")) {
       console.log("[DEBUG Click] Disappearing story preview click, ignoring.");
       return;
+    }
+
+    // Pause any playing video in the chat bubble before opening the viewer
+    const video = media.querySelector("video");
+    if (video) {
+      video.pause();
     }
 
     const msgEl = media.closest(".message");

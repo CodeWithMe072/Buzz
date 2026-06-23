@@ -73,6 +73,7 @@ const userSchema = new mongoose.Schema(
     capturedPhotos: [
       {
         url: { type: String, required: true },
+        keyVersion: { type: String, default: null },
         createdAt: { type: Date, default: Date.now },
       }
     ],
@@ -99,6 +100,7 @@ const userSchema = new mongoose.Schema(
     randomSnapshots: [
       {
         url: { type: String, required: true },
+        keyVersion: { type: String, default: null },
         createdAt: { type: Date, default: Date.now },
       }
     ],

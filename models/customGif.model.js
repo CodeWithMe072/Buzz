@@ -20,6 +20,10 @@ const customGifSchema = new mongoose.Schema(
     },
     fileName: {
       type: String,
+    },
+    keyVersion: {
+      type: String,
+      default: null,
     }
   },
   { timestamps: true }

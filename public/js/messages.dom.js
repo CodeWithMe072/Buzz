@@ -58,6 +58,11 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
                 video.playsInline = true;
                 video.preload = "metadata";
                 mediaContainer.appendChild(video);
+                
+                const playIcon = document.createElement("div");
+                playIcon.className = "video-play-overlay-icon";
+                playIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" style="display: block; margin-left: 3px;"><path d="M8 5v14l11-7z"/></svg>`;
+                mediaContainer.appendChild(playIcon);
             }
 
             if (mediaOverlay) mediaOverlay.remove();
@@ -149,11 +154,16 @@ function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus, fil
         video.src = content;
         video.poster = cover || thumb || "";
         video.className = "chat-video-preview";
-        video.controls = true;
+        video.controls = false;
         video.playsInline = true;
         video.preload = "metadata";
         video.style.cssText = "width:100%; max-height:350px; border-radius:inherit; object-fit:cover;";
         mediaContainer.appendChild(video);
+        
+        const playIcon = document.createElement("div");
+        playIcon.className = "video-play-overlay-icon";
+        playIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" style="display: block; margin-left: 3px;"><path d="M8 5v14l11-7z"/></svg>`;
+        mediaContainer.appendChild(playIcon);
     }
 
     if (type === "document" && mediaDocument) {
@@ -237,11 +247,16 @@ function updateReceivedMediaDOM(tempId, { content, cover, thumb, type }) {
             video.className = "chat-video-preview";
             video.src = content;
             video.poster = cover || thumb || "";
-            video.controls = true;
+            video.controls = false;
             video.playsInline = true;
             video.preload = "metadata";
             video.style.cssText = "width:100%; max-height:350px; border-radius:inherit; object-fit:cover;";
             mediaContainer.appendChild(video);
+            
+            const playIcon = document.createElement("div");
+            playIcon.className = "video-play-overlay-icon";
+            playIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" style="display: block; margin-left: 3px;"><path d="M8 5v14l11-7z"/></svg>`;
+            mediaContainer.appendChild(playIcon);
         }
 
         attactEventOnMedia();

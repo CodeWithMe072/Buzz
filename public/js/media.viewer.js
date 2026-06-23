@@ -257,6 +257,9 @@ class MediaViewer {
             video.src = item.src;
             video.controls = true;
             slide.appendChild(video);
+            if (window.initCustomVideoPlayer) {
+                window.initCustomVideoPlayer(video);
+            }
         } else {
             const img = document.createElement('img');
             img.loading = "lazy";

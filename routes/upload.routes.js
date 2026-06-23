@@ -1,7 +1,8 @@
 import express from "express";
 import multer from "multer";
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
+import { Readable } from "stream";
 import fse from "fs-extra";
 import path from "path";
 import os from "os";
@@ -9,6 +10,8 @@ import crypto from "crypto";
 import { protect } from "../middleware/auth.middleware.js";
 import { CustomGif } from "../models/customGif.model.js";
 import AdmZip from "adm-zip";
+import { createEncryptStream, createDecryptStream, incrementIV, getKey, encryptBuffer } from "../utils/mediaEncryption.js";
+import { redis } from "../lib/redis.js";
 
 const router = express.Router();
 
@@ -37,12 +40,58 @@ const BUCKET = process.env.R2_BUCKET;
 // https://cdn.yourdomain.com
 
 const PUBLIC_BASE_URL = process.env.R2_PUBLIC_URL;
+
+class MultiFileReadStream extends Readable {
+    constructor(chunkPaths) {
+        super();
+        this.chunkPaths = chunkPaths;
+        this.currentIndex = 0;
+        this.currentStream = null;
+    }
+
+    _read() {
+        if (this.currentStream) {
+            this.currentStream.resume();
+            return;
+        }
+
+        if (this.currentIndex >= this.chunkPaths.length) {
+            this.push(null);
+            return;
+        }
+
+        const chunkPath = this.chunkPaths[this.currentIndex++];
+        this.currentStream = fs.createReadStream(chunkPath);
+
+        this.currentStream.on("data", (chunk) => {
+            if (!this.push(chunk)) {
+                this.currentStream.pause();
+            }
+        });
+
+        this.currentStream.on("end", () => {
+            this.currentStream = null;
+            this._read();
+        });
+
+        this.currentStream.on("error", (err) => {
+            this.destroy(err);
+        });
+    }
+
+    _destroy(err, callback) {
+        if (this.currentStream) {
+            this.currentStream.destroy();
+        }
+        callback(err);
+    }
+}
 // =============================================================================
 // Public URL Helper
 // =============================================================================
 
 function getPublicFileUrl(key) {
-    return `${PUBLIC_BASE_URL}/${key}`;
+    return `/api/media?key=${encodeURIComponent(key)}&v=v1`;
 }
 
 // =============================================================================
@@ -50,12 +99,13 @@ function getPublicFileUrl(key) {
 // =============================================================================
 
 async function uploadToR2(filePath, key, mimeType) {
-    const fileStream = fs.createReadStream(filePath);
+    const fileBuffer = await fs.promises.readFile(filePath);
+    const encryptedBuffer = encryptBuffer(fileBuffer, "v1");
     await s3.send(
         new PutObjectCommand({
             Bucket: BUCKET,
             Key: key,
-            Body: fileStream,
+            Body: encryptedBuffer,
             ContentType: mimeType,
             CacheControl: "public, max-age=31536000",
         })
@@ -65,8 +115,23 @@ async function uploadToR2(filePath, key, mimeType) {
 
 async function deleteFromR2(url) {
     try {
-        if (!url || !url.startsWith(PUBLIC_BASE_URL)) return;
-        const key = url.replace(`${PUBLIC_BASE_URL}/`, "");
+        if (!url) return;
+        let key = "";
+        if (url.startsWith("/api/media")) {
+            const parsed = new URL(url, "http://localhost");
+            key = parsed.searchParams.get("key");
+        } else if (url.startsWith(PUBLIC_BASE_URL)) {
+            key = url.replace(`${PUBLIC_BASE_URL}/`, "");
+        } else {
+            try {
+                const parsed = new URL(url);
+                key = parsed.searchParams.get("key");
+            } catch {
+                return;
+            }
+        }
+        if (!key) return;
+
         await s3.send(
             new DeleteObjectCommand({
                 Bucket: BUCKET,
@@ -269,7 +334,8 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
                             user: req.user._id,
                             section: section,
                             url: url,
-                            fileName: file.name
+                            fileName: file.name,
+                            keyVersion: "v1"
                         });
                         await customGif.save();
                         uploadedGifs.push(customGif);
@@ -306,7 +372,8 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
                 user: req.user._id,
                 section: section,
                 url: url,
-                fileName: req.file.originalname
+                fileName: req.file.originalname,
+                keyVersion: "v1"
             });
             await customGif.save();
 
@@ -397,41 +464,25 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
     async (req, res) => {
         const { fileId, fileName, mimeType, } = req.body;
         const chunkDir = path.join(os.tmpdir(), "chunks", fileId);
-        const mergedPath = path.join(os.tmpdir(), `${Date.now()}_${fileName}`);
         try {
             // =========================================================================
-            // Get Chunks
+            // Get Chunks & Calculate Total Size
             // =========================================================================
             const chunkFiles = (
                 await fse.readdir(chunkDir)).sort((a, b) => Number(a) - Number(b));
 
-            // =========================================================================
-            // Merge Chunks Using Streams
-            // =========================================================================
-
-            const writeStream = fs.createWriteStream(mergedPath);
+            let totalSize = 0;
+            const chunkPaths = [];
             for (const chunkFile of chunkFiles) {
                 const chunkPath = path.join(chunkDir, chunkFile);
-                await new Promise((resolve, reject) => {
-                    const readStream = fs.createReadStream(chunkPath);
-                    readStream.on("error", reject);
-                    readStream.on("end", resolve);
-                    readStream.pipe(writeStream, { end: false, });
-                }
-                );
+                chunkPaths.push(chunkPath);
+                const stat = await fse.stat(chunkPath);
+                totalSize += stat.size;
             }
 
-            writeStream.end();
-
-            await new Promise((resolve, reject) => {
-                writeStream.on("finish", resolve);
-                writeStream.on("error", reject);
-            });
-
             // =========================================================================
-            // Upload To R2
+            // Stream Merge, Encrypt, and Upload Direct to R2
             // =========================================================================
-
             const isVideo = mimeType.startsWith("video/");
             const isAudio = mimeType.startsWith("audio/");
             const isDocument = [
@@ -445,28 +496,40 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                 "text/plain",
                 "text/csv",
             ].includes(mimeType);
+
             const key = generateFileKey(fileName, mimeType);
-            console.log(mergedPath)
-            console.log(key)
-            console.log(mimeType)
-            const url = await uploadToR2(mergedPath, key, mimeType);
+
+            // Stream chunks directly through encryption stream to s3
+            const mergedStream = new MultiFileReadStream(chunkPaths);
+            const encryptStream = createEncryptStream("v1");
+            const pipedStream = mergedStream.pipe(encryptStream);
+
+            await s3.send(
+                new PutObjectCommand({
+                    Bucket: BUCKET,
+                    Key: key,
+                    Body: pipedStream,
+                    ContentType: mimeType,
+                    ContentLength: totalSize + 16,
+                    CacheControl: "public, max-age=31536000",
+                })
+            );
+
+            const url = getPublicFileUrl(key);
+
             // =========================================================================
             // Cleanup
             // =========================================================================
-            // Get file size BEFORE deleting
-            const fileStat = await fse.stat(mergedPath);
             await fse.remove(chunkDir);
-            await fse.remove(mergedPath);
 
             // =========================================================================
             // Response
             // =========================================================================
-
             if (isVideo) {
                 return res.json(makeVideoUrls(url));
             }
             if (isDocument) {
-                return res.json(makeDocumentUrls(url, fileName, fileStat.size));
+                return res.json(makeDocumentUrls(url, fileName, totalSize));
             }
 
             if (isAudio) {
@@ -483,10 +546,188 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
         } catch (err) {
             console.error("[complete-upload] error:", err?.name, err?.message);
             await fse.remove(chunkDir).catch(() => { });
-            await fse.remove(mergedPath).catch(() => { });
             return res.status(500).json({ error: "Finalize upload failed", });
         }
     }
 );
+
+// =============================================================================
+// Download & Decrypt Media (with Authentication & Rate Limiting)
+// =============================================================================
+
+const mediaRateLimiter = async (req, res, next) => {
+    try {
+        const userId = req.user?._id?.toString() || req.ip;
+        const key = `ratelimit:media:${userId}`;
+        
+        const requests = await redis.incr(key);
+        if (requests === 1) {
+            await redis.expire(key, 60);
+        }
+        
+        if (requests > 150) {
+            return res.status(429).json({ error: "Too many requests. Please try again later." });
+        }
+        next();
+    } catch (err) {
+        console.error("Rate limiter error:", err);
+        next();
+    }
+};
+
+// In-memory media cache to avoid redundant HeadObject and IV fetches from R2
+const mediaCache = new Map();
+const MAX_CACHE_SIZE = 1000;
+const CACHE_TTL = 3600 * 1000; // 1 hour
+
+function getCachedMedia(key) {
+    const entry = mediaCache.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > CACHE_TTL) {
+        mediaCache.delete(key);
+        return null;
+    }
+    return entry.data;
+}
+
+function setCachedMedia(key, data) {
+    if (mediaCache.size >= MAX_CACHE_SIZE) {
+        // Evict oldest entry
+        const oldestKey = mediaCache.keys().next().value;
+        mediaCache.delete(oldestKey);
+    }
+    mediaCache.set(key, {
+        data,
+        timestamp: Date.now()
+    });
+}
+
+router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
+    const key = req.query.key;
+    const version = req.query.v || "v1";
+
+    if (!key) {
+        return res.status(400).json({ error: "Missing key parameter" });
+    }
+
+    try {
+        const rangeHeader = req.headers.range;
+
+        if (rangeHeader) {
+            let cached = getCachedMedia(key);
+            if (!cached) {
+                // Fetch the 16-byte IV from R2
+                const ivResponse = await s3.send(
+                    new GetObjectCommand({
+                        Bucket: BUCKET,
+                        Key: key,
+                        Range: "bytes=0-15",
+                    })
+                );
+
+                const ivChunks = [];
+                for await (const chunk of ivResponse.Body) {
+                    ivChunks.push(chunk);
+                }
+                const iv = Buffer.concat(ivChunks);
+
+                if (iv.length < 16) {
+                    return res.status(500).json({ error: "Failed to retrieve encryption IV" });
+                }
+
+                // Retrieve object metadata/size to calculate ranges
+                const headInfo = await s3.send(
+                    new HeadObjectCommand({
+                        Bucket: BUCKET,
+                        Key: key,
+                    })
+                );
+
+                cached = {
+                    iv,
+                    totalEncryptedSize: headInfo.ContentLength,
+                    contentType: headInfo.ContentType || "application/octet-stream"
+                };
+                setCachedMedia(key, cached);
+            }
+
+            const { iv, totalEncryptedSize, contentType } = cached;
+            const totalPlaintextSize = totalEncryptedSize - 16;
+
+            const parts = rangeHeader.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+
+            // Limit chunk size to maximum 2MB for fast loading and low memory usage
+            const maxChunkSize = 1024 * 1024 * 2; // 2MB
+            let end = parts[1] ? parseInt(parts[1], 10) : start + maxChunkSize - 1;
+            if (end - start + 1 > maxChunkSize) {
+                end = start + maxChunkSize - 1;
+            }
+            if (end >= totalPlaintextSize) {
+                end = totalPlaintextSize - 1;
+            }
+
+            if (start >= totalPlaintextSize || end >= totalPlaintextSize) {
+                res.status(416).set("Content-Range", `bytes */${totalPlaintextSize}`).end();
+                return;
+            }
+
+            const chunkSize = (end - start) + 1;
+            const blockNumber = Math.floor(start / 16);
+            const byteOffset = start % 16;
+
+            const startByteR2 = 16 + blockNumber * 16;
+            const endByteR2 = 16 + end;
+
+            const ciphertextResponse = await s3.send(
+                new GetObjectCommand({
+                    Bucket: BUCKET,
+                    Key: key,
+                    Range: `bytes=${startByteR2}-${endByteR2}`,
+                })
+            );
+
+            const ciphertextChunks = [];
+            for await (const chunk of ciphertextResponse.Body) {
+                ciphertextChunks.push(chunk);
+            }
+            const ciphertext = Buffer.concat(ciphertextChunks);
+
+            const adjustedIv = incrementIV(iv, blockNumber);
+            const cipherKey = getKey(version);
+            const decipher = crypto.createDecipheriv("aes-256-ctr", cipherKey, adjustedIv);
+            const decryptedWholeBlock = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+            const finalDecryptedSlice = decryptedWholeBlock.subarray(byteOffset, byteOffset + chunkSize);
+
+            res.writeHead(206, {
+                "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
+                "Accept-Ranges": "bytes",
+                "Content-Length": finalDecryptedSlice.length,
+                "Content-Type": contentType,
+                "Cache-Control": "public, max-age=31536000",
+            });
+            res.end(finalDecryptedSlice);
+        } else {
+            // Full file request
+            const response = await s3.send(
+                new GetObjectCommand({
+                    Bucket: BUCKET,
+                    Key: key,
+                })
+            );
+
+            res.writeHead(200, {
+                "Content-Type": response.ContentType || "application/octet-stream",
+                "Cache-Control": "public, max-age=31536000",
+            });
+
+            const decryptStream = createDecryptStream(version);
+            response.Body.pipe(decryptStream).pipe(res);
+        }
+    } catch (err) {
+        console.error("[api/media] decryption/download error:", err);
+        return res.status(500).json({ error: "Failed to download or decrypt media" });
+    }
+});
 
 export default router;

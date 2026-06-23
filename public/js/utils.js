@@ -457,4 +457,237 @@ function formatLastMessage(message) {
     return message.content || `📷 ${message.type}`;
 }
 
+window.initCustomVideoPlayer = function (video) {
+    if (!video || video.dataset.customPlayerInitialized) return;
+    video.dataset.customPlayerInitialized = "true";
+
+    // Disable native controls
+    video.controls = false;
+
+    // Wrap the video
+    const parent = video.parentElement;
+    if (!parent) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "custom-video-player";
+    
+    // Copy styles from video to wrapper
+    wrapper.style.cssText = video.style.cssText;
+    const originalObjectFit = video.style.objectFit || "contain";
+    video.style.cssText = `width: 100%; height: 100%; display: block; object-fit: ${originalObjectFit}; max-height: inherit; border-radius: inherit;`;
+
+    parent.replaceChild(wrapper, video);
+    wrapper.appendChild(video);
+
+    // Define SVG templates for controls
+    const svgPlay = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="display:block;"><path d="M8 5v14l11-7z"/></svg>`;
+    const svgPause = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="display:block;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+    const svgVolumeHigh = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+    const svgVolumeMute = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+    const svgMaximize = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>`;
+    const svgMinimize = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"/></svg>`;
+
+    // Create center overlay
+    const centerOverlay = document.createElement("div");
+    centerOverlay.className = "video-center-play-overlay";
+    centerOverlay.innerHTML = `<button class="video-center-play-btn" type="button"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" style="display:block; margin-left:2px;"><path d="M8 5v14l11-7z"/></svg></button>`;
+
+    // Create controls panel
+    const controls = document.createElement("div");
+    controls.className = "custom-video-controls";
+    controls.innerHTML = `
+        <button class="video-control-btn play-pause-btn" type="button">${svgPlay}</button>
+        <div class="video-progress-container">
+            <div class="video-progress-track">
+                <div class="video-progress-fill"></div>
+            </div>
+            <input type="range" class="video-progress-slider" min="0" max="100" step="0.1" value="0">
+            <div class="video-progress-thumb"></div>
+        </div>
+        <span class="video-time-display">00:00 / 00:00</span>
+        <button class="video-control-btn volume-btn" type="button">${svgVolumeHigh}</button>
+        <button class="video-control-btn fullscreen-btn" type="button">${svgMaximize}</button>
+    `;
+
+    wrapper.appendChild(centerOverlay);
+    wrapper.appendChild(controls);
+
+    // Create loading overlay for buffering
+    const loadingOverlay = document.createElement("div");
+    loadingOverlay.className = "video-loading-overlay hidden";
+    loadingOverlay.innerHTML = `<div class="video-loader"></div>`;
+    wrapper.appendChild(loadingOverlay);
+
+    // Get element references
+    const centerPlayBtn = centerOverlay.querySelector(".video-center-play-btn");
+    const playPauseBtn = controls.querySelector(".play-pause-btn");
+    const progressFill = controls.querySelector(".video-progress-fill");
+    const progressSlider = controls.querySelector(".video-progress-slider");
+    const progressThumb = controls.querySelector(".video-progress-thumb");
+    const timeDisplay = controls.querySelector(".video-time-display");
+    const volumeBtn = controls.querySelector(".volume-btn");
+    const fullscreenBtn = controls.querySelector(".fullscreen-btn");
+
+    // Prevent controls and overlays from bubbling click events (which would open MediaViewer)
+    controls.addEventListener("click", (e) => e.stopPropagation());
+    centerOverlay.addEventListener("click", (e) => e.stopPropagation());
+
+    const formatTimeDisplay = (seconds) => {
+        if (isNaN(seconds) || seconds === Infinity) return "00:00";
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const togglePlay = () => {
+        if (video.paused) {
+            video.play().catch(err => console.error("Play failed:", err));
+        } else {
+            video.pause();
+        }
+    };
+
+    // Video click toggles play/pause ONLY inside lightbox
+    video.addEventListener("click", (e) => {
+        const isInLightbox = !!video.closest("#mediaViewer") || !!video.closest(".media-slide") || !!video.closest(".moments-lightbox");
+        if (isInLightbox) {
+            e.stopPropagation();
+            togglePlay();
+        }
+    });
+
+    centerPlayBtn.addEventListener("click", togglePlay);
+    playPauseBtn.addEventListener("click", togglePlay);
+
+    // Progress updates
+    video.addEventListener("timeupdate", () => {
+        const pct = (video.currentTime / video.duration) * 100 || 0;
+        progressSlider.value = pct;
+        progressFill.style.width = pct + "%";
+        progressThumb.style.left = pct + "%";
+        timeDisplay.textContent = `${formatTimeDisplay(video.currentTime)} / ${formatTimeDisplay(video.duration)}`;
+    });
+
+    video.addEventListener("loadedmetadata", () => {
+        timeDisplay.textContent = `${formatTimeDisplay(video.currentTime)} / ${formatTimeDisplay(video.duration)}`;
+    });
+
+    // Handle range input changes
+    progressSlider.addEventListener("input", () => {
+        const pct = parseFloat(progressSlider.value);
+        progressFill.style.width = pct + "%";
+        progressThumb.style.left = pct + "%";
+        const time = (pct / 100) * video.duration || 0;
+        timeDisplay.textContent = `${formatTimeDisplay(time)} / ${formatTimeDisplay(video.duration)}`;
+    });
+
+    progressSlider.addEventListener("change", () => {
+        const pct = parseFloat(progressSlider.value);
+        video.currentTime = (pct / 100) * video.duration || 0;
+    });
+
+    // Volume control
+    volumeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        video.muted = !video.muted;
+    });
+
+    const updateVolumeIcon = () => {
+        if (video.muted || video.volume === 0) {
+            volumeBtn.innerHTML = svgVolumeMute;
+        } else {
+            volumeBtn.innerHTML = svgVolumeHigh;
+        }
+    };
+
+    video.addEventListener("volumechange", updateVolumeIcon);
+    updateVolumeIcon();
+
+    // Fullscreen control
+    fullscreenBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!document.fullscreenElement) {
+            wrapper.requestFullscreen().catch(err => {
+                video.requestFullscreen().catch(err2 => console.error(err2));
+            });
+        } else {
+            document.exitFullscreen().catch(err => console.error(err));
+        }
+    });
+
+    const onFullscreenChange = () => {
+        if (document.fullscreenElement === wrapper) {
+            fullscreenBtn.innerHTML = svgMinimize;
+        } else {
+            fullscreenBtn.innerHTML = svgMaximize;
+        }
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+
+    // Cleanup fullscreen listener if wrapper removed (optional but good practice)
+    const observer = new MutationObserver((mutations) => {
+        if (!document.body.contains(wrapper)) {
+            document.removeEventListener("fullscreenchange", onFullscreenChange);
+            observer.disconnect();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Track play/pause state for UI updates
+    video.addEventListener("play", () => {
+        playPauseBtn.innerHTML = svgPause;
+        centerOverlay.style.opacity = "0";
+        centerOverlay.style.pointerEvents = "none";
+    });
+
+    video.addEventListener("pause", () => {
+        playPauseBtn.innerHTML = svgPlay;
+        centerOverlay.style.opacity = "1";
+        centerOverlay.style.pointerEvents = "auto";
+    });
+
+    // Initial state setup
+    if (video.paused) {
+        playPauseBtn.innerHTML = svgPlay;
+        centerOverlay.style.opacity = "1";
+        centerOverlay.style.pointerEvents = "auto";
+    } else {
+        playPauseBtn.innerHTML = svgPause;
+        centerOverlay.style.opacity = "0";
+        centerOverlay.style.pointerEvents = "none";
+    }
+
+    // Inactivity timeout for controls
+    let controlsTimeout;
+    const showControlsTemp = () => {
+        wrapper.classList.add("controls-active");
+        clearTimeout(controlsTimeout);
+        if (!video.paused) {
+            controlsTimeout = setTimeout(() => {
+                wrapper.classList.remove("controls-active");
+            }, 2000);
+        }
+    };
+
+    wrapper.addEventListener("mousemove", showControlsTemp);
+    wrapper.addEventListener("touchstart", showControlsTemp, { passive: true });
+    video.addEventListener("play", showControlsTemp);
+    video.addEventListener("pause", () => {
+        wrapper.classList.add("controls-active");
+        clearTimeout(controlsTimeout);
+    });
+
+    // Buffering & Loading events
+    const showVideoLoader = () => loadingOverlay.classList.remove("hidden");
+    const hideVideoLoader = () => loadingOverlay.classList.add("hidden");
+
+    video.addEventListener("waiting", showVideoLoader);
+    video.addEventListener("seeking", showVideoLoader);
+    video.addEventListener("playing", hideVideoLoader);
+    video.addEventListener("seeked", hideVideoLoader);
+    video.addEventListener("canplay", hideVideoLoader);
+    video.addEventListener("pause", hideVideoLoader);
+    video.addEventListener("error", hideVideoLoader);
+};
+
 

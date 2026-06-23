@@ -4,6 +4,16 @@ import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
 import { socketAuth } from "../middleware/auth.middleware.js";
 
+function extractKeyVersion(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url, "http://localhost");
+    return parsed.searchParams.get("v") || null;
+  } catch {
+    return null;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    HELPER — verify two users are connected before allowing message
 ═══════════════════════════════════════════════════════════════ */
@@ -148,6 +158,7 @@ export default function initSocket(io) {
           content,
           fileName,
           fileSize,
+          keyVersion: extractKeyVersion(content) || extractKeyVersion(cover) || extractKeyVersion(thumb) || null,
           caption,
           cover,
           thumb,
@@ -261,6 +272,7 @@ export default function initSocket(io) {
               type: mediaType,
               cover: cover || null,
               thumb: thumb || null,
+              keyVersion: extractKeyVersion(url) || extractKeyVersion(cover) || extractKeyVersion(thumb) || null,
               "status.mediaReady": true,
             },
           }

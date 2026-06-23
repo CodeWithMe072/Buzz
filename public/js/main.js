@@ -183,3 +183,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }, 30000);
 });
+
+// Global video player coordination: ensure only one video plays at a time
+document.addEventListener("play", function (event) {
+    if (event.target && event.target.tagName === "VIDEO") {
+        const playingVideo = event.target;
+        document.querySelectorAll("video").forEach((video) => {
+            if (video !== playingVideo) {
+                video.pause();
+            }
+        });
+    }
+}, true); // Capture phase is required because 'play' event does not bubble

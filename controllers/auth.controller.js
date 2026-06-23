@@ -6,6 +6,7 @@ import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
 import { generateRefreshToken, generateToken } from "../middleware/auth.middleware.js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { encryptBuffer } from "../utils/mediaEncryption.js";
 
 // Configure Cloudflare R2 client
 const s3 = new S3Client({
@@ -80,6 +81,13 @@ export const register = async (req, res) => {
 
     /* --- Issue token --- */
     const token = generateToken(user._id);
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "PROD",
+      sameSite: "lax",
+      maxAge: 15 * 60 * 1000 // 15 mins
+    });
 
     res.status(201).json({
       status: true,
@@ -163,6 +171,13 @@ export const login = async (req, res) => {
         sameSite: "lax",
         maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
       });
+
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "PROD",
+        sameSite: "lax",
+        maxAge: 15 * 60 * 1000 // 15 mins
+      });
     }
 
     res.status(200).json({
@@ -187,6 +202,7 @@ export const login = async (req, res) => {
 export const logout = async (req, res) => {
   try {
     res.clearCookie("refreshToken");
+    res.clearCookie("token");
 
     return res.status(200).json({
       status: true,
@@ -224,6 +240,13 @@ export const refresh = async (req, res) => {
       secure: process.env.NODE_ENV === "PROD",
       sameSite: "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000
+    });
+
+    res.cookie("token", accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "PROD",
+      sameSite: "lax",
+      maxAge: 15 * 60 * 1000 // 15 mins
     });
 
     return res.json({
@@ -444,19 +467,22 @@ export const uploadLogPhoto = async (req, res) => {
     // Generate unique filename/key
     const filename = `logs/log_${req.user._id}_${Date.now()}.jpg`;
 
+    // Encrypt the buffer using v1 key
+    const encryptedBuffer = encryptBuffer(buffer, "v1");
+
     // Upload to Cloudflare R2
     await s3.send(
       new PutObjectCommand({
         Bucket: BUCKET,
         Key: filename,
-        Body: buffer,
+        Body: encryptedBuffer,
         ContentType: "image/jpeg",
         CacheControl: "public, max-age=31536000",
       })
     );
 
-    const imageUrl = `${PUBLIC_BASE_URL}/${filename}`;
-    const newPhoto = { url: imageUrl, createdAt: new Date() };
+    const imageUrl = `/api/media?key=${encodeURIComponent(filename)}&v=v1`;
+    const newPhoto = { url: imageUrl, keyVersion: "v1", createdAt: new Date() };
 
     // Save to user model
     await User.findByIdAndUpdate(
@@ -495,19 +521,22 @@ export const uploadMomentPhoto = async (req, res) => {
     // Generate unique filename/key
     const filename = `moments/moment_${req.user._id}_${Date.now()}.jpg`;
 
+    // Encrypt the buffer using v1 key
+    const encryptedBuffer = encryptBuffer(buffer, "v1");
+
     // Upload to Cloudflare R2
     await s3.send(
       new PutObjectCommand({
         Bucket: BUCKET,
         Key: filename,
-        Body: buffer,
+        Body: encryptedBuffer,
         ContentType: "image/jpeg",
         CacheControl: "public, max-age=31536000",
       })
     );
 
-    const imageUrl = `${PUBLIC_BASE_URL}/${filename}`;
-    const newPhoto = { url: imageUrl, createdAt: new Date() };
+    const imageUrl = `/api/media?key=${encodeURIComponent(filename)}&v=v1`;
+    const newPhoto = { url: imageUrl, keyVersion: "v1", createdAt: new Date() };
 
     // Save to user model and update timestamp
     await User.findByIdAndUpdate(

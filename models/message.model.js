@@ -89,6 +89,11 @@ const messageSchema = new mongoose.Schema(
       default: null,
     },
 
+    keyVersion: {
+      type: String,
+      default: null,
+    },
+
     isDisappearing: {
       type: Boolean,
       default: false,

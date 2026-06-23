@@ -22,6 +22,9 @@ export const protect = async (req, res, next) => {
     if (!token && req.cookies?.token) {
       token = req.cookies.token;
     }
+    if (!token && req.query?.token) {
+      token = req.query.token;
+    }
 
     if (!token) {
       return res.status(401).json({
