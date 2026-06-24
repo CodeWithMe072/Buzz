@@ -23,7 +23,7 @@ app.js
 clear_messages.js
 decrypted_file.js
 scratch_check.js
-to-remove-txt
+to-remove.txt
 
 # ZIP files
 *.zip
