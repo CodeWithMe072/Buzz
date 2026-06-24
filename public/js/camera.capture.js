@@ -13,6 +13,7 @@
     let currentCaptureMode = "photo"; // "photo" or "video"
     let capturedBlob = null;
     let capturedFileType = ""; // "image/jpeg" or "video/webm"
+    let currentFlashMode = "off"; // "off", "on", "auto"
     
     // Story Viewer Timers
     let storyDurationTimer = null;
@@ -59,6 +60,13 @@
         if (closeBtn && closeBtn.dataset.listenerAttached !== "true") {
             closeBtn.dataset.listenerAttached = "true";
             closeBtn.addEventListener("click", closeCameraCaptureOverlay);
+        }
+
+        // Flash Toggle Button
+        const flashBtn = document.getElementById("camera-capture-flash-btn");
+        if (flashBtn && flashBtn.dataset.listenerAttached !== "true") {
+            flashBtn.dataset.listenerAttached = "true";
+            flashBtn.addEventListener("click", toggleFlashMode);
         }
 
         // Camera Flip Toggle Button
@@ -217,6 +225,15 @@
             videoEl.srcObject = null;
         }
         if (stream) {
+            try {
+                const videoTrack = stream.getVideoTracks()[0];
+                if (videoTrack && typeof videoTrack.getCapabilities === "function") {
+                    const capabilities = videoTrack.getCapabilities();
+                    if (capabilities.torch) {
+                        videoTrack.applyConstraints({ advanced: [{ torch: false }] }).catch(() => {});
+                    }
+                }
+            } catch (err) {}
             stream.getTracks().forEach(track => track.stop());
             stream = null;
         }
@@ -225,6 +242,18 @@
 
     function closeCameraCaptureOverlay() {
         stopLiveCameraStream();
+        
+        // Reset flash mode to off only when closing the camera modal
+        currentFlashMode = "off";
+        const flashBtn = document.getElementById("camera-capture-flash-btn");
+        const badge = document.getElementById("camera-capture-flash-badge");
+        if (flashBtn && badge) {
+            flashBtn.title = "Flash Off";
+            badge.textContent = "OFF";
+            badge.style.background = "#4b5563";
+            badge.style.color = "#fff";
+        }
+
         const overlay = document.getElementById("camera-capture-overlay");
         if (overlay) {
             overlay.style.display = "none";
@@ -241,6 +270,81 @@
             setTimeout(() => { flipBtn.style.transform = "none"; }, 300);
         }
         await startLiveCameraStream();
+    }
+
+    function toggleFlashMode() {
+        const flashBtn = document.getElementById("camera-capture-flash-btn");
+        const badge = document.getElementById("camera-capture-flash-badge");
+        if (!flashBtn || !badge) return;
+
+        if (currentFlashMode === "off") {
+            currentFlashMode = "on";
+            flashBtn.title = "Flash On";
+            badge.textContent = "ON";
+            badge.style.background = "#eab308";
+            badge.style.color = "#000";
+        } else if (currentFlashMode === "on") {
+            currentFlashMode = "auto";
+            flashBtn.title = "Auto Flash";
+            badge.textContent = "AUTO";
+            badge.style.background = "#a855f7";
+            badge.style.color = "#fff";
+        } else {
+            currentFlashMode = "off";
+            flashBtn.title = "Flash Off";
+            badge.textContent = "OFF";
+            badge.style.background = "#4b5563";
+            badge.style.color = "#fff";
+        }
+        console.log("[Camera] Flash mode changed to:", currentFlashMode);
+    }
+
+    function checkIsDark() {
+        const videoEl = document.getElementById("camera-capture-video");
+        if (!videoEl || videoEl.paused || videoEl.ended) return false;
+        try {
+            const canvas = document.createElement("canvas");
+            canvas.width = 16;
+            canvas.height = 16;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(videoEl, 0, 0, 16, 16);
+            const imgData = ctx.getImageData(0, 0, 16, 16).data;
+            let totalLuminance = 0;
+            for (let i = 0; i < imgData.length; i += 4) {
+                const r = imgData[i];
+                const g = imgData[i+1];
+                const b = imgData[i+2];
+                const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+                totalLuminance += luminance;
+            }
+            const avgLuminance = totalLuminance / (imgData.length / 4);
+            console.log("[Camera] Average stream luminance:", avgLuminance);
+            return avgLuminance < 65;
+        } catch (e) {
+            console.warn("[Camera] Ambient light calculation failed, defaulting to dark:", e);
+            return true;
+        }
+    }
+
+    async function enableHardwareTorch(enable) {
+        if (!stream) return false;
+        const videoTrack = stream.getVideoTracks()[0];
+        if (!videoTrack) return false;
+        try {
+            const capabilities = typeof videoTrack.getCapabilities === "function" ? videoTrack.getCapabilities() : {};
+            if (capabilities.torch) {
+                await videoTrack.applyConstraints({
+                    advanced: [{ torch: !!enable }]
+                });
+                console.log(`[Camera] Hardware torch set to: ${enable}`);
+                return true;
+            } else {
+                console.log("[Camera] Hardware torch is not supported on this track/device.");
+            }
+        } catch (err) {
+            console.warn("[Camera] Failed to apply torch constraint:", err);
+        }
+        return false;
     }
 
     function setCaptureMode(mode) {
@@ -297,10 +401,47 @@
         }
     }
 
-    function takePhotoSnapshot() {
+    async function takePhotoSnapshot() {
         const videoEl = document.getElementById("camera-capture-video");
         const imgPreview = document.getElementById("camera-capture-img-preview");
+        const screenFlash = document.getElementById("camera-screen-flash");
         if (!videoEl || !imgPreview) return;
+
+        const isDark = checkIsDark();
+        const shouldFlash = currentFlashMode === "on" || (currentFlashMode === "auto" && isDark);
+
+        if (shouldFlash) {
+            console.log("[Camera] Flash active. Triggering hardware and screen overlay flash.");
+            if (screenFlash) {
+                screenFlash.style.display = "block";
+                screenFlash.style.opacity = "0.95";
+            }
+            await enableHardwareTorch(true);
+            
+            // Wait for camera stream to recover from applyConstraints black/blank transition
+            const startTime = Date.now();
+            while (Date.now() - startTime < 800) {
+                const tempCanvas = document.createElement("canvas");
+                tempCanvas.width = 1;
+                tempCanvas.height = 1;
+                const tempCtx = tempCanvas.getContext("2d");
+                tempCtx.drawImage(videoEl, 0, 0, 1, 1);
+                const pixel = tempCtx.getImageData(0, 0, 1, 1).data;
+                const brightness = 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2];
+                if (brightness > 2) {
+                    console.log(`[Camera] Stream recovered after ${Date.now() - startTime}ms (brightness: ${brightness})`);
+                    break;
+                }
+                await new Promise(r => setTimeout(r, 30));
+            }
+            
+            // Ensure the total stabilization/exposure adjustment delay is at least 650ms
+            const elapsed = Date.now() - startTime;
+            const remaining = Math.max(0, 650 - elapsed);
+            if (remaining > 0) {
+                await new Promise(resolve => setTimeout(resolve, remaining));
+            }
+        }
 
         // Capture snapshot canvas frame
         const canvas = document.createElement("canvas");
@@ -314,9 +455,15 @@
         
         // Apply canvas context filter matching current selected filter
         const activeFilter = FILTERS.find(f => f.name === currentFilter);
-        if (activeFilter) {
-            ctx.filter = activeFilter.css;
+        let filterCss = activeFilter ? activeFilter.css : "none";
+        if (shouldFlash) {
+            if (filterCss === "none") {
+                filterCss = "brightness(1.2) contrast(1.05)";
+            } else {
+                filterCss += " brightness(1.2) contrast(1.05)";
+            }
         }
+        ctx.filter = filterCss;
 
         // Draw camera frame (mirrored if using front camera)
         ctx.save();
@@ -326,6 +473,16 @@
         }
         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
         ctx.restore();
+
+        if (shouldFlash) {
+            await enableHardwareTorch(false);
+            if (screenFlash) {
+                screenFlash.style.opacity = "0";
+                setTimeout(() => {
+                    screenFlash.style.display = "none";
+                }, 150);
+            }
+        }
 
         // Helper to output to blob and preview once all baking is done
         const bakeOverlaysAndSave = () => {
@@ -441,9 +598,16 @@
         }
     }
 
-    function startVideoRecording() {
+    async function startVideoRecording() {
         if (!stream) return;
         recordedChunks = [];
+
+        const isDark = checkIsDark();
+        const shouldFlash = currentFlashMode === "on" || (currentFlashMode === "auto" && isDark);
+        if (shouldFlash) {
+            console.log("[Camera] Video recording starting with flash (torch).");
+            await enableHardwareTorch(true);
+        }
         
         // Use optimal recording options
         let options = { 
@@ -521,10 +685,11 @@
         recordTimerInterval = setInterval(updateRecordingTimer, 500);
     }
 
-    function stopVideoRecording() {
+    async function stopVideoRecording() {
         if (mediaRecorder && mediaRecorder.state === "recording") {
             mediaRecorder.stop();
         }
+        await enableHardwareTorch(false);
         stopRecordingTimer();
     }
 
@@ -592,6 +757,7 @@
 
         currentFilter = "normal";
         selectCameraFilter("normal");
+
 
         capturedBlob = null;
         capturedFileType = "";

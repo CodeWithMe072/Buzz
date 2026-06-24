@@ -55,6 +55,10 @@
             <video id="camera-capture-video-preview" controls loop playsinline
                 style="display: none; width: 100%; height: 100%; object-fit: cover;"></video>
 
+            <!-- Screen Flash Overlay -->
+            <div id="camera-screen-flash"
+                style="display: none; position: absolute; inset: 0; background: #ffffff; z-index: 2909; pointer-events: none; opacity: 0; transition: opacity 0.15s ease;"></div>
+
             <!-- ── Dynamic Filter Overlays ── -->
             <!-- Vibes Glasses Overlay -->
             <div id="overlay-glasses" class="camera-graphic-overlay"
@@ -115,7 +119,15 @@
             <div id="camera-capture-timer"
                 style="display: none; background: rgba(239, 68, 68, 0.85); color: white; padding: 5px 12px; border-radius: 15px; font-weight: 600; font-size: 13px;">
                 0:00</div>
-            <div style="width: 40px;"></div> <!-- balance -->
+            <!-- Flash Toggle Button -->
+            <button type="button" id="camera-capture-flash-btn"
+                style="background: rgba(0,0,0,0.5); border: none; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; cursor: pointer; transition: background 0.2s;"
+                title="Flash Off">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                <span id="camera-capture-flash-badge" style="position: absolute; bottom: -2px; right: -2px; font-size: 8px; font-weight: 800; background: #4b5563; color: white; padding: 1px 3.5px; border-radius: 4px; line-height: 1; border: 1px solid #111; font-family: 'Outfit', 'Inter', sans-serif;">OFF</span>
+            </button>
         </div>
 
         <!-- Bottom Controls -->
