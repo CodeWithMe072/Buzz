@@ -156,6 +156,13 @@ async function bootstrapAfterLogin() {
     // Sort conversations by last message timestamp once all have loaded
     State.conversations.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     renderChatList(document.getElementById("chat-search")?.value?.trim()?.toLowerCase() || "");
+
+    // If socket is already connected, emit delivery sync and flush queues now that messages are loaded
+    if (typeof socket !== "undefined" && socket && socket.connected) {
+      socket.emit("sync:delivered");
+      if (typeof flushOutbox === "function") flushOutbox();
+      if (typeof flushUploadQueue === "function") flushUploadQueue();
+    }
   }).catch(console.error);
 
   // 4. Connect socket with JWT in background

@@ -402,7 +402,11 @@ function initSocket() {
   socket.on("chat:seen_sync", ({ from }) => {
     // Our own other device tells us messages FROM "from" were seen
     console.log(`[Socket Client] chat:seen_sync received. from: ${from}`);
-    updateMessageSeenByTempId(from);
+    const conv = State.conversations.find(c => c.id === from);
+    if (conv) {
+      conv.unread = 0;
+    }
+    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   // ── Media uploaded ────────────────────────────────────────

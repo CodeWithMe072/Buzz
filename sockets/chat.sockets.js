@@ -61,7 +61,7 @@ export default function initSocket(io) {
     // Clean up stale socket IDs from Redis on connect
     const existingSockets = await redis.smembers(`user:${userId}:sockets`);
     for (const sid of existingSockets) {
-      if (!io.sockets.sockets.has(sid)) {
+      if (!socket.nsp.sockets.has(sid)) {
         await redis.srem(`user:${userId}:sockets`, sid);
       }
     }
@@ -80,6 +80,51 @@ export default function initSocket(io) {
     const onlineUsers = await redis.smembers("online:users");
     console.log(`[Socket] ${userId} connected. Current online:users:`, onlineUsers);
     socket.emit("online:list", { users: onlineUsers });
+
+    // Deliver pending messages on connect
+    try {
+      const undelivered = await Message.find({
+        to: userId,
+        "status.delivered": false,
+      });
+
+      if (undelivered.length > 0) {
+        await Message.updateMany(
+          { _id: { $in: undelivered.map(m => m._id) } },
+          { $set: { "status.delivered": true, deliveredAt: new Date() } }
+        );
+
+        for (const msg of undelivered) {
+          socket.emit("private_message", {
+            id: msg.tempId,
+            from: msg.from.toString(),
+            type: msg.type,
+            content: msg.content,
+            caption: msg.caption,
+            cover: msg.cover || null,
+            thumb: msg.thumb || null,
+            replyTo: msg.replyTo,
+            fileName: msg.fileName,
+            fileSize: msg.fileSize,
+            callType: msg.callType,
+            callStatus: msg.callStatus,
+            callRoomId: msg.callRoomId,
+            callExpiresAt: msg.callExpiresAt,
+            callDuration: msg.callDuration,
+            isDisappearing: msg.isDisappearing,
+            cameraFacing: msg.cameraFacing,
+            cameraFilter: msg.cameraFilter,
+            timestamp: msg.createdAt,
+            status: { delivered: true },
+          });
+
+          const senderId = msg.from.toString();
+          io.to(senderId).emit("message:delivered", { tempId: msg.tempId });
+        }
+      }
+    } catch (err) {
+      console.error("[Socket] Error syncing undelivered on connect:", err);
+    }
 
     /* ─────────────────────────────────────────────────────────
        PRIVATE MESSAGE
@@ -121,6 +166,17 @@ export default function initSocket(io) {
         // Cache sender for delivery ACK lookup
         await redis.set(`msg:${tempId}:from`, userId, "EX", 86400);
 
+        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+        const activeReceiverSockets = [];
+        for (const sid of receiverSockets) {
+          if (socket.nsp.sockets.has(sid)) {
+            activeReceiverSockets.push(sid);
+          } else {
+            await redis.srem(`user:${to}:sockets`, sid).catch(() => {});
+          }
+        }
+        const isOnline = activeReceiverSockets.length > 0;
+
         // Deliver to receiver instantly
         io.to(to).emit("private_message", {
           id: tempId,
@@ -137,7 +193,7 @@ export default function initSocket(io) {
           cameraFacing,
           cameraFilter,
           timestamp: now,
-          status: { delivered: false },
+          status: { delivered: isOnline },
         });
 
         // Sync to sender's other devices
@@ -147,7 +203,10 @@ export default function initSocket(io) {
         });
 
         // Ack to sender immediately
-        socket.emit("message_ack", { tempId, status: "sent" });
+        socket.emit("message_ack", { tempId, status: isOnline ? "delivered" : "sent" });
+        if (isOnline) {
+          io.to(userId).emit("message:delivered", { tempId });
+        }
 
         // Persist to DB (async, non-blocking)
         Message.create({
@@ -167,7 +226,8 @@ export default function initSocket(io) {
           isDisappearing,
           cameraFacing,
           cameraFilter,
-          status: { sent: true, delivered: false, seen: false },
+          status: { sent: true, delivered: isOnline, seen: false },
+          deliveredAt: isOnline ? new Date() : null,
         })
           .then(() => socket.emit("message_saved", { tempId }))
           .catch((err) => {
@@ -176,8 +236,7 @@ export default function initSocket(io) {
           });
 
 
-        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
-        if (!receiverSockets.length) {
+        if (!isOnline) {
           const [receiver, sender] = await Promise.all([
             User.findById(to).select("telegramChatId notificationsEnabled"),
             User.findById(userId).select("username"),
@@ -651,7 +710,7 @@ export default function initSocket(io) {
       const activeRemaining = [];
       for (const sid of remaining) {
         if (sid === socket.id) continue;
-        if (io.sockets.sockets.has(sid)) {
+        if (socket.nsp.sockets.has(sid)) {
           activeRemaining.push(sid);
         } else {
           await redis.srem(`user:${userId}:sockets`, sid).catch(() => { });
@@ -688,7 +747,7 @@ export default function initSocket(io) {
         const current = await redis.smembers(`user:${userId}:sockets`);
         const activeCurrent = [];
         for (const sid of current) {
-          if (io.sockets.sockets.has(sid)) {
+          if (socket.nsp.sockets.has(sid)) {
             activeCurrent.push(sid);
           } else {
             await redis.srem(`user:${userId}:sockets`, sid).catch(() => { });
@@ -714,8 +773,30 @@ export default function initSocket(io) {
 ═══════════════════════════════════════════════════════════════ */
 async function markUserOffline(userId, socket) {
   try {
+    // Defense-in-depth: double check active sockets in Redis & namespace before marking offline
+    const remaining = await redis.smembers(`user:${userId}:sockets`);
+    const activeRemaining = [];
+    const nsp = socket?.nsp;
+    if (nsp) {
+      for (const sid of remaining) {
+        if (socket && sid === socket.id) continue;
+        if (nsp.sockets.has(sid)) {
+          activeRemaining.push(sid);
+        } else {
+          await redis.srem(`user:${userId}:sockets`, sid).catch(() => { });
+        }
+      }
+    }
+
+    if (activeRemaining.length > 0) {
+      console.log(`[Socket] Prevented marking ${userId} offline because ${activeRemaining.length} active socket(s) still remain.`);
+      return;
+    }
+
     await redis.srem("online:users", userId);
-    socket.nsp.emit("user:offline", { userId });
+    if (socket && socket.nsp) {
+      socket.nsp.emit("user:offline", { userId });
+    }
     await User.findByIdAndUpdate(userId, { lastSeen: new Date() });
     console.log(`[Socket] ${userId} marked offline`);
   } catch (err) {
