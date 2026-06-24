@@ -3,7 +3,7 @@ import { Connection } from "../models/connection.model.js";
 import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
 import { socketAuth } from "../middleware/auth.middleware.js";
-
+import { telegramService } from "../services/telegram.service.js";
 function extractKeyVersion(url) {
   if (!url) return null;
   try {
@@ -174,6 +174,31 @@ export default function initSocket(io) {
             console.error("[Socket] Message save failed:", err.message);
             socket.emit("message_save_failed", { tempId });
           });
+
+
+        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+        if (!receiverSockets.length) {
+          const [receiver, sender] = await Promise.all([
+            User.findById(to).select("telegramChatId notificationsEnabled"),
+            User.findById(userId).select("username"),
+          ]);
+
+          if (receiver?.telegramChatId && receiver?.notificationsEnabled) {
+            const senderName = sender?.username || "Someone";
+            const preview = type === "text"
+              ? (content || "").substring(0, 50)
+              : (caption || `Sent a ${type}`);
+
+            const notification = telegramService.formatMessageNotification(
+              senderName, type, preview
+            );
+            await telegramService.sendNotification(receiver.telegramChatId, notification);
+          }
+        }
+
+
+
+
 
       } catch (err) {
         console.error("[Socket] private_message error:", err);
@@ -629,7 +654,7 @@ export default function initSocket(io) {
         if (io.sockets.sockets.has(sid)) {
           activeRemaining.push(sid);
         } else {
-          await redis.srem(`user:${userId}:sockets`, sid).catch(() => {});
+          await redis.srem(`user:${userId}:sockets`, sid).catch(() => { });
         }
       }
 
@@ -666,7 +691,7 @@ export default function initSocket(io) {
           if (io.sockets.sockets.has(sid)) {
             activeCurrent.push(sid);
           } else {
-            await redis.srem(`user:${userId}:sockets`, sid).catch(() => {});
+            await redis.srem(`user:${userId}:sockets`, sid).catch(() => { });
           }
         }
         if (activeCurrent.length > 0) {
