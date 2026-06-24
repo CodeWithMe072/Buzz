@@ -1,3 +1,4 @@
+
 # Dependencies
 node_modules/
 
@@ -18,6 +19,11 @@ backup/
 
 # Notes
 task.md
+app.js
+clear_messages.js
+decrypted_file.js
+scratch_check.js
+to-remove-txt
 
 # ZIP files
 *.zip
@@ -35,4 +41,4 @@ Thumbs.db
 
 # IDE
 .vscode/
-.idea/
+.idea/ try to remove all these form github and git history
