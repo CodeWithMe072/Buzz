@@ -702,24 +702,26 @@
 
                 updateMediaDOM(tempId, { content: realUrl, cover, thumb, type: realType, uploadStatus: "uploaded", fileName: file.name, fileSize: file.size });
 
-                socket.emit("private_message", {
-                    message: {
-                        tempId,
-                        to,
-                        type: realType,
-                        content: realUrl,
-                        caption: null,
-                        replyTo: null,
-                        fileName: file.name,
-                        fileSize: file.size,
-                        clientTime: Date.now(),
-                        cover,
-                        thumb,
-                        isDisappearing: true,
-                        cameraFacing: message.cameraFacing,
-                        cameraFilter: message.cameraFilter
-                    }
-                });
+                if (socket && socket.connected) {
+                    socket.emit("private_message", {
+                        message: {
+                            tempId,
+                            to,
+                            type: realType,
+                            content: realUrl,
+                            caption: null,
+                            replyTo: null,
+                            fileName: file.name,
+                            fileSize: file.size,
+                            clientTime: Date.now(),
+                            cover,
+                            thumb,
+                            isDisappearing: true,
+                            cameraFacing: message.cameraFacing,
+                            cameraFilter: message.cameraFilter
+                        }
+                    });
+                }
 
                 UploadQueue.remove(tempId);
             } catch (err) {

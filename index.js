@@ -30,8 +30,8 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true,
   },
-  pingTimeout: 3000,
-  pingInterval: 5000,
+  pingTimeout: 30000,
+  pingInterval: 20000,
 });
 const PORT = process.env.PORT || 5500;
 

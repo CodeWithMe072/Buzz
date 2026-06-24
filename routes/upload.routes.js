@@ -725,6 +725,10 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
             response.Body.pipe(decryptStream).pipe(res);
         }
     } catch (err) {
+        if (err.name === "NoSuchKey" || err.Code === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
+            console.warn(`[api/media] Key not found in S3 storage: ${key}`);
+            return res.status(404).json({ error: "Media not found" });
+        }
         console.error("[api/media] decryption/download error:", err);
         return res.status(500).json({ error: "Failed to download or decrypt media" });
     }

@@ -819,6 +819,13 @@ function showMessageOptions(message, msgEl, event) {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
         Reply
       </button>
+      <button class="option-btn forward-opt">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 17 20 12 15 7" />
+          <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
+        </svg>
+        Forward
+      </button>
     </div>`;
 
   // Wire emoji buttons
@@ -840,6 +847,13 @@ function showMessageOptions(message, msgEl, event) {
     document.getElementById("reply-preview").style.display = "flex";
     document.getElementById("message-input").focus();
     popup.remove();
+  });
+
+  // Wire forward button
+  popup.querySelector(".forward-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    popup.remove();
+    openForwardModal(message);
   });
 
   // ── Smart positioning ──
@@ -885,6 +899,221 @@ function showMessageOptions(message, msgEl, event) {
 }
 
 // =============================================================================
+// FORWARD MESSAGE MODAL
+// =============================================================================
+function openForwardModal(message) {
+  // Remove existing modals if any
+  document.querySelectorAll(".fwd-overlay").forEach(m => m.remove());
+
+  const overlay = document.createElement("div");
+  overlay.className = "fwd-overlay";
+  overlay.id = "forwardModal";
+
+  // Build conversations/chats list
+  const chatListHTML = State.conversations.map(c => {
+    const isLetterAvatar = c.avatar && c.avatar.length === 1;
+    const avatarHTML = isLetterAvatar 
+      ? `<div class="fwd-avatar">${c.avatar}</div>` 
+      : `<img class="fwd-avatar" src="${c.avatar}" alt="${c.username}">`;
+
+    return `
+      <label class="fwd-item" data-chat-id="${c.id}">
+        ${avatarHTML}
+        <span class="fwd-name">${c.username}</span>
+        <input type="checkbox" class="fwd-checkbox" value="${c.id}">
+      </label>
+    `;
+  }).join("");
+
+  overlay.innerHTML = `
+    <div class="fwd-container">
+      <div class="fwd-header">
+        <h3 class="fwd-title">Forward Message to...</h3>
+        <button class="fwd-close" id="fwdCloseBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="fwd-search-container">
+        <span class="fwd-search-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </span>
+        <input type="text" class="fwd-search-input" id="fwdSearchInput" placeholder="Search contacts...">
+      </div>
+      <div class="fwd-list" id="fwdList">
+        <p class="fwd-section-title">Recent Chats</p>
+        ${chatListHTML || '<p class="fwd-empty" style="text-align:center; color:var(--text-light); font-size:13px; margin: 20px 0;">No contacts available</p>'}
+      </div>
+      <div class="fwd-footer">
+        <button class="fwd-btn" id="fwdSendBtn" disabled>Send</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const searchInput = overlay.querySelector("#fwdSearchInput");
+  const listItems = overlay.querySelectorAll(".fwd-item");
+  const checkboxes = overlay.querySelectorAll(".fwd-checkbox");
+  const sendBtn = overlay.querySelector("#fwdSendBtn");
+  const closeBtn = overlay.querySelector("#fwdCloseBtn");
+
+  // Search filter
+  searchInput.addEventListener("input", (e) => {
+    const q = e.target.value.toLowerCase().trim();
+    listItems.forEach(item => {
+      const name = item.querySelector(".fwd-name").textContent.toLowerCase();
+      if (name.includes(q)) {
+        item.style.display = "flex";
+      } else {
+        item.style.display = "none";
+      }
+    });
+  });
+
+  // Enable/Disable Send button based on selection
+  const updateSendBtnState = () => {
+    const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+    sendBtn.disabled = selectedCount === 0;
+  };
+
+  checkboxes.forEach(cb => {
+    cb.addEventListener("change", updateSendBtnState);
+  });
+
+  // Close modal logic
+  const closeModal = () => {
+    overlay.remove();
+  };
+
+  closeBtn.addEventListener("click", closeModal);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  // Escape key close
+  const handleEsc = (e) => {
+    if (e.key === "Escape") {
+      closeModal();
+      document.removeEventListener("keydown", handleEsc);
+    }
+  };
+  document.addEventListener("keydown", handleEsc);
+
+  // Send action
+  sendBtn.addEventListener("click", () => {
+    const selectedRecipients = Array.from(checkboxes)
+      .filter(cb => cb.checked)
+      .map(cb => cb.value);
+
+    if (selectedRecipients.length === 0) return;
+
+    selectedRecipients.forEach(recipientId => {
+      const tempId = generateId();
+
+      // Construct message payload
+      const forwardMsgPayload = {
+        tempId,
+        to: recipientId,
+        type: message.type,
+        content: message.content,
+        caption: message.caption || null,
+        replyTo: null,
+        fileName: message.fileName || null,
+        fileSize: message.fileSize || null,
+        clientTime: Date.now(),
+        cover: message.cover || null,
+        thumb: message.thumb || null,
+        cameraFacing: message.cameraFacing || null,
+        cameraFilter: message.cameraFilter || null,
+        isDisappearing: message.isDisappearing || false
+      };
+
+      // Add to local state messages array
+      const localMsg = {
+        tempId,
+        id: tempId,
+        type: message.type,
+        content: message.content,
+        cover: message.cover || null,
+        thumb: message.thumb || null,
+        fileName: message.fileName || null,
+        fileSize: message.fileSize || null,
+        caption: message.caption || null,
+        sender: "me",
+        user: State.currentUser.id || State.currentUser._id,
+        timestamp: Date.now(),
+        replyTo: null,
+        reactions: {},
+        status: { sent: false, delivered: false, seen: false },
+        cameraFacing: message.cameraFacing || null,
+        cameraFilter: message.cameraFilter || null,
+        isDisappearing: message.isDisappearing || false
+      };
+
+      if (!State.messages[recipientId]) State.messages[recipientId] = [];
+      State.messages[recipientId].unshift(localMsg);
+      State.messageIndex[tempId] = recipientId;
+
+      // Update conversations sidebar last message
+      const conv = State.conversations.find(c => c.id === recipientId);
+      if (conv) {
+        conv.lastMessage = formatLastMessage(localMsg);
+        conv.timestamp = Date.now();
+      }
+
+      // If active chat is this recipient, render message
+      if (recipientId === State.activeChat) {
+        const messagesEl = document.getElementById("messages");
+        if (messagesEl) {
+          messagesEl.appendChild(createMessageElement(localMsg));
+        }
+        const container = document.getElementById("messages-container");
+        if (container) {
+          container.scrollTop = 99999;
+        }
+      }
+
+      // Queue in Outbox for reliability
+      OutboxQueue.add({
+        tempId,
+        to: recipientId,
+        type: message.type,
+        content: message.content,
+        caption: message.caption || null,
+        fileName: message.fileName || null,
+        fileSize: message.fileSize || null,
+        cover: message.cover || null,
+        thumb: message.thumb || null,
+        replyTo: null,
+        clientTime: Date.now(),
+        cameraFacing: message.cameraFacing || null,
+        cameraFilter: message.cameraFilter || null,
+        isDisappearing: message.isDisappearing || false
+      });
+
+      // Send over socket connection
+      if (socket && socket.connected) {
+        socket.emit("private_message", {
+          message: forwardMsgPayload
+        });
+      }
+    });
+
+    // Refresh chat list order in sidebar
+    renderChatList(document.getElementById("chat-search").value.trim().toLowerCase());
+
+    closeModal();
+    showToast(`Message forwarded to ${selectedRecipients.length} chat(s)`);
+  });
+}
+
+// =============================================================================
 // SEND MESSAGE
 // =============================================================================
 function sendMessage() {
@@ -922,12 +1151,14 @@ function sendMessage() {
     replyTo: State.replyingTo || null, clientTime: Date.now()
   });
 
-  socket.emit("private_message", {
-    message: {
-      tempId, to: State.activeChat, type: "text", content,
-      replyTo: State.replyingTo || null, clientTime: Date.now()
-    }
-  });
+  if (socket && socket.connected) {
+    socket.emit("private_message", {
+      message: {
+        tempId, to: State.activeChat, type: "text", content,
+        replyTo: State.replyingTo || null, clientTime: Date.now()
+      }
+    });
+  }
 
   input.value = "";
   document.getElementById("send-btn").disabled = true;

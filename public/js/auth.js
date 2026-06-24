@@ -169,10 +169,11 @@ async function bootstrapAfterLogin() {
     auth: { token },
     reconnection: true,
     reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
-    reconnectionDelayMax: 10000,
-    timeout: 10000,
-    transports: ["websocket", "polling"]
+    reconnectionDelay: 2000,
+    reconnectionDelayMax: 15000,
+    timeout: 30000,
+    transports: ["polling", "websocket"],
+    rememberUpgrade: true
   });
 
   initSocket();

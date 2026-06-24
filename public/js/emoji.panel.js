@@ -1376,16 +1376,18 @@ const EmojiPanel = (() => {
     });
 
     // Emit socket event
-    socket.emit("private_message", {
-      message: {
-        tempId,
-        to: State.activeChat,
-        type: type,
-        content: content,
-        replyTo: State.replyingTo || null,
-        clientTime: Date.now()
-      }
-    });
+    if (socket && socket.connected) {
+      socket.emit("private_message", {
+        message: {
+          tempId,
+          to: State.activeChat,
+          type: type,
+          content: content,
+          replyTo: State.replyingTo || null,
+          clientTime: Date.now()
+        }
+      });
+    }
 
     // Close picker drawer
     const panel = $("custom-emoji-panel");

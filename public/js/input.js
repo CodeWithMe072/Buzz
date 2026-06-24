@@ -295,21 +295,23 @@ async function uploadMedia(msgId, receiver, file) {
 
         updateMediaDOM(msgId, { content: realUrl, cover, thumb, type: realType, uploadStatus: "uploaded", fileName: file.name, fileSize: file.size });
 
-        socket.emit("private_message", {
-            message: {
-                tempId: msgId,
-                to: receiver,
-                type: realType,
-                content: realUrl,
-                caption: msg?.caption || null,
-                replyTo: msg?.replyTo || null,
-                fileName: file?.name || null,
-                fileSize: file?.fileSize || null,
-                clientTime: msg?.clientTime || Date.now(),
-                cover,
-                thumb
-            }
-        });
+        if (socket && socket.connected) {
+            socket.emit("private_message", {
+                message: {
+                    tempId: msgId,
+                    to: receiver,
+                    type: realType,
+                    content: realUrl,
+                    caption: msg?.caption || null,
+                    replyTo: msg?.replyTo || null,
+                    fileName: file?.name || null,
+                    fileSize: file?.fileSize || null,
+                    clientTime: msg?.clientTime || Date.now(),
+                    cover,
+                    thumb
+                }
+            });
+        }
 
         UploadQueue.remove(msgId);
     } catch (err) {
@@ -653,13 +655,15 @@ async function uploadAudio(msgId, receiver, audioBlob) {
 
         updateAudioDOM(msgId, realUrl);
 
-        socket.emit("private_message", {
-            message: {
-                tempId: msgId, to: receiver, type: "audio", content: realUrl,
-                caption: null, replyTo: msg?.replyTo || null,
-                clientTime: msg?.clientTime || Date.now()
-            }
-        });
+        if (socket && socket.connected) {
+            socket.emit("private_message", {
+                message: {
+                    tempId: msgId, to: receiver, type: "audio", content: realUrl,
+                    caption: null, replyTo: msg?.replyTo || null,
+                    clientTime: msg?.clientTime || Date.now()
+                }
+            });
+        }
 
         UploadQueue.remove(msgId);
     } catch (err) {
