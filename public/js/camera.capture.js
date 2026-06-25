@@ -1030,8 +1030,17 @@
             viewer.style.display = "none";
         }
         if (video) {
+            // Nullify handlers first to prevent browser from firing error event when source is cleared
+            video.onloadedmetadata = null;
+            video.onended = null;
+            video.onerror = null;
+
             video.pause();
             video.src = "";
+            video.removeAttribute("src");
+            try {
+                video.load();
+            } catch (e) {}
             video.style.display = "none";
             video.classList.remove("mirrored-media");
             
