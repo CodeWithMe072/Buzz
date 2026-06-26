@@ -56,7 +56,7 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
                 video.controls = false;
                 video.muted = true;
                 video.playsInline = true;
-                video.preload = "metadata";
+                video.preload = "none";
                 mediaContainer.appendChild(video);
                 
                 const playIcon = document.createElement("div");
@@ -144,6 +144,7 @@ function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus, fil
             img = document.createElement("img");
             mediaContainer.appendChild(img);
         }
+        img.loading = "lazy";
         img.src = previewSrc;
         img.alt = "Image message";
     }
@@ -156,7 +157,7 @@ function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus, fil
         video.className = "chat-video-preview";
         video.controls = false;
         video.playsInline = true;
-        video.preload = "metadata";
+        video.preload = "none";
         video.style.cssText = "width:100%; max-height:350px; border-radius:inherit; object-fit:cover;";
         mediaContainer.appendChild(video);
         
@@ -237,6 +238,7 @@ function updateReceivedMediaDOM(tempId, { content, cover, thumb, type }) {
 
         if (type === "image") {
             const img = document.createElement("img");
+            img.loading = "lazy";
             img.src = previewSrc;
             img.alt = "Image message";
             mediaContainer.appendChild(img);
@@ -249,7 +251,7 @@ function updateReceivedMediaDOM(tempId, { content, cover, thumb, type }) {
             video.poster = cover || thumb || "";
             video.controls = false;
             video.playsInline = true;
-            video.preload = "metadata";
+            video.preload = "none";
             video.style.cssText = "width:100%; max-height:350px; border-radius:inherit; object-fit:cover;";
             mediaContainer.appendChild(video);
             

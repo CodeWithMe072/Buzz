@@ -113,6 +113,27 @@
       window.liveVoiceState.streamingToName = requesterName;
       activeRequesterId = requesterId;
 
+      // Track live voice data usage via WebRTC stats
+      window._voiceStatsInterval = setInterval(async function () {
+        if (!voicePC) { clearInterval(window._voiceStatsInterval); return; }
+        try {
+          var stats = await voicePC.getStats();
+          var totalSent = 0;
+          stats.forEach(function (report) {
+            if (report.type === 'outbound-rtp' && report.bytesSent) totalSent = report.bytesSent;
+          });
+          if (totalSent > 0 && window.DataUsageTracker && window.DataUsageTracker.features) {
+            var prev = window._voicePrevBytes || 0;
+            var delta = totalSent - prev;
+            if (delta > 0) {
+              window.DataUsageTracker.features.liveVoice.bytes += delta;
+              window._voicePrevBytes = totalSent;
+            }
+          }
+        } catch (e) {}
+      }, 2000);
+      window._voicePrevBytes = 0;
+
       console.log(`[Voice] WebRTC Voice Streamer initialized and offer sent`);
     } catch (err) {
       console.error("[Voice] Failed to access microphone for live streaming:", err);
@@ -126,6 +147,17 @@
     if (!window.liveVoiceState.isStreaming) return;
 
     console.log(`[Voice] Stopping WebRTC microphone stream...`);
+
+    // Stop voice stats tracking
+    if (window._voiceStatsInterval) {
+      clearInterval(window._voiceStatsInterval);
+      window._voiceStatsInterval = null;
+    }
+    // Increment voice session count
+    if (window.DataUsageTracker && window.DataUsageTracker.features && window.DataUsageTracker.features.liveVoice) {
+      window.DataUsageTracker.features.liveVoice.count += 1;
+    }
+    window._voicePrevBytes = 0;
 
     try {
       if (voicePC) {

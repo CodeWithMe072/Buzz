@@ -12,6 +12,8 @@ import { CustomGif } from "../models/customGif.model.js";
 import AdmZip from "adm-zip";
 import { createEncryptStream, createDecryptStream, incrementIV, getKey, encryptBuffer } from "../utils/mediaEncryption.js";
 import { redis } from "../lib/redis.js";
+import sharp from "sharp";
+import { execFile } from "child_process";
 
 const router = express.Router();
 
@@ -176,6 +178,73 @@ function makeDocumentUrls(originalUrl, fileName, fileSize) {
     };
 }
 
+function extractVideoFrame(inputPath, outputPath) {
+    return new Promise((resolve, reject) => {
+        execFile("ffmpeg", [
+            "-y",
+            "-i", inputPath,
+            "-ss", "00:00:01",
+            "-vframes", "1",
+            "-f", "image2",
+            outputPath
+        ], (err, stdout, stderr) => {
+            if (err) {
+                console.error("[FFmpeg] extraction failed:", err, stderr);
+                return reject(err);
+            }
+            resolve();
+        });
+    });
+}
+
+async function generateAndUploadThumbnail(filePath, originalKey, isVideo) {
+    const tempCoverPath = path.join(os.tmpdir(), `cover_${crypto.randomUUID()}.jpg`);
+    const tempCompressedCoverPath = path.join(os.tmpdir(), `cover_270_${crypto.randomUUID()}.jpg`);
+    const tempThumbPath = path.join(os.tmpdir(), `thumb_50_${crypto.randomUUID()}.jpg`);
+
+    try {
+        if (isVideo) {
+            await extractVideoFrame(filePath, tempCoverPath);
+        } else {
+            await fs.promises.copyFile(filePath, tempCoverPath);
+        }
+
+        // Generate cover_270 (270px width)
+        await sharp(tempCoverPath)
+            .resize(270)
+            .jpeg({ quality: 80 })
+            .toFile(tempCompressedCoverPath);
+
+        // Generate thumb_50 (50px width)
+        await sharp(tempCoverPath)
+            .resize(50)
+            .jpeg({ quality: 70 })
+            .toFile(tempThumbPath);
+
+        const coverKey = originalKey + "_cover.jpg";
+        const thumbKey = originalKey + "_thumb.jpg";
+
+        const coverUrl = await uploadToR2(tempCompressedCoverPath, coverKey, "image/jpeg");
+        const thumbUrl = await uploadToR2(tempThumbPath, thumbKey, "image/jpeg");
+
+        await Promise.all([
+            fse.remove(tempCoverPath).catch(() => {}),
+            fse.remove(tempCompressedCoverPath).catch(() => {}),
+            fse.remove(tempThumbPath).catch(() => {})
+        ]);
+
+        return { cover_270: coverUrl, thumb_50: thumbUrl };
+    } catch (err) {
+        console.error("[generateAndUploadThumbnail] failed:", err);
+        await Promise.all([
+            fse.remove(tempCoverPath).catch(() => {}),
+            fse.remove(tempCompressedCoverPath).catch(() => {}),
+            fse.remove(tempThumbPath).catch(() => {})
+        ]);
+        return { cover_270: null, thumb_50: null };
+    }
+}
+
 // =============================================================================
 // Safe File Name
 // =============================================================================
@@ -232,10 +301,23 @@ router.post("/api/upload", protect, diskUpload.single("file"), async (req, res) 
     try {
         const url = await uploadToR2(tmpPath, key, mimetype);
 
+        let cover_270 = null;
+        let thumb_50 = null;
+        if (isVideo || mimetype.startsWith("image/")) {
+            const thumbs = await generateAndUploadThumbnail(tmpPath, key, isVideo);
+            cover_270 = thumbs.cover_270;
+            thumb_50 = thumbs.thumb_50;
+        }
+
         await fse.remove(tmpPath);
 
         if (isVideo) {
-            return res.json(makeVideoUrls(url));
+            return res.json({
+                type: "video",
+                original: url,
+                cover_270: cover_270,
+                thumb_50: thumb_50
+            });
         }
         if (isAudio) {
             return res.json({
@@ -248,7 +330,14 @@ router.post("/api/upload", protect, diskUpload.single("file"), async (req, res) 
         if (isDocument) {
             return res.json(makeDocumentUrls(url, originalname, req.file.size));
         }
-        return res.json(makeImageUrls(url));
+        
+        // It's an image
+        return res.json({
+            type: "image",
+            original: url,
+            cover_270: cover_270 || url,
+            thumb_50: thumb_50 || url
+        });
 
     } catch (err) {
         console.error("[upload] R2 error:", err?.name, err?.message);
@@ -517,6 +606,30 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
 
             const url = getPublicFileUrl(key);
 
+            // Generate thumbnails in parallel by temporarily merging chunks to one file
+            let cover_270 = null;
+            let thumb_50 = null;
+            if (isVideo || mimeType.startsWith("image/")) {
+                const tempMergedPath = path.join(os.tmpdir(), `merge_${fileId}_${Date.now()}`);
+                try {
+                    const writeStream = fs.createWriteStream(tempMergedPath);
+                    for (const chunkPath of chunkPaths) {
+                        const chunkData = await fs.promises.readFile(chunkPath);
+                        writeStream.write(chunkData);
+                    }
+                    writeStream.end();
+                    await new Promise((resolve) => writeStream.on("finish", resolve));
+
+                    const thumbs = await generateAndUploadThumbnail(tempMergedPath, key, isVideo);
+                    cover_270 = thumbs.cover_270;
+                    thumb_50 = thumbs.thumb_50;
+                } catch (thumbErr) {
+                    console.error("Failed to generate thumbnail for chunked upload:", thumbErr);
+                } finally {
+                    await fse.remove(tempMergedPath).catch(() => {});
+                }
+            }
+
             // =========================================================================
             // Cleanup
             // =========================================================================
@@ -526,7 +639,12 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
             // Response
             // =========================================================================
             if (isVideo) {
-                return res.json(makeVideoUrls(url));
+                return res.json({
+                    type: "video",
+                    original: url,
+                    cover_270: cover_270,
+                    thumb_50: thumb_50
+                });
             }
             if (isDocument) {
                 return res.json(makeDocumentUrls(url, fileName, totalSize));
@@ -541,7 +659,12 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                 });
             }
 
-            return res.json(makeImageUrls(url));
+            return res.json({
+                type: "image",
+                original: url,
+                cover_270: cover_270 || url,
+                thumb_50: thumb_50 || url
+            });
 
         } catch (err) {
             console.error("[complete-upload] error:", err?.name, err?.message);

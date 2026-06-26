@@ -3,6 +3,13 @@
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
+    // Register Service Worker for media caching
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('[ServiceWorker] Registered:', reg.scope))
+            .catch(err => console.error('[ServiceWorker] Registration failed:', err));
+    }
+
     // 1. Initialize Core Network Monitor
     console.time("NetworkMonitor");
     if (window.NetworkMonitor) {

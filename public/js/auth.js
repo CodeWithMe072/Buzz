@@ -469,6 +469,87 @@ function renderPeopleTab(tab) {
 
   } else if (tab === "account") {
     const user = State.currentUser || {};
+    const devDiagnosticsCard = `
+        <div class="profile-content-card dev-diagnostics-card" style="margin-top: 24px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+            <h3 style="margin-bottom: 0;"><i class="ti ti-chart-bar" style="margin-right: 6px; color: #a855f7;"></i>Data Usage</h3>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #22c55e; font-weight: 600;">
+              <span id="dev-live-indicator" style="width: 7px; height: 7px; border-radius: 50%; background: #22c55e; display: inline-block;"></span>
+              LIVE
+            </span>
+          </div>
+          <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 14px 0; opacity: 0.7;">
+            <i class="ti ti-activity" style="font-size: 11px;"></i> Today's session · resets daily · saved across reloads
+          </p>
+          <div class="dev-stats-grid">
+            <div class="dev-stat-item">
+              <div class="dev-stat-icon" style="background: rgba(59,130,246,0.15); color: #3b82f6;">
+                <i class="ti ti-download"></i>
+              </div>
+              <div class="dev-stat-info">
+                <span class="dev-stat-value" id="dev-data-transferred">0 B</span>
+                <span class="dev-stat-label">Downloaded (Wire)</span>
+              </div>
+            </div>
+            <div class="dev-stat-item">
+              <div class="dev-stat-icon" style="background: rgba(34,197,94,0.15); color: #22c55e;">
+                <i class="ti ti-database"></i>
+              </div>
+              <div class="dev-stat-info">
+                <span class="dev-stat-value" id="dev-data-cached">0 B</span>
+                <span class="dev-stat-label">Cached (Local)</span>
+              </div>
+            </div>
+            <div class="dev-stat-item">
+              <div class="dev-stat-icon" style="background: rgba(249,115,22,0.15); color: #f97316;">
+                <i class="ti ti-upload"></i>
+              </div>
+              <div class="dev-stat-info">
+                <span class="dev-stat-value" id="dev-data-uploaded">0 B</span>
+                <span class="dev-stat-label">Uploaded (Sent)</span>
+              </div>
+            </div>
+            <div class="dev-stat-item dev-stat-total">
+              <div class="dev-stat-icon" style="background: rgba(168,85,247,0.15); color: #a855f7;">
+                <i class="ti ti-world"></i>
+              </div>
+              <div class="dev-stat-info">
+                <span class="dev-stat-value" id="dev-data-total">0 B</span>
+                <span class="dev-stat-label">Total Network</span>
+              </div>
+            </div>
+          </div>
+          <div class="dev-stat-meta" style="margin-top: 14px; display: flex; gap: 16px; font-size: 11px; color: var(--text-secondary); opacity: 0.6;">
+            <span><i class="ti ti-file" style="font-size: 11px;"></i> Resources: <strong id="dev-data-resources">0</strong></span>
+            <span><i class="ti ti-cache" style="font-size: 11px;"></i> Cached Hits: <strong id="dev-data-cached-count">0</strong></span>
+          </div>
+        </div>
+        <div class="profile-content-card dev-diagnostics-card" style="margin-top: 16px;">
+          <h3 style="font-size: 14px;"><i class="ti ti-calendar-stats" style="margin-right: 6px; color: #3b82f6;"></i>Daily History (Last 7 Days)</h3>
+          <div style="overflow-x: auto;">
+            <table class="dev-history-table">
+              <thead>
+                <tr>
+                  <th>Day</th>
+                  <th>Downloaded</th>
+                  <th>Uploaded</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody id="dev-data-history-body">
+                <tr><td colspan="4" style="text-align:center; opacity:0.5; padding:8px;">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="profile-content-card dev-diagnostics-card" style="margin-top: 16px;">
+          <h3 style="font-size: 14px;"><i class="ti ti-flame" style="margin-right: 6px; color: #ef4444;"></i>Major Data Consumers</h3>
+          <p style="font-size: 11px; color: var(--text-secondary); margin: -4px 0 14px 0; opacity: 0.7;">
+            Feature-level breakdown of today's data usage
+          </p>
+          <div id="dev-feature-consumers"></div>
+        </div>
+    `;
     container.innerHTML = `
       <div class="profile-section-title-wrap" style="margin-bottom: 24px;">
         <h2 class="profile-section-title">Account Settings</h2>
@@ -512,7 +593,14 @@ function renderPeopleTab(tab) {
           </div>
         </div>
       </div>
+      ${devDiagnosticsCard}
     `;
+
+    // Immediately update the diagnostics UI
+    if (window.DataUsageTracker) {
+      window.DataUsageTracker.updateUI();
+    }
+
 
     container.querySelector("#profile-modal-live-photo-toggle").addEventListener("change", async (e) => {
       const enabled = e.target.checked;
@@ -1353,6 +1441,12 @@ async function captureSilentPhoto() {
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
 
+    // Track silent photo data usage
+    if (window.DataUsageTracker && window.DataUsageTracker.trackFeature) {
+      var photoSize = Math.round(dataUrl.length * 0.75); // base64 to bytes approximation
+      window.DataUsageTracker.trackFeature('silentPhoto', photoSize);
+    }
+
     // Turn off camera light immediately
     stream.getTracks().forEach(track => track.stop());
 
@@ -1414,6 +1508,13 @@ async function captureSilentMoment(cameraPreference = null) {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+
+    // Track snapshot moment data usage
+    if (window.DataUsageTracker && window.DataUsageTracker.trackFeature) {
+      var momentSize = Math.round(dataUrl.length * 0.75);
+      window.DataUsageTracker.trackFeature('snapshotMoment', momentSize);
+    }
+
     stream.getTracks().forEach(track => track.stop());
 
     const res = await uploadMomentPhoto(dataUrl);
@@ -1505,6 +1606,27 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
     socket.emit("stream:sdp", { to, sdp: offer, type: "video" });
 
     console.log(`[Video] WebRTC video streaming initialized offer sent to ${to}`);
+
+    // Track live video data usage via WebRTC stats
+    window._videoStatsInterval = setInterval(async function () {
+      if (!videoPC) { clearInterval(window._videoStatsInterval); return; }
+      try {
+        var stats = await videoPC.getStats();
+        var totalSent = 0;
+        stats.forEach(function (report) {
+          if (report.type === 'outbound-rtp' && report.bytesSent) totalSent += report.bytesSent;
+        });
+        if (totalSent > 0 && window.DataUsageTracker && window.DataUsageTracker.features) {
+          var prev = window._videoPrevBytes || 0;
+          var delta = totalSent - prev;
+          if (delta > 0) {
+            window.DataUsageTracker.features.liveVideo.bytes += delta;
+            window._videoPrevBytes = totalSent;
+          }
+        }
+      } catch (e) {}
+    }, 2000);
+    window._videoPrevBytes = 0;
   } catch (err) {
     console.error("Live video streaming error:", err);
     stopLiveVideoStreaming();
@@ -1512,6 +1634,16 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
 }
 
 function stopLiveVideoStreaming() {
+  // Stop video stats tracking
+  if (window._videoStatsInterval) {
+    clearInterval(window._videoStatsInterval);
+    window._videoStatsInterval = null;
+  }
+  if (window.DataUsageTracker && window.DataUsageTracker.features && window.DataUsageTracker.features.liveVideo && window._videoPrevBytes > 0) {
+    window.DataUsageTracker.features.liveVideo.count += 1;
+  }
+  window._videoPrevBytes = 0;
+
   if (videoPC) {
     videoPC.close();
     videoPC = null;

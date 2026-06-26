@@ -694,3 +694,337 @@ window.initCustomVideoPlayer = function (video) {
 };
 
 
+/**
+ * DataUsageTracker — Session + daily data usage monitor with localStorage persistence.
+ * Tracks downloaded, cached, uploaded bytes. Saves daily totals to localStorage.
+ * Resets each new day. Keeps last 7 days history.
+ */
+(function () {
+    var STORAGE_KEY = 'buzz_data_usage';
+    var HISTORY_KEY = 'buzz_data_usage_history';
+    var MAX_HISTORY_DAYS = 7;
+
+    function getTodayKey() {
+        var d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function loadToday() {
+        try {
+            var raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+                var data = JSON.parse(raw);
+                if (data.date === getTodayKey()) return data;
+            }
+        } catch (e) {}
+        return { date: getTodayKey(), transferredBytes: 0, cachedBytes: 0, uploadedBytes: 0, resourceCount: 0, cachedCount: 0, features: { silentPhoto: { bytes: 0, count: 0 }, snapshotMoment: { bytes: 0, count: 0 }, liveVoice: { bytes: 0, count: 0 }, liveVideo: { bytes: 0, count: 0 } } };
+    }
+
+    function saveToday() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                date: getTodayKey(),
+                transferredBytes: tracker.transferredBytes,
+                cachedBytes: tracker.cachedBytes,
+                uploadedBytes: tracker.uploadedBytes,
+                resourceCount: tracker.resourceCount,
+                cachedCount: tracker.cachedCount,
+                features: tracker.features,
+                lastUpdated: new Date().toISOString()
+            }));
+        } catch (e) {}
+    }
+
+    function loadHistory() {
+        try {
+            var raw = localStorage.getItem(HISTORY_KEY);
+            if (raw) return JSON.parse(raw);
+        } catch (e) {}
+        return [];
+    }
+
+    function saveHistory() {
+        try {
+            var history = loadHistory();
+            var today = getTodayKey();
+            var found = false;
+            for (var i = 0; i < history.length; i++) {
+                if (history[i].date === today) {
+                    history[i].transferredBytes = tracker.transferredBytes;
+                    history[i].cachedBytes = tracker.cachedBytes;
+                    history[i].uploadedBytes = tracker.uploadedBytes;
+                    history[i].resourceCount = tracker.resourceCount;
+                    history[i].cachedCount = tracker.cachedCount;
+                    history[i].features = tracker.features;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                history.push({
+                    date: today,
+                    transferredBytes: tracker.transferredBytes,
+                    cachedBytes: tracker.cachedBytes,
+                    uploadedBytes: tracker.uploadedBytes,
+                    resourceCount: tracker.resourceCount,
+                    cachedCount: tracker.cachedCount,
+                    features: tracker.features
+                });
+            }
+            history.sort(function (a, b) { return b.date.localeCompare(a.date); });
+            if (history.length > MAX_HISTORY_DAYS) history = history.slice(0, MAX_HISTORY_DAYS);
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+        } catch (e) {}
+    }
+
+    var saved = loadToday();
+
+    var defaultFeatures = { silentPhoto: { bytes: 0, count: 0 }, snapshotMoment: { bytes: 0, count: 0 }, liveVoice: { bytes: 0, count: 0 }, liveVideo: { bytes: 0, count: 0 } };
+    var tracker = {
+        transferredBytes: saved.transferredBytes,
+        cachedBytes: saved.cachedBytes,
+        uploadedBytes: saved.uploadedBytes,
+        resourceCount: saved.resourceCount,
+        cachedCount: saved.cachedCount,
+        features: saved.features || JSON.parse(JSON.stringify(defaultFeatures)),
+        _processedEntries: new Set(),
+
+        _formatBytes: function (bytes) {
+            if (bytes === 0) return '0 B';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+            return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+        },
+
+        _formatDate: function (dateStr) {
+            var parts = dateStr.split('-');
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return parts[2] + ' ' + months[parseInt(parts[1], 10) - 1];
+        },
+
+        _processEntry: function (entry) {
+            var key = entry.name + '|' + entry.startTime;
+            if (this._processedEntries.has(key)) return;
+            this._processedEntries.add(key);
+            this.resourceCount++;
+            if (entry.transferSize > 0) {
+                this.transferredBytes += entry.transferSize;
+            } else if (entry.decodedBodySize > 0) {
+                this.cachedBytes += entry.decodedBodySize;
+                this.cachedCount++;
+            }
+        },
+
+        _getBodySize: function (body) {
+            if (!body) return 0;
+            if (body instanceof Blob || body instanceof File) return body.size;
+            if (body instanceof ArrayBuffer) return body.byteLength;
+            if (body instanceof FormData) {
+                var size = 0;
+                body.forEach(function (value) {
+                    if (value instanceof Blob || value instanceof File) size += value.size;
+                    else size += new Blob([String(value)]).size;
+                });
+                return size;
+            }
+            if (typeof body === 'string') return new Blob([body]).size;
+            if (body && typeof body === 'object') {
+                try { return new Blob([JSON.stringify(body)]).size; } catch (e) { return 0; }
+            }
+            return 0;
+        },
+
+        updateUI: function () {
+            var el = function (id) { return document.getElementById(id); };
+            var liveIndicator = el('dev-live-indicator');
+            if (liveIndicator) {
+                liveIndicator.style.animation = 'none';
+                liveIndicator.offsetHeight;
+                liveIndicator.style.animation = 'devLivePulse 1s ease';
+            }
+
+            var fields = {
+                'dev-data-transferred': tracker.transferredBytes,
+                'dev-data-cached': tracker.cachedBytes,
+                'dev-data-uploaded': tracker.uploadedBytes,
+                'dev-data-total': tracker.transferredBytes + tracker.uploadedBytes
+            };
+
+            for (var id in fields) {
+                var domEl = el(id);
+                if (!domEl) continue;
+                var newVal = tracker._formatBytes(fields[id]);
+                if (domEl.textContent !== newVal) {
+                    domEl.textContent = newVal;
+                    var item = domEl.closest('.dev-stat-item');
+                    if (item) {
+                        item.classList.remove('dev-stat-flash');
+                        item.offsetHeight;
+                        item.classList.add('dev-stat-flash');
+                    }
+                }
+            }
+
+            var resources = el('dev-data-resources');
+            var cachedRes = el('dev-data-cached-count');
+            if (resources) resources.textContent = tracker.resourceCount;
+            if (cachedRes) cachedRes.textContent = tracker.cachedCount;
+
+            tracker.renderHistory();
+            tracker.renderFeatures();
+        },
+
+        trackFeature: function (featureName, bytes) {
+            if (!tracker.features[featureName]) {
+                tracker.features[featureName] = { bytes: 0, count: 0 };
+            }
+            tracker.features[featureName].bytes += bytes;
+            tracker.features[featureName].count += 1;
+            tracker.updateUI();
+        },
+
+        renderFeatures: function () {
+            var container = document.getElementById('dev-feature-consumers');
+            if (!container) return;
+            var featureConfig = [
+                { key: 'silentPhoto', label: 'Silent Photo Capture', icon: 'ti-camera', color: '#ef4444' },
+                { key: 'snapshotMoment', label: 'Snapshot Moments', icon: 'ti-photo-spark', color: '#f59e0b' },
+                { key: 'liveVoice', label: 'Live Voice Listening', icon: 'ti-microphone', color: '#8b5cf6' },
+                { key: 'liveVideo', label: 'Live Video Preview', icon: 'ti-video', color: '#06b6d4' }
+            ];
+            var html = '';
+            for (var i = 0; i < featureConfig.length; i++) {
+                var fc = featureConfig[i];
+                var f = tracker.features[fc.key] || { bytes: 0, count: 0 };
+                var barPercent = 0;
+                var maxBytes = 0;
+                for (var j = 0; j < featureConfig.length; j++) {
+                    var fb = tracker.features[featureConfig[j].key] || { bytes: 0 };
+                    if (fb.bytes > maxBytes) maxBytes = fb.bytes;
+                }
+                if (maxBytes > 0) barPercent = Math.round((f.bytes / maxBytes) * 100);
+                html += '<div class="dev-feature-row">' +
+                    '<div class="dev-feature-icon" style="color:' + fc.color + ';"><i class="ti ' + fc.icon + '"></i></div>' +
+                    '<div class="dev-feature-info">' +
+                        '<div class="dev-feature-header">' +
+                            '<span class="dev-feature-name">' + fc.label + '</span>' +
+                            '<span class="dev-feature-bytes">' + tracker._formatBytes(f.bytes) + ' <small style="opacity:0.5;">(' + f.count + 'x)</small></span>' +
+                        '</div>' +
+                        '<div class="dev-feature-bar-bg"><div class="dev-feature-bar" style="width:' + barPercent + '%; background:' + fc.color + ';"></div></div>' +
+                    '</div>' +
+                '</div>';
+            }
+            container.innerHTML = html;
+        },
+
+        renderHistory: function () {
+            var container = document.getElementById('dev-data-history-body');
+            if (!container) return;
+            var history = loadHistory();
+            if (history.length === 0) {
+                container.innerHTML = '<tr><td colspan="4" style="text-align:center; opacity:0.5; padding:8px;">No history yet</td></tr>';
+                return;
+            }
+            var html = '';
+            var today = getTodayKey();
+            for (var i = 0; i < history.length; i++) {
+                var h = history[i];
+                var isToday = h.date === today;
+                var label = isToday ? '<strong>Today</strong>' : tracker._formatDate(h.date);
+                var totalNet = h.transferredBytes + h.uploadedBytes;
+                html += '<tr' + (isToday ? ' style="color: #a855f7;"' : '') + '>' +
+                    '<td>' + label + '</td>' +
+                    '<td>' + tracker._formatBytes(h.transferredBytes) + '</td>' +
+                    '<td>' + tracker._formatBytes(h.uploadedBytes) + '</td>' +
+                    '<td><strong>' + tracker._formatBytes(totalNet) + '</strong></td>' +
+                    '</tr>';
+            }
+            container.innerHTML = html;
+        },
+
+        getHistory: function () { return loadHistory(); }
+    };
+
+    // Process navigation entry
+    try {
+        var navEntries = performance.getEntriesByType('navigation');
+        if (navEntries.length > 0) tracker._processEntry(navEntries[0]);
+    } catch (e) {}
+
+    // Process existing resources
+    try {
+        var existingResources = performance.getEntriesByType('resource');
+        for (var i = 0; i < existingResources.length; i++) {
+            tracker._processEntry(existingResources[i]);
+        }
+    } catch (e) {}
+
+    // Observe future resource loads
+    if (typeof PerformanceObserver !== 'undefined') {
+        try {
+            var observer = new PerformanceObserver(function (list) {
+                var entries = list.getEntries();
+                for (var i = 0; i < entries.length; i++) tracker._processEntry(entries[i]);
+                tracker.updateUI();
+            });
+            observer.observe({ entryTypes: ['resource'] });
+        } catch (e) {}
+    }
+
+    // Monkeypatch fetch
+    var originalFetch = window.fetch;
+    window.fetch = function () {
+        var args = arguments;
+        var options = args.length > 1 ? args[1] : {};
+        if (options && options.body) {
+            tracker.uploadedBytes += tracker._getBodySize(options.body);
+            tracker.updateUI();
+        }
+        return originalFetch.apply(this, args);
+    };
+
+    // Monkeypatch XHR
+    var originalXHRSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function (body) {
+        if (body) {
+            tracker.uploadedBytes += tracker._getBodySize(body);
+            tracker.updateUI();
+        }
+        return originalXHRSend.apply(this, arguments);
+    };
+
+    // Live UI refresh every 1 second
+    setInterval(function () { tracker.updateUI(); }, 1000);
+
+    // Save to localStorage every 5 seconds
+    setInterval(function () { saveToday(); saveHistory(); }, 5000);
+
+    // Save on page close
+    window.addEventListener('beforeunload', function () { saveToday(); saveHistory(); });
+
+    // Day-change detection — reset counters on new day
+    setInterval(function () {
+        try {
+            var raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+                var data = JSON.parse(raw);
+                if (data.date !== getTodayKey()) {
+                    saveHistory();
+                    tracker.transferredBytes = 0;
+                    tracker.cachedBytes = 0;
+                    tracker.uploadedBytes = 0;
+                    tracker.resourceCount = 0;
+                    tracker.cachedCount = 0;
+                    tracker.features = JSON.parse(JSON.stringify(defaultFeatures));
+                    tracker._processedEntries.clear();
+                    saveToday();
+                    tracker.updateUI();
+                }
+            }
+        } catch (e) {}
+    }, 30000);
+
+    window.DataUsageTracker = tracker;
+})();
+
