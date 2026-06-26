@@ -697,6 +697,19 @@ export default function initSocket(io) {
         console.error("[Socket] react error:", err);
       }
     });
+    /* ─────────────────────────────────────────────────────────
+       DATA USAGE TRACKER SYNC
+    ───────────────────────────────────────────────────────── */
+    socket.on("data_usage_sync", async (data) => {
+      try {
+        if (!data || !data.date) return;
+        await User.findByIdAndUpdate(userId, {
+          $set: { dataUsage: data }
+        });
+      } catch (err) {
+        console.error("[Socket] data_usage_sync error:", err);
+      }
+    });
 
     /* ─────────────────────────────────────────────────────────
        DISCONNECT — with 30-second grace period

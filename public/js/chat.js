@@ -434,8 +434,12 @@ function createMessageElement(message) {
     const filterClass = message.cameraFilter ? `filter-${message.cameraFilter}` : "";
     const videoClass = [isMirrored ? "mirrored-media" : "", filterClass].filter(Boolean).join(" ");
     
+    const coverUrl = message.cover || message.thumb;
     const mediaPreviewHTML = isVideo
-      ? `<video src="${message.content}" muted autoplay loop playsinline class="${videoClass}" style="width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; border-radius: inherit;"></video>`
+      ? (coverUrl
+          ? `<img src="${coverUrl}" class="${videoClass}" style="width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;" />`
+          : `<div class="disappearing-video-placeholder ${videoClass}" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #1a1a1a; border-radius: inherit;"><svg viewBox="0 0 24 24" width="48" height="48" fill="rgba(255,255,255,0.4)"><path d="M8 5v14l11-7z"/></svg></div>`
+        )
       : `<img src="${message.content}" alt="Disappearing Photo" style="width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;" />`;
 
     // Calculate overlay html for special Snapchat/Instagram filters
@@ -530,7 +534,9 @@ function createMessageElement(message) {
             avatar: avatar,
             cameraFacing: message.cameraFacing,
             cameraFilter: message.cameraFilter,
-            timestamp: message.timestamp || message.clientTime
+            timestamp: message.timestamp || message.clientTime,
+            fileSize: message.fileSize,
+            id: message.id || message.tempId
           });
         } else {
           showToast("Story viewer loading...", "info");
@@ -596,7 +602,7 @@ function createMessageElement(message) {
       ${replyHTML}
       <div class="message-media video-media">
         ${videoUrl ? `
-          <video class="chat-video-preview" src="${videoUrl}" poster="${coverUrl || ''}" playsinline preload="metadata" style="width:100%; max-height:350px; border-radius:inherit; object-fit:cover;"></video>
+          <img class="chat-video-preview video-thumb" src="${coverUrl || '/images/default-video-cover.png'}" alt="Video" loading="lazy" style="width:100%; max-height:350px; border-radius:inherit; object-fit:cover;">
           <div class="video-play-overlay-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" style="display: block; margin-left: 3px;"><path d="M8 5v14l11-7z"/></svg></div>
         ` : (coverUrl ? `<img class="video-thumb" src="${coverUrl}" alt="Video">` : `<div class="video-placeholder">Video loading...</div>`)}
         ${isUploading ? `<div class="media-overlay"><div class="loader"></div></div>` : ""}

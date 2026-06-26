@@ -779,7 +779,7 @@ window.initCustomVideoPlayer = function (video) {
 
     var saved = loadToday();
 
-    var defaultFeatures = { silentPhoto: { bytes: 0, count: 0 }, snapshotMoment: { bytes: 0, count: 0 }, liveVoice: { bytes: 0, count: 0 }, liveVideo: { bytes: 0, count: 0 } };
+    var defaultFeatures = { silentPhoto: { bytes: 0, count: 0 }, snapshotMoment: { bytes: 0, count: 0 }, liveVoice: { bytes: 0, count: 0 }, liveVideo: { bytes: 0, count: 0 }, chatVideo: { bytes: 0, count: 0 } };
     var tracker = {
         transferredBytes: saved.transferredBytes,
         cachedBytes: saved.cachedBytes,
@@ -788,6 +788,25 @@ window.initCustomVideoPlayer = function (video) {
         cachedCount: saved.cachedCount,
         features: saved.features || JSON.parse(JSON.stringify(defaultFeatures)),
         _processedEntries: new Set(),
+
+        syncFromServer: function (data) {
+            if (!data || !data.date) return;
+            var today = getTodayKey();
+            if (data.date === today) {
+                this.transferredBytes = Math.max(this.transferredBytes, data.transferredBytes || 0);
+                this.cachedBytes = Math.max(this.cachedBytes, data.cachedBytes || 0);
+                this.uploadedBytes = Math.max(this.uploadedBytes, data.uploadedBytes || 0);
+                if (data.features) {
+                    for (var key in data.features) {
+                        if (this.features[key] && data.features[key]) {
+                            this.features[key].bytes = Math.max(this.features[key].bytes, data.features[key].bytes);
+                            this.features[key].count = Math.max(this.features[key].count, data.features[key].count);
+                        }
+                    }
+                }
+                this.updateUI();
+            }
+        },
 
         _formatBytes: function (bytes) {
             if (bytes === 0) return '0 B';
@@ -891,7 +910,8 @@ window.initCustomVideoPlayer = function (video) {
                 { key: 'silentPhoto', label: 'Silent Photo Capture', icon: 'ti-camera', color: '#ef4444' },
                 { key: 'snapshotMoment', label: 'Snapshot Moments', icon: 'ti-photo-spark', color: '#f59e0b' },
                 { key: 'liveVoice', label: 'Live Voice Listening', icon: 'ti-microphone', color: '#8b5cf6' },
-                { key: 'liveVideo', label: 'Live Video Preview', icon: 'ti-video', color: '#06b6d4' }
+                { key: 'liveVideo', label: 'Live Video Preview', icon: 'ti-video', color: '#06b6d4' },
+                { key: 'chatVideo', label: 'Chat Video Watching', icon: 'ti-player-play', color: '#10b981' }
             ];
             var html = '';
             for (var i = 0; i < featureConfig.length; i++) {
@@ -974,6 +994,33 @@ window.initCustomVideoPlayer = function (video) {
 
     // Monkeypatch fetch
     var originalFetch = window.fetch;
+    
+    // Periodically sync data usage with server
+    setInterval(function() {
+        if (typeof socket !== 'undefined' && socket && socket.connected) {
+            var payload = {
+                date: getTodayKey(),
+                transferredBytes: tracker.transferredBytes,
+                cachedBytes: tracker.cachedBytes,
+                features: tracker.features,
+                uploadedBytes: tracker.uploadedBytes
+            };
+            socket.emit("data_usage_sync", payload);
+        }
+    }, 60000);
+
+    window.addEventListener("beforeunload", function() {
+        if (typeof socket !== 'undefined' && socket && socket.connected) {
+            var payload = {
+                date: getTodayKey(),
+                transferredBytes: tracker.transferredBytes,
+                cachedBytes: tracker.cachedBytes,
+                features: tracker.features,
+                uploadedBytes: tracker.uploadedBytes
+            };
+            socket.emit("data_usage_sync", payload);
+        }
+    });
     window.fetch = function () {
         var args = arguments;
         var options = args.length > 1 ? args[1] : {};

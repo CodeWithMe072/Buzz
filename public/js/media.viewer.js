@@ -107,7 +107,8 @@ class MediaViewer {
                 src: m.content || m.src,
                 thumb: m.thumb || null,
                 cover: m.cover || null,
-                createdAt: m.createdAt || m.timestamp || null
+                createdAt: m.createdAt || m.timestamp || null,
+                fileSize: m.fileSize || 0
             }));
         } else {
             this.mediaItems = (State.messages[this.chatId] || [])
@@ -119,7 +120,8 @@ class MediaViewer {
                     src: m.content,
                     thumb: m.thumb || null,
                     cover: m.cover || null,
-                    createdAt: m.createdAt || m.timestamp || null
+                    createdAt: m.createdAt || m.timestamp || null,
+                    fileSize: m.fileSize || 0
                 }));
         }
         this.renderedCount = 0;
@@ -178,7 +180,7 @@ class MediaViewer {
         if (this.isLoading || !this.hasMore) return;
         this.isLoading = true;
         try {
-            const data = await fetchMedia(this.chatId, this.lastCreatedAt, 10);
+            const data = await window.fetchMedia(this.chatId, this.lastCreatedAt, 10);
             const mediaMessages = data.Data?.data || [];
             if (mediaMessages.length < 10) {
                 this.hasMore = false;
@@ -195,7 +197,8 @@ class MediaViewer {
                         src: m.content,
                         thumb: m.thumb || null,
                         cover: m.cover || null,
-                        createdAt: m.createdAt
+                        createdAt: m.createdAt,
+                        fileSize: m.fileSize || 0
                     });
                 });
                 this.updateControls();
@@ -254,7 +257,9 @@ class MediaViewer {
 
         if (item.type === 'video') {
             const video = document.createElement('video');
-            video.src = item.src;
+            video.dataset.src = item.src;
+            video.preload = "none";
+            video.poster = item.cover || item.thumb || '';
             video.controls = true;
             slide.appendChild(video);
             if (window.initCustomVideoPlayer) {
@@ -297,7 +302,34 @@ class MediaViewer {
             const active = i === this.currentIndex;
             slide.classList.toggle('active', active);
             const video = slide.querySelector('video');
-            if (video) active ? video.play() : video.pause();
+            if (video) {
+                if (active) {
+                    if (!video.src) video.src = video.dataset.src;
+                    video.preload = "auto";
+                    var playPromise = video.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(_ => {
+                            // Autoplay started
+                            // Track chat video data usage
+                            if (this.mediaItems[i] && this.mediaItems[i].fileSize && window.DataUsageTracker) {
+                                window.DataUsageTracker.trackFeature('chatVideo', this.mediaItems[i].fileSize);
+                                this.mediaItems[i].fileSize = 0; // Prevent double tracking
+                            }
+                        }).catch(error => {
+                            console.warn("Autoplay prevented by browser, requires user interaction", error);
+                            // Ensure controls are visible so user can click play manually
+                            video.controls = true;
+                        });
+                    }
+                } else if (Math.abs(i - this.currentIndex) === 1) {
+                    if (!video.src) video.src = video.dataset.src;
+                    video.preload = "metadata";
+                    video.pause();
+                } else {
+                    video.preload = "none";
+                    video.pause();
+                }
+            }
         });
 
         this.thumbnailContainer.querySelectorAll('.thumbnail-item').forEach((t, i) => {
@@ -386,7 +418,8 @@ class MediaViewer {
             src: msg.content,
             thumb: msg.thumb || null,
             cover: msg.cover || null,
-            createdAt: msg.createdAt || msg.timestamp || null
+            createdAt: msg.createdAt || msg.timestamp || null,
+            fileSize: msg.fileSize || 0
         });
         if (this.overlay.classList.contains("active")) {
             if (this.currentIndex >= this.renderedCount - 3) this.renderMore();

@@ -82,6 +82,10 @@ async function bootstrapAfterLogin() {
       };
       localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
 
+      if (window.DataUsageTracker && user.dataUsage) {
+        window.DataUsageTracker.syncFromServer(user.dataUsage);
+      }
+
       // Update UI with fresh user details
       const currentUsername = document.getElementById("current-username");
       if (currentUsername) currentUsername.textContent = State.currentUser.username;

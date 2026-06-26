@@ -260,6 +260,7 @@ async function getSearchGif(query) {
 
 // ─── Expose TokenStore globally for auth.js to use ───────────
 window.TokenStore = TokenStore;
+window.fetchMedia = fetchMedia;
 
 async function uploadMomentPhoto(image) {
   try {

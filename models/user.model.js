@@ -97,6 +97,10 @@ const userSchema = new mongoose.Schema(
         ref: "User",
       }
     ],
+    dataUsage: {
+      type: Object,
+      default: {}
+    },
     randomSnapshots: [
       {
         url: { type: String, required: true },

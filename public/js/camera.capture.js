@@ -985,6 +985,12 @@
                 const duration = video.duration || 10;
                 video.play();
                 startStoryProgressTracking(duration * 1000);
+                
+                // Track chat video data usage
+                if (details.fileSize && window.DataUsageTracker && window.DataUsageTracker.trackFeature) {
+                    window.DataUsageTracker.trackFeature('chatVideo', details.fileSize);
+                    details.fileSize = 0; // Prevent double tracking if replay
+                }
             };
 
             video.onended = () => {

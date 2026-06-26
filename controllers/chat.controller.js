@@ -134,7 +134,7 @@ export const getMedia = async (req, res) => {
         { from: myId, to: userId },
         { from: userId, to: myId },
       ],
-      type: { $in: ["image", "video", "gif"] }
+      type: { $in: ["image", "video"] }
     };
 
     if (before) {
@@ -227,21 +227,21 @@ const FALLBACK_GIFS = [
 ];
 
 export const getTrendingGifs = async (req, res) => {
-  try {
-    const apiKey = process.env.GIPHY_API_KEY;
-    if (apiKey) {
-      const response = await fetch(`https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=24&rating=g`);
-      if (response.ok) {
-        const json = await response.json();
-        return res.json(json);
-      } else {
-        const errJson = await response.json().catch(() => ({}));
-        console.warn("[Giphy API Warning] Trending request failed:", errJson);
-      }
-    }
-  } catch (err) {
-    console.error("[getTrendingGifs] error fetching Giphy:", err);
-  }
+  // try {
+  //   const apiKey = process.env.GIPHY_API_KEY;
+  //   if (apiKey) {
+  //     const response = await fetch(`https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=24&rating=g`);
+  //     if (response.ok) {
+  //       const json = await response.json();
+  //       return res.json(json);
+  //     } else {
+  //       const errJson = await response.json().catch(() => ({}));
+  //       console.warn("[Giphy API Warning] Trending request failed:", errJson);
+  //     }
+  //   }
+  // } catch (err) {
+  //   console.error("[getTrendingGifs] error fetching Giphy:", err);
+  // }
 
   // Fallback if no apiKey is set, or if it failed/banned
   const fallbackData = FALLBACK_GIFS.map(g => ({
@@ -254,22 +254,22 @@ export const getTrendingGifs = async (req, res) => {
 };
 
 export const searchGifs = async (req, res) => {
-  try {
-    const { q } = req.query;
-    const apiKey = process.env.GIPHY_API_KEY;
-    if (apiKey && q) {
-      const response = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=24&rating=g`);
-      if (response.ok) {
-        const json = await response.json();
-        return res.json(json);
-      } else {
-        const errJson = await response.json().catch(() => ({}));
-        console.warn("[Giphy API Warning] Search request failed:", errJson);
-      }
-    }
-  } catch (err) {
-    console.error("[searchGifs] error fetching Giphy:", err);
-  }
+  // try {
+  //   const { q } = req.query;
+  //   const apiKey = process.env.GIPHY_API_KEY;
+  //   if (apiKey && q) {
+  //     const response = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=24&rating=g`);
+  //     if (response.ok) {
+  //       const json = await response.json();
+  //       return res.json(json);
+  //     } else {
+  //       const errJson = await response.json().catch(() => ({}));
+  //       console.warn("[Giphy API Warning] Search request failed:", errJson);
+  //     }
+  //   }
+  // } catch (err) {
+  //   console.error("[searchGifs] error fetching Giphy:", err);
+  // }
 
   // Fallback search
   const { q } = req.query;

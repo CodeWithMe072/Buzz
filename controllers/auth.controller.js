@@ -270,7 +270,7 @@ export const me = async (req, res) => {
   try {
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
-      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt showDashboard lastSeen createdAt"
+      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt showDashboard lastSeen createdAt dataUsage"
     );
 
     if (!user) {
