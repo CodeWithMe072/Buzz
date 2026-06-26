@@ -280,6 +280,7 @@ async function uploadMedia(msgId, receiver, file) {
         const cover = data.cover_270 || null;
         const thumb = data.thumb_50 || null;
         const realType = data.type || mediaType;
+        const duration = data.duration || null;
 
         const chatId = State.messageIndex[msgId];
         const msg = chatId ? (State.messages[chatId] || []).find(m => m.tempId === msgId) : null;
@@ -289,11 +290,12 @@ async function uploadMedia(msgId, receiver, file) {
             msg.cover = cover;
             msg.thumb = thumb;
             msg.type = realType;
+            msg.duration = duration;
             msg.uploadStatus = "uploaded";
             msg.status = { sent: true, delivered: false, seen: false };
         }
 
-        updateMediaDOM(msgId, { content: realUrl, cover, thumb, type: realType, uploadStatus: "uploaded", fileName: file.name, fileSize: file.size });
+        updateMediaDOM(msgId, { content: realUrl, cover, thumb, type: realType, uploadStatus: "uploaded", fileName: file.name, fileSize: file.size, duration });
 
         if (socket && socket.connected) {
             socket.emit("private_message", {
@@ -308,7 +310,8 @@ async function uploadMedia(msgId, receiver, file) {
                     fileSize: file?.fileSize || null,
                     clientTime: msg?.clientTime || Date.now(),
                     cover,
-                    thumb
+                    thumb,
+                    duration
                 }
             });
         }

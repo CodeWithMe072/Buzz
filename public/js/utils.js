@@ -134,7 +134,27 @@ function startTimeTicker() {
 async function forceDownload(url, fileName) {
     try {
         showToast("Downloading...", "info");
-        const response = await fetch(url);
+        let fetchUrl = url;
+
+        let target = url;
+        if (target.includes("/api/media")) {
+            target = "/api/media" + target.split("/api/media")[1];
+        }
+        if (target.startsWith("/api/media")) {
+            const parsed = new URL(target, window.location.origin);
+            const key = parsed.searchParams.get("key");
+            if (key) {
+                const res = await apiRequest("POST", "/api/media/decrypt", { key });
+                const data = res?.data || res?.Data || res;
+                if (data && data.token) {
+                    fetchUrl = `/api/media/stream/${data.token}`;
+                } else {
+                    throw new Error("Failed to get download decryption token");
+                }
+            }
+        }
+
+        const response = await fetch(fetchUrl);
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement("a");

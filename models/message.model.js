@@ -89,6 +89,11 @@ const messageSchema = new mongoose.Schema(
       default: null,
     },
 
+    duration: {
+      type: Number,
+      default: null,
+    },
+
     keyVersion: {
       type: String,
       default: null,

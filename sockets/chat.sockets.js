@@ -142,7 +142,7 @@ export default function initSocket(io) {
           tempId, to, type, content = null,
           caption = null, replyTo = null,
           clientTime, fileName = null, fileSize = null,
-          cover = null, thumb = null,
+          cover = null, thumb = null, duration = null,
           isDisappearing = false,
           cameraFacing = null,
           cameraFilter = null
@@ -221,6 +221,7 @@ export default function initSocket(io) {
           caption,
           cover,
           thumb,
+          duration,
           replyTo,
           clientTime,
           isDisappearing,

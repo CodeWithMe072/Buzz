@@ -1,4 +1,12 @@
 import mongoose from "mongoose";
+import dns from "dns";
+
+// Set DNS servers to Google Public DNS to resolve mongodb+srv SRV records
+try {
+  dns.setServers(["8.8.8.8", "8.8.4.4"]);
+} catch (e) {
+  console.warn("[MongoDB Config] Failed to set custom DNS servers:", e.message);
+}
 
 export const connectMongo = async () => {
   try {

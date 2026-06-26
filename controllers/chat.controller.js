@@ -144,10 +144,36 @@ export const getMedia = async (req, res) => {
     const media = await Message.find(query)
       .sort({ createdAt: -1 })
       .limit(Number(limit))
-      .select("tempId type content cover thumb caption fileName fileSize createdAt from")
+      .select("tempId type content cover thumb caption fileName fileSize createdAt from duration")
       .lean();
 
-    res.json({ status: true, count: media.length, data: media });
+    const formattedMedia = media.map(m => {
+      const url = m.content || "";
+      let encryptedFileId = url;
+      let target = url;
+      if (target.includes("/api/media")) {
+        target = "/api/media" + target.split("/api/media")[1];
+      }
+      if (target.startsWith("/api/media")) {
+        try {
+          const parsed = new URL(target, "http://localhost");
+          encryptedFileId = parsed.searchParams.get("key") || url;
+        } catch {
+          // ignore
+        }
+      }
+      return {
+        id: m._id || m.tempId,
+        type: m.type,
+        thumbnail: `/api/thumbnail/${m._id || m.tempId}`,
+        size: m.fileSize || "0 B",
+        duration: m.duration || null,
+        encryptedFileId: encryptedFileId,
+        createdAt: m.createdAt
+      };
+    });
+
+    res.json({ status: true, count: formattedMedia.length, data: formattedMedia });
 
   } catch (err) {
     console.error("[GetMedia]", err);

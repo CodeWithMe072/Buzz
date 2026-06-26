@@ -9,6 +9,8 @@ import os from "os";
 import crypto from "crypto";
 import { protect } from "../middleware/auth.middleware.js";
 import { CustomGif } from "../models/customGif.model.js";
+import { Message } from "../models/message.model.js";
+import mongoose from "mongoose";
 import AdmZip from "adm-zip";
 import { createEncryptStream, createDecryptStream, incrementIV, getKey, encryptBuffer } from "../utils/mediaEncryption.js";
 import { redis } from "../lib/redis.js";
@@ -94,6 +96,23 @@ class MultiFileReadStream extends Readable {
 
 function getPublicFileUrl(key) {
     return `/api/media?key=${encodeURIComponent(key)}&v=v1`;
+}
+
+function extractKeyFromUrl(url) {
+    if (!url) return null;
+    let target = url;
+    if (target.includes("/api/media")) {
+        target = "/api/media" + target.split("/api/media")[1];
+    }
+    if (target.startsWith("/api/media")) {
+        try {
+            const parsed = new URL(target, "http://localhost");
+            return parsed.searchParams.get("key");
+        } catch {
+            return null;
+        }
+    }
+    return target;
 }
 
 // =============================================================================
@@ -193,6 +212,24 @@ function extractVideoFrame(inputPath, outputPath) {
                 return reject(err);
             }
             resolve();
+        });
+    });
+}
+
+function getMediaDuration(filePath) {
+    return new Promise((resolve) => {
+        execFile("ffmpeg", ["-i", filePath], (err, stdout, stderr) => {
+            const output = stderr || stdout || "";
+            const match = output.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
+            if (match) {
+                const hours = parseInt(match[1], 10);
+                const minutes = parseInt(match[2], 10);
+                const seconds = parseFloat(match[3]);
+                const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+                resolve(totalSeconds);
+            } else {
+                resolve(null);
+            }
         });
     });
 }
@@ -309,6 +346,11 @@ router.post("/api/upload", protect, diskUpload.single("file"), async (req, res) 
             thumb_50 = thumbs.thumb_50;
         }
 
+        let duration = null;
+        if (isVideo || isAudio) {
+            duration = await getMediaDuration(tmpPath);
+        }
+
         await fse.remove(tmpPath);
 
         if (isVideo) {
@@ -316,7 +358,8 @@ router.post("/api/upload", protect, diskUpload.single("file"), async (req, res) 
                 type: "video",
                 original: url,
                 cover_270: cover_270,
-                thumb_50: thumb_50
+                thumb_50: thumb_50,
+                duration: duration
             });
         }
         if (isAudio) {
@@ -325,6 +368,7 @@ router.post("/api/upload", protect, diskUpload.single("file"), async (req, res) 
                 original: url,
                 cover_270: null,
                 thumb_50: null,
+                duration: duration
             });
         }
         if (isDocument) {
@@ -609,7 +653,9 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
             // Generate thumbnails in parallel by temporarily merging chunks to one file
             let cover_270 = null;
             let thumb_50 = null;
-            if (isVideo || mimeType.startsWith("image/")) {
+            let duration = null;
+
+            if (isVideo || isAudio || mimeType.startsWith("image/")) {
                 const tempMergedPath = path.join(os.tmpdir(), `merge_${fileId}_${Date.now()}`);
                 try {
                     const writeStream = fs.createWriteStream(tempMergedPath);
@@ -620,11 +666,17 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                     writeStream.end();
                     await new Promise((resolve) => writeStream.on("finish", resolve));
 
-                    const thumbs = await generateAndUploadThumbnail(tempMergedPath, key, isVideo);
-                    cover_270 = thumbs.cover_270;
-                    thumb_50 = thumbs.thumb_50;
+                    if (isVideo || mimeType.startsWith("image/")) {
+                        const thumbs = await generateAndUploadThumbnail(tempMergedPath, key, isVideo);
+                        cover_270 = thumbs.cover_270;
+                        thumb_50 = thumbs.thumb_50;
+                    }
+
+                    if (isVideo || isAudio) {
+                        duration = await getMediaDuration(tempMergedPath);
+                    }
                 } catch (thumbErr) {
-                    console.error("Failed to generate thumbnail for chunked upload:", thumbErr);
+                    console.error("Failed to process merged file for chunked upload:", thumbErr);
                 } finally {
                     await fse.remove(tempMergedPath).catch(() => {});
                 }
@@ -643,7 +695,8 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                     type: "video",
                     original: url,
                     cover_270: cover_270,
-                    thumb_50: thumb_50
+                    thumb_50: thumb_50,
+                    duration: duration
                 });
             }
             if (isDocument) {
@@ -656,6 +709,7 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                     original: url,
                     cover_270: null,
                     thumb_50: null,
+                    duration: duration
                 });
             }
 
@@ -726,6 +780,47 @@ function setCachedMedia(key, data) {
 }
 
 router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
+    if (req.query.page) {
+        try {
+            const myId = req.user._id;
+            const page = parseInt(req.query.page, 10) || 1;
+            const limit = parseInt(req.query.limit, 10) || 10;
+            const skip = (page - 1) * limit;
+
+            const query = {
+                $or: [
+                    { from: myId },
+                    { to: myId }
+                ],
+                type: { $in: ["image", "video", "audio"] }
+            };
+
+            const media = await Message.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
+
+            const formattedMedia = media.map(m => {
+                const encryptedFileId = extractKeyFromUrl(m.content);
+                return {
+                    id: m._id || m.tempId,
+                    type: m.type,
+                    thumbnail: `/api/thumbnail/${m._id || m.tempId}`,
+                    size: m.fileSize || "0 B",
+                    duration: m.duration || null,
+                    encryptedFileId: encryptedFileId,
+                    createdAt: m.createdAt
+                };
+            });
+
+            return res.json({ status: true, count: formattedMedia.length, data: formattedMedia });
+        } catch (err) {
+            console.error("[api/media] list error:", err);
+            return res.status(500).json({ error: "Failed to load media list" });
+        }
+    }
+
     const key = req.query.key;
     const version = req.query.v || "v1";
 
@@ -846,6 +941,13 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
 
             const decryptStream = createDecryptStream(version);
             response.Body.pipe(decryptStream).pipe(res);
+
+            res.on("close", () => {
+                if (response.Body && typeof response.Body.destroy === "function") {
+                    response.Body.destroy();
+                }
+                decryptStream.destroy();
+            });
         }
     } catch (err) {
         if (err.name === "NoSuchKey" || err.Code === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
@@ -854,6 +956,288 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
         }
         console.error("[api/media] decryption/download error:", err);
         return res.status(500).json({ error: "Failed to download or decrypt media" });
+    }
+});
+
+// =============================================================================
+// Serve Default SVG Placeholders
+// =============================================================================
+function serveDefaultPlaceholder(res, type) {
+    res.writeHead(200, {
+        "Content-Type": "image/svg+xml",
+        "Cache-Control": "public, max-age=31536000",
+    });
+    if (type === "video") {
+        res.end(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+                <rect width="100%" height="100%" fill="#1f1f1f"/>
+                <circle cx="100" cy="100" r="30" fill="none" stroke="#888" stroke-width="4"/>
+                <polygon points="92,85 115,100 92,115" fill="#888"/>
+            </svg>
+        `.trim());
+    } else {
+        res.end(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+                <rect width="100%" height="100%" fill="#1f1f1f"/>
+                <rect x="50" y="50" width="100" height="100" rx="10" fill="none" stroke="#888" stroke-width="4"/>
+                <circle cx="80" cy="80" r="12" fill="#888"/>
+                <path d="M50,130 L85,95 L110,120 L130,100 L150,120" fill="none" stroke="#888" stroke-width="4"/>
+            </svg>
+        `.trim());
+    }
+}
+
+// =============================================================================
+// GET /api/thumbnail/:id (and alias /thumbnail/:id)
+// =============================================================================
+router.get(["/api/thumbnail/:id", "/thumbnail/:id"], protect, async (req, res) => {
+    const id = req.params.id;
+    let key = "";
+    let message = null;
+    try {
+        message = await Message.findOne({ $or: [{ _id: mongoose.Types.ObjectId.isValid(id) ? id : null }, { tempId: id }] });
+        if (!message) {
+            return res.status(404).json({ error: "Message not found" });
+        }
+        
+        // Authorization check: sender or receiver must be the current user
+        if (message.from.toString() !== req.user._id.toString() && message.to.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ error: "Access denied" });
+        }
+
+        const url = message.cover || message.thumb || (message.type === "video" ? null : message.content);
+        if (!url) {
+            return serveDefaultPlaceholder(res, message.type);
+        }
+
+        key = extractKeyFromUrl(url);
+        if (!key) {
+            return serveDefaultPlaceholder(res, message.type);
+        }
+
+        const version = message.keyVersion || "v1";
+
+        const response = await s3.send(
+            new GetObjectCommand({
+                Bucket: BUCKET,
+                Key: key,
+            })
+        );
+
+        res.writeHead(200, {
+            "Content-Type": response.ContentType || "image/jpeg",
+            "Cache-Control": "public, max-age=31536000",
+        });
+
+        const decryptStream = createDecryptStream(version);
+        response.Body.pipe(decryptStream).pipe(res);
+
+        res.on("close", () => {
+            if (response.Body && typeof response.Body.destroy === "function") {
+                response.Body.destroy();
+            }
+            decryptStream.destroy();
+        });
+    } catch (err) {
+        if (err.name === "NoSuchKey" || err.Code === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
+            console.warn(`[api/thumbnail] Key not found in S3 storage: ${key}`);
+            return serveDefaultPlaceholder(res, message?.type);
+        }
+        console.error("[api/thumbnail] error:", err);
+        return res.status(500).json({ error: "Failed to download or decrypt thumbnail" });
+    }
+});
+
+// =============================================================================
+// POST /api/media/decrypt (and alias /media/decrypt)
+// =============================================================================
+router.post(["/api/media/decrypt", "/media/decrypt"], protect, async (req, res) => {
+    const { mediaId, key } = req.body;
+    try {
+        let message = null;
+        let fileKey = null;
+
+        if (mediaId) {
+            message = await Message.findOne({
+                _id: mongoose.Types.ObjectId.isValid(mediaId) ? mediaId : null,
+                $or: [{ from: req.user._id }, { to: req.user._id }]
+            });
+            if (!message) {
+                message = await Message.findOne({
+                    tempId: mediaId,
+                    $or: [{ from: req.user._id }, { to: req.user._id }]
+                });
+            }
+            if (message) {
+                fileKey = extractKeyFromUrl(message.content);
+            }
+        } else if (key) {
+            message = await Message.findOne({
+                $or: [{ from: req.user._id }, { to: req.user._id }],
+                content: { $regex: key }
+            });
+            if (message) {
+                fileKey = key;
+            }
+        }
+
+        if (!message || !fileKey) {
+            return res.status(404).json({ error: "Media not found or unauthorized access" });
+        }
+
+        const token = crypto.randomBytes(32).toString("hex");
+        const version = message.keyVersion || "v1";
+
+        await redis.set(`stream:${token}`, JSON.stringify({
+            key: fileKey,
+            version: version,
+            mediaId: message._id || message.tempId
+        }), "EX", 60);
+
+        return res.json({ token });
+    } catch (err) {
+        console.error("[api/media/decrypt] error:", err);
+        return res.status(500).json({ error: "Failed to generate decryption token" });
+    }
+});
+
+// =============================================================================
+// GET /api/media/stream/:token (and alias /media/stream/:token)
+// =============================================================================
+router.get(["/api/media/stream/:token", "/media/stream/:token"], async (req, res) => {
+    const { token } = req.params;
+    try {
+        const streamDataStr = await redis.get(`stream:${token}`);
+        if (!streamDataStr) {
+            return res.status(403).json({ error: "Invalid or expired token" });
+        }
+
+        const { key, version } = JSON.parse(streamDataStr);
+        // Extend token expiration by another 60 seconds
+        await redis.expire(`stream:${token}`, 60);
+
+        const rangeHeader = req.headers.range;
+
+        if (rangeHeader) {
+            let cached = getCachedMedia(key);
+            if (!cached) {
+                const ivResponse = await s3.send(
+                    new GetObjectCommand({
+                        Bucket: BUCKET,
+                        Key: key,
+                        Range: "bytes=0-15",
+                    })
+                );
+
+                const ivChunks = [];
+                for await (const chunk of ivResponse.Body) {
+                    ivChunks.push(chunk);
+                }
+                const iv = Buffer.concat(ivChunks);
+
+                if (iv.length < 16) {
+                    return res.status(500).json({ error: "Failed to retrieve encryption IV" });
+                }
+
+                const headInfo = await s3.send(
+                    new HeadObjectCommand({
+                        Bucket: BUCKET,
+                        Key: key,
+                    })
+                );
+
+                cached = {
+                    iv,
+                    totalEncryptedSize: headInfo.ContentLength,
+                    contentType: headInfo.ContentType || "application/octet-stream"
+                };
+                setCachedMedia(key, cached);
+            }
+
+            const { iv, totalEncryptedSize, contentType } = cached;
+            const totalPlaintextSize = totalEncryptedSize - 16;
+
+            const parts = rangeHeader.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+
+            const maxChunkSize = 1024 * 1024 * 2; // 2MB
+            let end = parts[1] ? parseInt(parts[1], 10) : start + maxChunkSize - 1;
+            if (end - start + 1 > maxChunkSize) {
+                end = start + maxChunkSize - 1;
+            }
+            if (end >= totalPlaintextSize) {
+                end = totalPlaintextSize - 1;
+            }
+
+            if (start >= totalPlaintextSize || end >= totalPlaintextSize) {
+                res.status(416).set("Content-Range", `bytes */${totalPlaintextSize}`).end();
+                return;
+            }
+
+            const chunkSize = (end - start) + 1;
+            const blockNumber = Math.floor(start / 16);
+            const byteOffset = start % 16;
+
+            const startByteR2 = 16 + blockNumber * 16;
+            const endByteR2 = 16 + end;
+
+            const ciphertextResponse = await s3.send(
+                new GetObjectCommand({
+                    Bucket: BUCKET,
+                    Key: key,
+                    Range: `bytes=${startByteR2}-${endByteR2}`,
+                })
+            );
+
+            const ciphertextChunks = [];
+            for await (const chunk of ciphertextResponse.Body) {
+                ciphertextChunks.push(chunk);
+            }
+            const ciphertext = Buffer.concat(ciphertextChunks);
+
+            const adjustedIv = incrementIV(iv, blockNumber);
+            const cipherKey = getKey(version);
+            const decipher = crypto.createDecipheriv("aes-256-ctr", cipherKey, adjustedIv);
+            const decryptedWholeBlock = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+            const finalDecryptedSlice = decryptedWholeBlock.subarray(byteOffset, byteOffset + chunkSize);
+
+            res.writeHead(206, {
+                "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
+                "Accept-Ranges": "bytes",
+                "Content-Length": finalDecryptedSlice.length,
+                "Content-Type": contentType,
+                "Cache-Control": "public, max-age=31536000",
+            });
+            res.end(finalDecryptedSlice);
+        } else {
+            const response = await s3.send(
+                new GetObjectCommand({
+                    Bucket: BUCKET,
+                    Key: key,
+                })
+            );
+
+            res.writeHead(200, {
+                "Content-Type": response.ContentType || "application/octet-stream",
+                "Cache-Control": "public, max-age=31536000",
+            });
+
+            const decryptStream = createDecryptStream(version);
+            response.Body.pipe(decryptStream).pipe(res);
+
+            res.on("close", () => {
+                if (response.Body && typeof response.Body.destroy === "function") {
+                    response.Body.destroy();
+                }
+                decryptStream.destroy();
+            });
+        }
+    } catch (err) {
+        if (err.name === "NoSuchKey" || err.Code === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
+            return res.status(404).json({ error: "Media not found" });
+        }
+        console.error("[api/media/stream] error:", err);
+        return res.status(500).json({ error: "Streaming error" });
     }
 });
 

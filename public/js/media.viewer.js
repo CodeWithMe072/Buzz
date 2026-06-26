@@ -1,72 +1,7 @@
 /**
- * media.viewer.js — MediaViewer class for fullscreen image/video browsing.
+ * media.viewer.js — MediaViewer class for fullscreen image/video/audio/pdf browsing.
  */
 
-// =============================================================================
-// VIDEO UTILITIES
-// =============================================================================
-function getVideoDuration(videoUrl) {
-    return new Promise((resolve, reject) => {
-        const video = document.createElement("video");
-        video.preload = "metadata";
-        video.src = videoUrl;
-        video.crossOrigin = "anonymous";
-        video.onloadedmetadata = () => resolve(video.duration);
-        video.onerror = () => reject("Failed to load video metadata");
-    });
-}
-
-async function generateVideoThumbnail(videoUrl) {
-    return new Promise((resolve, reject) => {
-        const video = document.createElement("video");
-        let timeout;
-
-        function cleanup() {
-            clearTimeout(timeout);
-            video.pause();
-            video.removeAttribute("src");
-            video.load();
-        }
-
-        timeout = setTimeout(() => { cleanup(); reject(new Error("Thumbnail timeout")); }, 15000);
-
-        video.crossOrigin = "anonymous";
-        video.muted = true;
-        video.playsInline = true;
-        video.preload = "metadata";
-        video.autoplay = false;
-        video.src = videoUrl;
-
-        video.onloadedmetadata = () => {
-            const seekTime = Math.min(1, Math.max(0, video.duration / 2));
-            setTimeout(() => {
-                try { video.currentTime = seekTime; }
-                catch (err) { cleanup(); reject(err); }
-            }, 200);
-        };
-
-        video.onseeked = () => {
-            try {
-                const canvas = document.createElement("canvas");
-                canvas.width = 270;
-                canvas.height = 270;
-                const ctx = canvas.getContext("2d");
-                ctx.fillStyle = "#000";
-                ctx.fillRect(0, 0, 270, 270);
-                ctx.drawImage(video, 0, 0, 270, 270);
-                const url = canvas.toDataURL("image/jpeg", 0.7);
-                cleanup();
-                resolve({ url });
-            } catch (err) { cleanup(); reject(err); }
-        };
-
-        video.onerror = () => { cleanup(); reject(new Error("Video load failed")); };
-    });
-}
-
-// =============================================================================
-// MEDIA VIEWER CLASS
-// =============================================================================
 class MediaViewer {
     constructor(chatId, data = []) {
         this.chatId = chatId;
@@ -92,6 +27,9 @@ class MediaViewer {
         this.isLoading = false;
         this.lastCreatedAt = null;
 
+        // Decryption controller to allow cancelling pending decryption requests
+        this.activeDecryptController = null;
+
         this.collectMediaItems();
         this.bindEvents();
     }
@@ -102,36 +40,59 @@ class MediaViewer {
         if (this.data && this.data.length) {
             this.mediaItems = this.data.map((m, index) => ({
                 index,
-                id: m.id ?? m.tempId,
+                id: m.id ?? m.tempId ?? m._id,
                 type: m.type,
-                src: m.content || m.src,
-                thumb: m.thumb || null,
-                cover: m.cover || null,
+                thumbnail: m.thumbnail || m.thumb || m.cover || null,
+                size: m.size || m.fileSize || 0,
+                duration: m.duration || null,
+                encryptedFileId: m.encryptedFileId || null,
                 createdAt: m.createdAt || m.timestamp || null,
-                fileSize: m.fileSize || 0
+                state: 'waiting' // Initial state
             }));
         } else {
+            // Support scanning chat messages
             this.mediaItems = (State.messages[this.chatId] || [])
-                .filter(m => (m.type === 'image' || m.type === 'video' || m.type === 'gif') && m.content)
-                .map((m, index) => ({
-                    index,
-                    id: m.id ?? m.tempId,
-                    type: m.type,
-                    src: m.content,
-                    thumb: m.thumb || null,
-                    cover: m.cover || null,
-                    createdAt: m.createdAt || m.timestamp || null,
-                    fileSize: m.fileSize || 0
-                }));
+                .filter(m => (m.type === 'image' || m.type === 'video' || m.type === 'audio' || m.type === 'document' || m.type === 'gif') && m.content)
+                .map((m, index) => {
+                    const isPdf = m.type === 'document' && m.fileName && m.fileName.toLowerCase().endsWith('.pdf');
+                    // Only include image, video, audio, gif, and PDF documents
+                    if (m.type !== 'image' && m.type !== 'video' && m.type !== 'audio' && m.type !== 'gif' && !isPdf) {
+                        return null;
+                    }
+                    
+                    // Extract encryptedFileId if possible
+                    let encryptedFileId = m.content;
+                    if (m.content && m.content.startsWith("/api/media")) {
+                        try {
+                            const parsed = new URL(m.content, window.location.origin);
+                            encryptedFileId = parsed.searchParams.get("key") || m.content;
+                        } catch {
+                            // ignore
+                        }
+                    }
+
+                    return {
+                        index,
+                        id: m.id ?? m.tempId ?? m._id,
+                        type: isPdf ? 'pdf' : m.type,
+                        thumbnail: m.thumb || m.cover || `/api/thumbnail/${m.id ?? m.tempId ?? m._id}`,
+                        size: m.fileSize || 0,
+                        duration: m.duration || null,
+                        encryptedFileId: encryptedFileId,
+                        createdAt: m.createdAt || m.timestamp || null,
+                        state: 'waiting'
+                    };
+                }).filter(Boolean);
+
+            // Re-index after filtering
+            this.mediaItems.forEach((m, idx) => m.index = idx);
         }
         this.renderedCount = 0;
         this.lastCreatedAt = this.mediaItems[this.mediaItems.length - 1]?.createdAt || null;
     }
 
     getIndexByMessageId(messageId) {
-        const idx = this.mediaItems.findIndex(m => String(m.id) === String(messageId));
-        console.log("[DEBUG MediaViewer] getIndexByMessageId messageId:", messageId, "found index:", idx, "items:", this.mediaItems.map(x => ({ id: x.id, type: x.type })));
-        return idx;
+        return this.mediaItems.findIndex(m => String(m.id) === String(messageId));
     }
 
     /* ─── LIFECYCLE ─── */
@@ -140,8 +101,15 @@ class MediaViewer {
         console.log("[DEBUG MediaViewer] open called with:", indexOrId, "initialItems:", initialItems);
         if (initialItems && initialItems.length) {
             this.mediaItems = initialItems.map((m, index) => ({
-                ...m,
-                index
+                index,
+                id: m.id ?? m.tempId ?? m._id,
+                type: m.type,
+                thumbnail: m.thumbnail || m.thumb || m.cover || `/api/thumbnail/${m.id ?? m.tempId ?? m._id}`,
+                size: m.size || m.fileSize || 0,
+                duration: m.duration || null,
+                encryptedFileId: m.encryptedFileId || null,
+                createdAt: m.createdAt || null,
+                state: 'waiting'
             }));
             this.renderedCount = 0;
             this.hasMore = initialItems.length === 10;
@@ -149,7 +117,6 @@ class MediaViewer {
             this.collectMediaItems();
             this.hasMore = true;
         }
-        console.log("[DEBUG MediaViewer] collected items:", this.mediaItems.map(x => ({ id: x.id, type: x.type })));
         this.isLoading = false;
         this.lastCreatedAt = this.mediaItems[this.mediaItems.length - 1]?.createdAt || null;
 
@@ -159,7 +126,6 @@ class MediaViewer {
         } else {
             index = this.getIndexByMessageId(indexOrId);
         }
-        console.log("[DEBUG MediaViewer] resolved index:", index);
         if (index < 0 || index >= this.mediaItems.length) {
             console.warn("[DEBUG MediaViewer] resolved index out of bounds or not found!", index);
             return;
@@ -173,7 +139,22 @@ class MediaViewer {
     close() {
         this.overlay.classList.remove('active');
         document.body.style.overflow = '';
-        this.container.querySelectorAll('video').forEach(v => v.pause());
+        
+        // Cancel any pending decryption request
+        if (this.activeDecryptController) {
+            this.activeDecryptController.abort();
+            this.activeDecryptController = null;
+        }
+
+        // Pause and unload all media elements
+        this.container.querySelectorAll('video, audio').forEach(el => {
+            el.pause();
+            el.removeAttribute('src');
+            el.load();
+        });
+        this.container.innerHTML = '';
+        this.thumbnailContainer.innerHTML = '';
+        this.renderedCount = 0;
     }
 
     async loadMoreFromDB() {
@@ -188,17 +169,19 @@ class MediaViewer {
             if (mediaMessages.length > 0) {
                 this.lastCreatedAt = mediaMessages[mediaMessages.length - 1].createdAt;
                 mediaMessages.forEach(m => {
-                    const id = m.id ?? m.tempId;
+                    const id = m.id ?? m.tempId ?? m._id;
                     if (this.mediaItems.some(item => String(item.id) === String(id))) return;
+                    
                     this.mediaItems.push({
                         index: this.mediaItems.length,
                         id,
                         type: m.type,
-                        src: m.content,
-                        thumb: m.thumb || null,
-                        cover: m.cover || null,
+                        thumbnail: m.thumbnail || `/api/thumbnail/${id}`,
+                        size: m.size || m.fileSize || 0,
+                        duration: m.duration || null,
+                        encryptedFileId: m.encryptedFileId || null,
                         createdAt: m.createdAt,
-                        fileSize: m.fileSize || 0
+                        state: 'waiting'
                     });
                 });
                 this.updateControls();
@@ -252,37 +235,60 @@ class MediaViewer {
     appendItem(item, index) {
         /* Main slide */
         const slide = document.createElement('div');
-        slide.className = 'media-slide';
+        slide.className = 'media-slide waiting';
         slide.dataset.index = index;
 
-        if (item.type === 'video') {
-            const video = document.createElement('video');
-            video.dataset.src = item.src;
-            video.preload = "none";
-            video.poster = item.cover || item.thumb || '';
-            video.controls = true;
-            slide.appendChild(video);
-            if (window.initCustomVideoPlayer) {
-                window.initCustomVideoPlayer(video);
+        // Slide state overlay for loading/error indicators
+        const overlay = document.createElement('div');
+        overlay.className = 'slide-state-overlay';
+        overlay.innerHTML = `<div class="loader"></div><div class="state-text">Loading...</div>`;
+        slide.appendChild(overlay);
+
+        // Thumbnail placeholder
+        const placeholderImg = document.createElement('img');
+        placeholderImg.className = 'thumbnail-placeholder';
+        placeholderImg.src = item.thumbnail || `/api/thumbnail/${item.id}`;
+        placeholderImg.onload = () => {
+            this.setMediaState(index, 'thumbnailLoaded');
+        };
+        
+        let thumbRetries = 0;
+        placeholderImg.onerror = () => {
+            if (thumbRetries < 4) {
+                thumbRetries++;
+                setTimeout(() => {
+                    placeholderImg.src = (item.thumbnail || `/api/thumbnail/${item.id}`) + `?retry=${thumbRetries}`;
+                }, 300);
+            } else {
+                // Fallback if thumbnail fails after retries
+                placeholderImg.src = '/images/default-video-cover.png';
+                this.setMediaState(index, 'thumbnailLoaded');
             }
-        } else {
-            const img = document.createElement('img');
-            img.loading = "lazy";
-            img.src = item.src;
-            slide.appendChild(img);
-        }
+        };
+        slide.appendChild(placeholderImg);
+
         this.container.appendChild(slide);
 
-        /* Thumbnail */
+        /* Thumbnail Strip Item */
         const thumb = document.createElement('div');
         thumb.className = 'thumbnail-item';
         thumb.dataset.index = index;
 
         const thumbImg = document.createElement('img');
         thumbImg.loading = "lazy";
-        thumbImg.src = item.type !== 'video'
-            ? (item.thumb || item.src)
-            : (item.cover || item.thumb || item.src);
+        thumbImg.src = item.thumbnail || `/api/thumbnail/${item.id}`;
+        
+        let stripRetries = 0;
+        thumbImg.onerror = () => {
+            if (stripRetries < 4) {
+                stripRetries++;
+                setTimeout(() => {
+                    thumbImg.src = (item.thumbnail || `/api/thumbnail/${item.id}`) + `?retry=${stripRetries}`;
+                }, 300);
+            } else {
+                thumbImg.src = '/images/default-video-cover.png';
+            }
+        };
         if (item.type === 'video') thumb.classList.add('video');
 
         thumb.appendChild(thumbImg);
@@ -297,38 +303,221 @@ class MediaViewer {
         this.thumbnailContainer.appendChild(thumb);
     }
 
+    setMediaState(index, state) {
+        const item = this.mediaItems[index];
+        if (item) {
+            item.state = state;
+        }
+        const slide = this.container.querySelector(`.media-slide[data-index="${index}"]`);
+        if (slide) {
+            slide.classList.remove('waiting', 'thumbnailLoaded', 'decryptRequested', 'streamReady', 'displaying', 'playing', 'error');
+            slide.classList.add(state);
+
+            const textEl = slide.querySelector('.slide-state-overlay .state-text');
+            const loaderEl = slide.querySelector('.slide-state-overlay .loader');
+
+            if (state === 'decryptRequested') {
+                if (textEl) textEl.textContent = 'Decrypting...';
+                if (loaderEl) loaderEl.style.display = 'block';
+            } else if (state === 'streamReady') {
+                if (textEl) textEl.textContent = 'Streaming...';
+                if (loaderEl) loaderEl.style.display = 'block';
+            } else if (state === 'error') {
+                if (textEl) textEl.textContent = 'Decryption failed';
+                if (loaderEl) loaderEl.style.display = 'none';
+            } else {
+                if (loaderEl) loaderEl.style.display = 'none';
+            }
+        }
+    }
+
+    async decryptAndLoadItem(index, retryCount = 0) {
+        const item = this.mediaItems[index];
+        if (!item || item.state === 'displaying' || item.state === 'playing' || item.state === 'streamReady') {
+            return;
+        }
+
+        // Cancel any active decryption requests on initial attempt
+        if (this.activeDecryptController && retryCount === 0) {
+            this.activeDecryptController.abort();
+            this.activeDecryptController = null;
+        }
+
+        const controller = retryCount === 0 ? new AbortController() : this.activeDecryptController;
+        if (retryCount === 0) {
+            this.activeDecryptController = controller;
+        }
+        
+        this.setMediaState(index, 'decryptRequested');
+
+        try {
+            const res = await apiRequest("POST", "/api/media/decrypt", { mediaId: item.id }, "json", false);
+            const data = res?.data || res?.Data || res;
+            
+            if (controller && controller.signal.aborted) return;
+
+            if (data && data.token) {
+                this.setMediaState(index, 'streamReady');
+                const streamUrl = `/api/media/stream/${data.token}`;
+                this.loadMediaSource(item, streamUrl);
+            } else {
+                throw new Error("No token returned");
+            }
+        } catch (err) {
+            if (err.name === 'AbortError' || (controller && controller.signal.aborted)) {
+                console.log("[MediaViewer] Decrypt request aborted for index:", index);
+            } else {
+                console.error("[MediaViewer] Decrypt request failed:", err);
+                if (retryCount < 4) {
+                    console.log(`[MediaViewer] Retrying decryption for index ${index} in 300ms (attempt ${retryCount + 1})...`);
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    if (this.activeDecryptController === controller) {
+                        return this.decryptAndLoadItem(index, retryCount + 1);
+                    }
+                } else {
+                    this.setMediaState(index, 'error');
+                }
+            }
+        } finally {
+            if (this.activeDecryptController === controller && retryCount === 0) {
+                this.activeDecryptController = null;
+            }
+        }
+    }
+
+    loadMediaSource(item, streamUrl) {
+        const index = item.index;
+        const slide = this.container.querySelector(`.media-slide[data-index="${index}"]`);
+        if (!slide) return;
+
+        if (item.type === 'video') {
+            let video = slide.querySelector('video');
+            if (!video) {
+                video = document.createElement('video');
+                video.controls = true;
+                slide.appendChild(video);
+                if (window.initCustomVideoPlayer) {
+                    window.initCustomVideoPlayer(video);
+                }
+            }
+            video.src = streamUrl;
+            video.preload = "auto";
+            
+            video.onplay = () => {
+                this.setMediaState(index, 'playing');
+                if (item.size && window.DataUsageTracker) {
+                    let bytes = parseInt(item.size, 10);
+                    if (isNaN(bytes)) bytes = 0;
+                    window.DataUsageTracker.trackFeature('chatVideo', bytes);
+                    item.size = 0; // Prevent double tracking
+                }
+            };
+            
+            video.play().catch(err => {
+                console.warn("[MediaViewer] Autoplay prevented:", err);
+                this.setMediaState(index, 'streamReady');
+            });
+
+        } else if (item.type === 'audio') {
+            let audio = slide.querySelector('audio');
+            if (!audio) {
+                audio = document.createElement('audio');
+                audio.controls = true;
+                slide.appendChild(audio);
+            }
+            audio.src = streamUrl;
+            audio.preload = "auto";
+            
+            audio.onplay = () => {
+                this.setMediaState(index, 'playing');
+            };
+            
+            audio.play().catch(err => {
+                console.warn("[MediaViewer] Autoplay prevented:", err);
+                this.setMediaState(index, 'streamReady');
+            });
+
+        } else if (item.type === 'pdf') {
+            let iframe = slide.querySelector('iframe.pdf-viewer');
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.className = 'pdf-viewer';
+                slide.appendChild(iframe);
+            }
+            iframe.src = streamUrl;
+            iframe.onload = () => {
+                this.setMediaState(index, 'displaying');
+            };
+            iframe.onerror = () => {
+                this.setMediaState(index, 'error');
+            };
+
+        } else {
+            // Image / GIF
+            let img = slide.querySelector('img.original-image');
+            if (!img) {
+                img = document.createElement('img');
+                img.className = 'original-image';
+                slide.appendChild(img);
+            }
+            img.src = streamUrl;
+            img.onload = () => {
+                this.setMediaState(index, 'displaying');
+            };
+            img.onerror = () => {
+                this.setMediaState(index, 'error');
+            };
+        }
+    }
+
+    cleanMemoryCache() {
+        this.container.querySelectorAll('.media-slide').forEach((slide, idx) => {
+            // Unload files outside [currentIndex - 1, currentIndex + 1] range
+            if (Math.abs(idx - this.currentIndex) > 1) {
+                const video = slide.querySelector('video');
+                if (video) {
+                    video.pause();
+                    video.removeAttribute('src');
+                    video.load();
+                    video.remove();
+                }
+
+                const audio = slide.querySelector('audio');
+                if (audio) {
+                    audio.pause();
+                    audio.removeAttribute('src');
+                    audio.load();
+                    audio.remove();
+                }
+
+                const img = slide.querySelector('img.original-image');
+                if (img) {
+                    img.src = '';
+                    img.remove();
+                }
+
+                const iframe = slide.querySelector('iframe.pdf-viewer');
+                if (iframe) {
+                    iframe.src = '';
+                    iframe.remove();
+                }
+
+                this.setMediaState(idx, 'thumbnailLoaded');
+            }
+        });
+    }
+
     updateMedia() {
+        // Toggle active class on slides
         this.container.querySelectorAll('.media-slide').forEach((slide, i) => {
             const active = i === this.currentIndex;
             slide.classList.toggle('active', active);
+            
             const video = slide.querySelector('video');
-            if (video) {
-                if (active) {
-                    if (!video.src) video.src = video.dataset.src;
-                    video.preload = "auto";
-                    var playPromise = video.play();
-                    if (playPromise !== undefined) {
-                        playPromise.then(_ => {
-                            // Autoplay started
-                            // Track chat video data usage
-                            if (this.mediaItems[i] && this.mediaItems[i].fileSize && window.DataUsageTracker) {
-                                window.DataUsageTracker.trackFeature('chatVideo', this.mediaItems[i].fileSize);
-                                this.mediaItems[i].fileSize = 0; // Prevent double tracking
-                            }
-                        }).catch(error => {
-                            console.warn("Autoplay prevented by browser, requires user interaction", error);
-                            // Ensure controls are visible so user can click play manually
-                            video.controls = true;
-                        });
-                    }
-                } else if (Math.abs(i - this.currentIndex) === 1) {
-                    if (!video.src) video.src = video.dataset.src;
-                    video.preload = "metadata";
-                    video.pause();
-                } else {
-                    video.preload = "none";
-                    video.pause();
-                }
+            const audio = slide.querySelector('audio');
+            if (!active) {
+                if (video) video.pause();
+                if (audio) audio.pause();
             }
         });
 
@@ -338,6 +527,12 @@ class MediaViewer {
         });
 
         this.updateControls();
+
+        // 1. Clean memory cache of distant elements
+        this.cleanMemoryCache();
+
+        // 2. Decrypt and load the current active item
+        this.decryptAndLoadItem(this.currentIndex);
     }
 
     updateControls() {
@@ -406,20 +601,34 @@ class MediaViewer {
 
     addItem(msg) {
         if (!msg?.content) return;
-        if (!(msg.type === "image" || msg.type === "video" || msg.type === "gif")) return;
-        const id = msg.id ?? msg.tempId;
+        const isPdf = msg.type === "document" && msg.fileName && msg.fileName.toLowerCase().endsWith(".pdf");
+        if (!(msg.type === "image" || msg.type === "video" || msg.type === "gif" || msg.type === "audio" || isPdf)) return;
+        
+        const id = msg.id ?? msg.tempId ?? msg._id;
         if (this.mediaItems.some(item => String(item.id) === String(id))) return;
+
+        // Extract encryptedFileId if possible
+        let encryptedFileId = msg.content;
+        if (msg.content && msg.content.startsWith("/api/media")) {
+            try {
+                const parsed = new URL(msg.content, window.location.origin);
+                encryptedFileId = parsed.searchParams.get("key") || msg.content;
+            } catch {
+                // ignore
+            }
+        }
 
         const index = this.mediaItems.length;
         this.mediaItems.push({
             index,
             id,
-            type: msg.type,
-            src: msg.content,
-            thumb: msg.thumb || null,
-            cover: msg.cover || null,
+            type: isPdf ? 'pdf' : msg.type,
+            thumbnail: msg.thumb || msg.cover || `/api/thumbnail/${id}`,
+            size: msg.fileSize || 0,
+            duration: msg.duration || null,
+            encryptedFileId: encryptedFileId,
             createdAt: msg.createdAt || msg.timestamp || null,
-            fileSize: msg.fileSize || 0
+            state: 'waiting'
         });
         if (this.overlay.classList.contains("active")) {
             if (this.currentIndex >= this.renderedCount - 3) this.renderMore();

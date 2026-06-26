@@ -7840,4 +7840,79 @@ input:checked+.slider:before {
     opacity: 0.4;
     cursor: not-allowed;
 }
+
+/* Additional styles for Media Viewer V2 */
+.media-slide .thumbnail-placeholder {
+    position: absolute;
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+    filter: blur(10px);
+    transition: opacity 0.3s ease;
+    opacity: 0.7;
+    z-index: 1;
+}
+
+/* Hide thumbnail placeholder when original is loaded */
+.media-slide.displaying .thumbnail-placeholder,
+.media-slide.playing .thumbnail-placeholder {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.media-slide .original-image {
+    position: relative;
+    z-index: 2;
+    max-width: 90%;
+    max-height: 90%;
+    object-fit: contain;
+}
+
+.media-slide iframe.pdf-viewer {
+    width: 80%;
+    height: 80%;
+    border: none;
+    background: #fff;
+    z-index: 2;
+}
+
+.slide-state-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    z-index: 3;
+    pointer-events: none;
+    color: #fff;
+    font-size: 14px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.slide-state-overlay .loader {
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    border-top: 3px solid #25d366;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Show state overlay only in transition or error states */
+.media-slide .slide-state-overlay {
+    display: none;
+}
+.media-slide.decryptRequested .slide-state-overlay,
+.media-slide.streamReady .slide-state-overlay,
+.media-slide.error .slide-state-overlay {
+    display: flex;
+}
 
