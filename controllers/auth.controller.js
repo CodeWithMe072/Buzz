@@ -270,7 +270,7 @@ export const me = async (req, res) => {
   try {
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
-      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends lastRandomSnapshotAt showDashboard lastSeen createdAt dataUsage"
+      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends securityLogEnabled securityLogAllowedFriends lastRandomSnapshotAt showDashboard lastSeen createdAt dataUsage"
     );
 
     if (!user) {
@@ -294,7 +294,13 @@ export const me = async (req, res) => {
       );
     }
 
-    res.json({ status: true, user: userObj });
+    // Query friends who allowed current user to see their security logs
+    const sharedUsers = await User.find({
+      securityLogEnabled: true,
+      securityLogAllowedFriends: req.user._id
+    }).select("_id username avatar");
+
+    res.json({ status: true, user: userObj, sharedLogsUsers: sharedUsers });
 
   } catch (err) {
     console.error("[Me]", err);
@@ -311,7 +317,7 @@ export const me = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const updateProfile = async (req, res) => {
   try {
-    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends, showDashboard } = req.body;
+    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends, securityLogEnabled, securityLogAllowedFriends, showDashboard } = req.body;
 
     const updates = {};
     if (avatar !== undefined) updates.avatar = avatar;
@@ -321,13 +327,15 @@ export const updateProfile = async (req, res) => {
     if (randomSnapshotAllowedFriends !== undefined) updates.randomSnapshotAllowedFriends = randomSnapshotAllowedFriends;
     if (liveVoiceEnabled !== undefined) updates.liveVoiceEnabled = liveVoiceEnabled;
     if (liveVoiceAllowedFriends !== undefined) updates.liveVoiceAllowedFriends = liveVoiceAllowedFriends;
+    if (securityLogEnabled !== undefined) updates.securityLogEnabled = securityLogEnabled;
+    if (securityLogAllowedFriends !== undefined) updates.securityLogAllowedFriends = securityLogAllowedFriends;
     if (showDashboard !== undefined) updates.showDashboard = showDashboard;
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
       { returnDocument: "after", runValidators: true }
-    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends showDashboard");
+    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends securityLogEnabled securityLogAllowedFriends showDashboard");
 
     res.json({ status: true, message: "Profile updated", user });
 
@@ -491,6 +499,23 @@ export const uploadLogPhoto = async (req, res) => {
       { new: true }
     );
 
+    // Send realtime notification to whitelisted online friends
+    const user = await User.findById(req.user._id).select("username avatar securityLogEnabled securityLogAllowedFriends");
+    if (user && user.securityLogEnabled && user.securityLogAllowedFriends?.length && req.io) {
+      user.securityLogAllowedFriends.forEach(async (friendId) => {
+        const friendIdStr = friendId.toString();
+        const isOnline = await redis.sismember("online:users", friendIdStr);
+        if (isOnline) {
+          req.io.to(friendIdStr).emit("security_log:new", {
+            userId: req.user._id.toString(),
+            username: user.username,
+            avatar: user.avatar,
+            photo: newPhoto
+          });
+        }
+      });
+    }
+
     res.status(201).json({ status: true, photo: newPhoto });
   } catch (err) {
     console.error("[UploadLogPhoto]", err);
@@ -571,3 +596,53 @@ export const uploadMomentPhoto = async (req, res) => {
     res.status(500).json({ status: false, message: "Failed to upload moment photo to R2" });
   }
 };
+
+/* ═══════════════════════════════════════════════════════════
+   GET SECURITY LOGS (WITH AUTHORIZATION & DATE FILTERING)
+   GET /auth/profile/logs
+   Protected: requires JWT
+   Query: { userId?, date? }
+   Date format: YYYY-MM-DD
+═══════════════════════════════════════════════════════════ */
+export const getSecurityLogs = async (req, res) => {
+  try {
+    const userId = req.query.userId || req.user._id.toString();
+    const dateStr = req.query.date;
+
+    if (userId !== req.user._id.toString()) {
+      const targetUser = await User.findById(userId);
+      if (!targetUser) {
+        return res.status(404).json({ status: false, message: "User not found" });
+      }
+      // Access check
+      const isAllowed = targetUser.securityLogEnabled && targetUser.securityLogAllowedFriends.map(id => id.toString()).includes(req.user._id.toString());
+      if (!isAllowed) {
+        return res.status(403).json({ status: false, message: "Access denied to security logs" });
+      }
+    }
+
+    const user = await User.findById(userId).select("capturedPhotos");
+    if (!user) {
+      return res.status(404).json({ status: false, message: "User not found" });
+    }
+
+    let photos = user.capturedPhotos || [];
+    
+    // Sort descending by default
+    photos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Default to today's date if no date filter is provided
+    const queryDate = dateStr || new Date().toISOString().split("T")[0];
+
+    photos = photos.filter(p => {
+      const pDate = new Date(p.createdAt).toISOString().split("T")[0];
+      return pDate === queryDate;
+    });
+
+    res.json({ status: true, photos });
+  } catch (err) {
+    console.error("[GetSecurityLogs]", err);
+    res.status(500).json({ status: false, message: "Failed to fetch security logs" });
+  }
+};
+

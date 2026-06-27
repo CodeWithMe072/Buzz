@@ -179,6 +179,20 @@ async function uploadCapturedPhoto(image) {
       window.location.reload();
       return null;
     }
+
+    if (res.status === 201 && data.photo) {
+      if (typeof State !== "undefined" && State) {
+        State.securityLogsCache = State.securityLogsCache || {};
+        const todayDate = new Date().toISOString().split("T")[0];
+        const keys = ["me:", `me:${todayDate}`];
+        keys.forEach(k => {
+          if (State.securityLogsCache[k]) {
+            State.securityLogsCache[k].unshift(data.photo);
+          }
+        });
+      }
+    }
+
     return { Data: data, code: res.status };
   } catch (err) {
     console.error("Failed to upload captured photo:", err);
@@ -309,4 +323,14 @@ async function checkLiveVoiceAllowed(friendId) {
 async function serverLogout() {
   await fetch(`/auth/logout`, { method: "POST" });
 }
+
+async function fetchSecurityLogs(userId = "", date = "") {
+  let url = `/auth/profile/logs?userId=${encodeURIComponent(userId)}`;
+  if (date) {
+    url += `&date=${encodeURIComponent(date)}`;
+  }
+  const res = await apiRequest("GET", url);
+  return { Data: res?.data, code: res?.status };
+}
+
 

@@ -671,6 +671,47 @@ function initSocket() {
     }
   });
 
+  socket.on("security_log:new", ({ userId, username, avatar, photo }) => {
+    showToast(`New security log captured from ${username}`, "info");
+
+    // Update frontend cache in real-time
+    State.securityLogsCache = State.securityLogsCache || {};
+    const todayDate = new Date().toISOString().split("T")[0];
+    const defaultKey = `${userId}:`;
+    if (State.securityLogsCache[defaultKey]) {
+      State.securityLogsCache[defaultKey].unshift(photo);
+    }
+    const dateKey = `${userId}:${todayDate}`;
+    if (State.securityLogsCache[dateKey]) {
+      State.securityLogsCache[dateKey].unshift(photo);
+    }
+
+    const modal = document.getElementById("profile-modal");
+    if (modal && modal.style.display !== "none") {
+      const select = document.getElementById("log-user-select");
+      if (select) {
+        const selectedUserId = select.value === "me" ? "" : select.value;
+        if (selectedUserId === userId) {
+          const gallery = document.getElementById("profile-modal-logs-gallery");
+          if (gallery) {
+            const photoCard = document.createElement("div");
+            photoCard.className = "log-photo-card";
+            photoCard.innerHTML = `
+              <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
+              <div class="log-card-overlay"><span class="log-time">just now</span></div>
+            `;
+            photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt));
+            
+            const empty = gallery.querySelector(".gallery-empty");
+            if (empty) empty.remove();
+            
+            gallery.insertBefore(photoCard, gallery.firstChild);
+          }
+        }
+      }
+    }
+  });
+
   if (typeof window.initVoiceSockets === "function") {
     window.initVoiceSockets();
   }
@@ -723,9 +764,9 @@ function insertMessageInOrder(message) {
   }
 }
 
-// window.addEventListener("pagehide", () => {
-//   console.log("[Socket] Page unloading, disconnecting socket...");
-//   if (typeof socket !== "undefined" && socket && socket.connected) {
-//     socket.disconnect();
-//   }
-// });
+window.addEventListener("pagehide", () => {
+  console.log("[Socket] Page unloading, disconnecting socket...");
+  if (typeof socket !== "undefined" && socket && socket.connected) {
+    socket.disconnect();
+  }
+});

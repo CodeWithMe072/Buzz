@@ -10,6 +10,7 @@ import {
   toggleNotifications,
   uploadLogPhoto,
   uploadMomentPhoto,
+  getSecurityLogs,
 } from "../controllers/auth.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 import { redis } from "../lib/redis.js";
@@ -31,6 +32,7 @@ router.post("/auth/refresh", refresh);
 /* --- Protected --- */
 router.get("/auth/me", protect, me);
 router.put("/auth/profile", protect, updateProfile);
+router.get("/auth/profile/logs", protect, getSecurityLogs);
 router.post("/auth/profile/logs", protect, upload.single("image"), uploadLogPhoto);
 router.post("/auth/profile/moments", protect, upload.single("image"), uploadMomentPhoto);
 router.put("/auth/password", protect, changePassword);

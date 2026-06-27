@@ -97,6 +97,16 @@ const userSchema = new mongoose.Schema(
         ref: "User",
       }
     ],
+    securityLogEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    securityLogAllowedFriends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      }
+    ],
     dataUsage: {
       type: Object,
       default: {}

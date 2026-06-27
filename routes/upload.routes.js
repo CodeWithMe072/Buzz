@@ -10,6 +10,7 @@ import crypto from "crypto";
 import { protect } from "../middleware/auth.middleware.js";
 import { CustomGif } from "../models/customGif.model.js";
 import { Message } from "../models/message.model.js";
+import { User } from "../models/user.model.js";
 import mongoose from "mongoose";
 import AdmZip from "adm-zip";
 import { createEncryptStream, createDecryptStream, incrementIV, getKey, encryptBuffer } from "../utils/mediaEncryption.js";
@@ -826,6 +827,21 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
 
     if (!key) {
         return res.status(400).json({ error: "Missing key parameter" });
+    }
+
+    // Authorization Check on Decryption for logs/
+    if (key.startsWith("logs/")) {
+        // key format: logs/log_${ownerId}_${timestamp}.jpg
+        const parts = key.split("_");
+        if (parts.length >= 2) {
+            const ownerId = parts[1];
+            if (ownerId !== req.user._id.toString()) {
+                const owner = await User.findById(ownerId);
+                if (!owner || !owner.securityLogEnabled || !owner.securityLogAllowedFriends.map(id => id.toString()).includes(req.user._id.toString())) {
+                    return res.status(403).json({ error: "Access denied to security logs" });
+                }
+            }
+        }
     }
 
     try {

@@ -80,6 +80,7 @@ async function bootstrapAfterLogin() {
         ...State.currentUser,
         ...user
       };
+      State.sharedLogsUsers = profileRes.Data.sharedLogsUsers || [];
       localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
 
       if (window.DataUsageTracker && user.dataUsage) {
@@ -304,6 +305,7 @@ function formatRelativeTime(date) {
 }
 
 function openLogLightbox(url, timestamp) {
+  if (document.querySelector(".log-lightbox-overlay")) return;
   const lightbox = document.createElement("div");
   lightbox.className = "log-lightbox-overlay";
   lightbox.innerHTML = `
@@ -672,10 +674,29 @@ function renderPeopleTab(tab) {
           </div>
         </div>
       </div>
+
+      <div class="profile-content-card" style="margin-top: 24px;">
+        <div class="settings-row" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 16px;">
+          <div class="settings-label-wrap">
+            <span class="settings-label-main">Security Logs Sharing</span>
+            <span class="settings-label-sub">Allow whitelisted friends to view your today/old security logs</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="profile-modal-security-log-toggle" ${user.securityLogEnabled ? "checked" : ""}>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div id="profile-modal-security-log-whitelist-container" style="${user.securityLogEnabled ? "display: block;" : "display: none;"}">
+          <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--text-secondary);">Share Security Logs With</h3>
+          <div class="profile-modal-whitelist-list" id="profile-modal-security-log-whitelist-list">
+          </div>
+        </div>
+      </div>
     `;
 
     renderModalWhitelist(container.querySelector("#profile-modal-whitelist-list"));
     renderModalVoiceWhitelist(container.querySelector("#profile-modal-voice-whitelist-list"));
+    renderModalSecurityLogWhitelist(container.querySelector("#profile-modal-security-log-whitelist-list"));
 
     container.querySelector("#profile-modal-random-snapshot-toggle").addEventListener("change", async (e) => {
       const enabled = e.target.checked;
@@ -717,18 +738,127 @@ function renderPeopleTab(tab) {
       }
     });
 
+    container.querySelector("#profile-modal-security-log-toggle").addEventListener("change", async (e) => {
+      const enabled = e.target.checked;
+      const res = await updateProfile({ securityLogEnabled: enabled });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.securityLogEnabled = enabled;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        const whitelistContainer = container.querySelector("#profile-modal-security-log-whitelist-container");
+        if (whitelistContainer) {
+          whitelistContainer.style.display = enabled ? "block" : "none";
+        }
+        if (enabled) {
+          renderModalSecurityLogWhitelist(container.querySelector("#profile-modal-security-log-whitelist-list"));
+        }
+        showToast(`Security logs sharing ${enabled ? "enabled" : "disabled"}`, "success");
+      } else {
+        e.target.checked = !enabled;
+        showToast("Failed to update profile setting", "error");
+      }
+    });
+
   } else if (tab === "logs") {
     container.innerHTML = `
       <div class="profile-section-title-wrap" style="margin-bottom: 24px;">
         <h2 class="profile-section-title">Security Logs</h2>
       </div>
       <div class="profile-content-card">
-        <h3 style="margin-bottom: 12px;">Silent Log Captures</h3>
-        <div class="profile-modal-logs-gallery" id="profile-modal-logs-gallery">
+        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 12px; color: var(--text-secondary);">Source</span>
+            <select id="log-user-select" class="buzz-select" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 6px; padding: 6px 12px; font-size: 13px; outline: none; cursor: pointer;">
+              <option value="me">My Logs</option>
+            </select>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 12px; color: var(--text-secondary);">Date Filter</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <input type="date" id="log-date-filter" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 6px; padding: 5px 10px; font-size: 13px; outline: none; cursor: pointer;">
+              <button id="log-clear-date" class="gov-btn" style="padding: 6px 10px; font-size: 11px; margin: 0; min-height: unset; background: rgba(255,255,255,0.1); border: none;">Clear</button>
+            </div>
+          </div>
+        </div>
+        <div class="profile-modal-logs-gallery" id="profile-modal-logs-gallery" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 16px;">
+        </div>
+
+        <div style="margin-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 20px;">
+          <h3 style="font-size: 14px; margin-bottom: 12px; color: var(--text-secondary);">Authorized Log Sources</h3>
+          <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+            <table class="buzz-table" style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; background: rgba(255,255,255,0.01); border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+              <thead>
+                <tr style="background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08);">
+                  <th style="padding: 10px 12px; font-weight: 600; color: var(--text-secondary);">User</th>
+                  <th style="padding: 10px 12px; font-weight: 600; color: var(--text-secondary);">Source Type</th>
+                  <th style="padding: 10px 12px; font-weight: 600; color: var(--text-secondary);">Status</th>
+                  <th style="padding: 10px 12px; font-weight: 600; color: var(--text-secondary); text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="log-sources-table-body">
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     `;
-    renderModalLogs(container.querySelector("#profile-modal-logs-gallery"));
+
+    const select = container.querySelector("#log-user-select");
+    const dateFilter = container.querySelector("#log-date-filter");
+    const clearDateBtn = container.querySelector("#log-clear-date");
+
+    if (State.sharedLogsUsers && State.sharedLogsUsers.length) {
+      State.sharedLogsUsers.forEach(u => {
+        const opt = document.createElement("option");
+        opt.value = u._id || u.id;
+        opt.textContent = u.username;
+        select.appendChild(opt);
+      });
+    }
+
+    select.addEventListener("change", () => loadAndRenderLogs(container));
+    dateFilter.addEventListener("change", () => loadAndRenderLogs(container));
+    clearDateBtn.addEventListener("click", () => {
+      dateFilter.value = "";
+      loadAndRenderLogs(container);
+    });
+
+    renderLogSourcesTable(container);
+    loadAndRenderLogs(container);
+
+    // Fetch fresh profile in background to get real-time whitelist updates
+    getMyProfile().then(profileRes => {
+      if (profileRes && profileRes.code === 200 && profileRes.Data?.user) {
+        const user = profileRes.Data.user;
+        if (user._id && !user.id) {
+          user.id = user._id.toString();
+        }
+        State.currentUser = { ...State.currentUser, ...user };
+        State.sharedLogsUsers = profileRes.Data.sharedLogsUsers || [];
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+
+        // Re-populate log-user-select dropdown
+        const currentVal = select.value;
+        select.innerHTML = '<option value="me">My Logs</option>';
+        if (State.sharedLogsUsers && State.sharedLogsUsers.length) {
+          State.sharedLogsUsers.forEach(u => {
+            const opt = document.createElement("option");
+            opt.value = u._id || u.id;
+            opt.textContent = u.username;
+            select.appendChild(opt);
+          });
+        }
+        
+        // Restore selection if still valid, otherwise revert to me
+        select.value = currentVal;
+        if (select.value !== currentVal) {
+          select.value = "me";
+          loadAndRenderLogs(container);
+        }
+
+        // Re-render table with fresh entries
+        renderLogSourcesTable(container);
+      }
+    }).catch(console.error);
   } else if (tab === "themes") {
     const activeTheme = localStorage.getItem("buzz-app-theme") || "default";
     container.innerHTML = `
@@ -1187,6 +1317,171 @@ function renderModalVoiceWhitelist(whitelistList) {
       }
     });
     whitelistList.appendChild(row);
+  });
+}
+
+function renderModalSecurityLogWhitelist(whitelistList) {
+  if (!whitelistList) return;
+  whitelistList.innerHTML = "";
+  const user = State.currentUser || {};
+  if (!State.contacts.length) {
+    whitelistList.innerHTML = `<p style="font-size:12px;color:var(--text-secondary);text-align:center;margin:16px 0;">No connections to share with yet.</p>`;
+    return;
+  }
+
+  const allowed = (user.securityLogAllowedFriends || []).map(id => id.toString());
+  State.contacts.forEach(c => {
+    const row = document.createElement("div");
+    row.className = "whitelist-row";
+    const isWhitelisted = allowed.includes(c.user.id?.toString());
+    row.innerHTML = `
+      <div class="whitelist-user">
+        <div class="whitelist-avatar">${c.user.username.charAt(0).toUpperCase()}</div>
+        <span class="whitelist-username">${sanitizeInput(c.user.username)}</span>
+      </div>
+      <label class="switch mini-switch">
+        <input type="checkbox" class="modal-security-log-whitelist-friend-toggle" data-friend-id="${c.user.id}" ${isWhitelisted ? "checked" : ""}>
+        <span class="slider"></span>
+      </label>
+    `;
+
+    row.querySelector(".modal-security-log-whitelist-friend-toggle").addEventListener("change", async (e) => {
+      const friendId = e.target.dataset.friendId;
+      const checked = e.target.checked;
+      let allowedList = State.currentUser.securityLogAllowedFriends || [];
+      allowedList = allowedList.map(id => id.toString());
+      const idx = allowedList.indexOf(friendId);
+      if (checked) { if (idx === -1) allowedList.push(friendId); } else { if (idx !== -1) allowedList.splice(idx, 1); }
+
+      const res = await updateProfile({ securityLogAllowedFriends: allowedList });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.securityLogAllowedFriends = allowedList;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        showToast(`Security logs permission updated`, "success");
+      } else {
+        e.target.checked = !checked;
+        showToast("Failed to update whitelist", "error");
+      }
+    });
+    whitelistList.appendChild(row);
+  });
+}
+
+async function loadAndRenderLogs(container) {
+  const select = container.querySelector("#log-user-select");
+  const dateFilter = container.querySelector("#log-date-filter");
+  const gallery = container.querySelector("#profile-modal-logs-gallery");
+  if (!select || !dateFilter || !gallery) return;
+
+  const selectedUserId = select.value === "me" ? "" : select.value;
+  const selectedDate = dateFilter.value || "";
+  
+  // Highlight row in table
+  updateTableSelection(container, select.value);
+
+  State.securityLogsCache = State.securityLogsCache || {};
+  const cacheKey = `${selectedUserId || "me"}:${selectedDate}`;
+  let photos = State.securityLogsCache[cacheKey];
+
+  if (!photos) {
+    gallery.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-secondary); padding: 20px;">Loading logs...</div>`;
+    const res = await fetchSecurityLogs(selectedUserId, selectedDate);
+    if (res.code === 200 && res.Data?.photos) {
+      photos = res.Data.photos;
+      State.securityLogsCache[cacheKey] = photos;
+    }
+  }
+
+  if (photos) {
+    gallery.innerHTML = "";
+    if (!photos.length) {
+      gallery.innerHTML = `<div class="gallery-empty" style="grid-column: span 3; text-align: center; padding: 20px; color: var(--text-secondary);"><p>No security logs found.</p></div>`;
+      return;
+    }
+    photos.forEach((photo) => {
+      const photoCard = document.createElement("div");
+      photoCard.className = "log-photo-card";
+      photoCard.innerHTML = `
+        <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
+        <div class="log-card-overlay"><span class="log-time">${formatRelativeTime(new Date(photo.createdAt))}</span></div>
+      `;
+      photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt));
+      gallery.appendChild(photoCard);
+    });
+  } else {
+    gallery.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-danger); padding: 20px;">Failed to load logs.</div>`;
+  }
+}
+
+function renderLogSourcesTable(container) {
+  const tbody = container.querySelector("#log-sources-table-body");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+
+  // 1. My Logs row
+  const myRow = document.createElement("tr");
+  myRow.style.borderBottom = "1px solid rgba(255,255,255,0.04)";
+  myRow.innerHTML = `
+    <td style="padding: 10px 12px; display: flex; align-items: center; gap: 8px;">
+      <div class="whitelist-avatar" style="width: 24px; height: 24px; font-size: 10px; margin: 0;">${State.currentUser.username.charAt(0).toUpperCase()}</div>
+      <span style="font-weight: 500;">You</span>
+    </td>
+    <td style="padding: 10px 12px; color: var(--text-secondary);">Personal Logs</td>
+    <td style="padding: 10px 12px;"><span style="background: rgba(0, 200, 100, 0.15); color: #00c864; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Active</span></td>
+    <td style="padding: 10px 12px; text-align: right;">
+      <button class="gov-btn select-source-btn" data-user-id="me" style="padding: 4px 8px; font-size: 11px; margin: 0; min-height: unset; background: var(--primary-color);">Select</button>
+    </td>
+  `;
+  tbody.appendChild(myRow);
+
+  // 2. Shared friends rows
+  if (State.sharedLogsUsers && State.sharedLogsUsers.length) {
+    State.sharedLogsUsers.forEach(u => {
+      const row = document.createElement("tr");
+      row.style.borderBottom = "1px solid rgba(255,255,255,0.04)";
+      row.innerHTML = `
+        <td style="padding: 10px 12px; display: flex; align-items: center; gap: 8px;">
+          <div class="whitelist-avatar" style="width: 24px; height: 24px; font-size: 10px; margin: 0;">${u.username.charAt(0).toUpperCase()}</div>
+          <span style="font-weight: 500;">${sanitizeInput(u.username)}</span>
+        </td>
+        <td style="padding: 10px 12px; color: var(--text-secondary);">Shared Logs</td>
+        <td style="padding: 10px 12px;"><span style="background: rgba(0, 200, 100, 0.15); color: #00c864; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Authorized</span></td>
+        <td style="padding: 10px 12px; text-align: right;">
+          <button class="gov-btn select-source-btn" data-user-id="${u._id || u.id}" style="padding: 4px 8px; font-size: 11px; margin: 0; min-height: unset;">Select</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
+  } else {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td colspan="4" style="padding: 12px; text-align: center; color: var(--text-secondary); font-style: italic;">No friends have whitelisted you to view their logs yet.</td>
+    `;
+    tbody.appendChild(row);
+  }
+
+  // Add click listeners to select buttons
+  tbody.querySelectorAll(".select-source-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const targetUserId = e.target.dataset.userId;
+      const select = container.querySelector("#log-user-select");
+      if (select) {
+        select.value = targetUserId;
+        loadAndRenderLogs(container);
+      }
+    });
+  });
+}
+
+function updateTableSelection(container, selectedUserId) {
+  const tbody = container.querySelector("#log-sources-table-body");
+  if (!tbody) return;
+  tbody.querySelectorAll(".select-source-btn").forEach(b => {
+    if (b.dataset.userId === selectedUserId) {
+      b.style.background = "var(--primary-color)";
+    } else {
+      b.style.background = "rgba(255,255,255,0.1)";
+    }
   });
 }
 
