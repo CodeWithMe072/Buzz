@@ -1086,6 +1086,24 @@ router.post(["/api/media/decrypt", "/media/decrypt"], protect, async (req, res) 
             }
             if (message) {
                 fileKey = extractKeyFromUrl(message.content);
+            } else {
+                // Check if it's a security log photo ID
+                const currentUser = await User.findById(req.user._id);
+                let photo = currentUser.capturedPhotos?.find(p => p._id?.toString() === mediaId || p.id === mediaId);
+                if (!photo) {
+                    const whitelistedFriends = await User.find({
+                        securityLogEnabled: true,
+                        securityLogAllowedFriends: req.user._id
+                    });
+                    for (const friend of whitelistedFriends) {
+                        photo = friend.capturedPhotos?.find(p => p._id?.toString() === mediaId || p.id === mediaId);
+                        if (photo) break;
+                    }
+                }
+                if (photo) {
+                    fileKey = extractKeyFromUrl(photo.url);
+                    message = { keyVersion: photo.keyVersion || "v1" };
+                }
             }
         } else if (key) {
             message = await Message.findOne({

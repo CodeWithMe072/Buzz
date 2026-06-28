@@ -220,13 +220,11 @@ export const logout = async (req, res) => {
 export const refresh = async (req, res) => {
   try {
     const refreshToken = req.cookies?.refreshToken;
-    console.log(refreshToken)
     if (!refreshToken) {
       return res.status(401).json({
         code: "NO_REFRESH_TOKEN"
       });
     }
-    console.log(process.env.JWT_REFRESH_SECRET, process.env.JWT_SECRET)
     const decoded = jwt.verify(
       refreshToken,
       process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
@@ -254,7 +252,6 @@ export const refresh = async (req, res) => {
       token: accessToken
     });
   } catch {
-    console.log()
     return res.status(401).json({
       code: "REFRESH_TOKEN_EXPIRED"
     });

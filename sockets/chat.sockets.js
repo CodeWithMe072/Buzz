@@ -698,6 +698,27 @@ export default function initSocket(io) {
         console.error("[Socket] react error:", err);
       }
     });
+
+    /* ─────────────────────────────────────────────────────────
+       DELETE MESSAGE — broadcast deletion event to recipients
+    ───────────────────────────────────────────────────────── */
+    socket.on("delete_message", async ({ messageId, to, type }) => {
+      try {
+        if (!messageId || !to) return;
+        const deletePayload = { messageId, type };
+
+        // Send to recipient if type is everyone
+        if (type === "everyone") {
+          io.to(to).emit("message_deleted", deletePayload);
+        }
+        // Send to sender's other devices
+        socket.to(userId).emit("message_deleted", deletePayload);
+        // Confirm to this socket
+        socket.emit("message_deleted", deletePayload);
+      } catch (err) {
+        console.error("[Socket] delete_message error:", err);
+      }
+    });
     /* ─────────────────────────────────────────────────────────
        DATA USAGE TRACKER SYNC
     ───────────────────────────────────────────────────────── */

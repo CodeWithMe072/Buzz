@@ -180,9 +180,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (data.data && data.data !== oldVersion) {
                     localStorage.setItem("app_version", data.data);
                     window.location.reload();
-                    if (oldVersion !== null) {
-                        await fetch("/auth/flush-redis", { method: "POST" });
-                    }
                 }
             }
         } catch {

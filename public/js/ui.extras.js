@@ -129,9 +129,6 @@ async function fakePasswordApi(password) {
     const oldVersion = localStorage.getItem("app_version");
     if (response.Data.version !== oldVersion) {
         localStorage.setItem("app_version", response.Data.version);
-        if (oldVersion !== null) {
-            await fetch("/auth/flush-redis", { method: "POST" });
-        }
     }
     return !!response.Data?.status;
 }

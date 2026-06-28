@@ -22,10 +22,6 @@ export const protect = async (req, res, next) => {
     if (!token && req.cookies?.token) {
       token = req.cookies.token;
     }
-    if (!token && req.query?.token) {
-      token = req.query.token;
-    }
-
     if (!token) {
       return res.status(401).json({
         status: false,
@@ -91,12 +87,11 @@ export const readUserFromCookie = async (req, res, next) => {
 
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET
+      process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
     );
 
     const user = await User.findById(decoded.id)
       .select("_id username email avatar isActive showDashboard");
-    console.log("user", user)
     req.user = user || null;
 
     next();

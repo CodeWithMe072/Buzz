@@ -1209,11 +1209,11 @@ const CallManager = (() => {
       const convId = message.from?.toString();
       if (!convId) return;
       if (!State.messages[convId]) State.messages[convId] = [];
-      if (!State.messages[convId].some(m => m.id === message.id || m.tempId === message.tempId)) {
+      if (!State.messages[convId].some(m => (m.id || m._id) === (message.id || message._id) || m.tempId === message.tempId)) {
         State.messages[convId].unshift({
           ...message, sender: "other", user: convId,
         });
-        State.messageIndex[message.id || message.tempId] = convId;
+        State.messageIndex[message.id || message._id || message.tempId] = convId;
       }
       const conv = State.conversations.find(c => c.id === convId);
       if (conv) {

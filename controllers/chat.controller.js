@@ -314,3 +314,35 @@ export const searchGifs = async (req, res) => {
   }));
   res.json({ data: fallbackData });
 };
+
+export const deleteMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { type } = req.body; // 'me' or 'everyone'
+    const myId = req.user._id;
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ status: false, message: "Message not found" });
+    }
+
+    if (type === "everyone") {
+      // Add both users' IDs to soft delete list
+      await Message.updateOne(
+        { _id: messageId },
+        { $addToSet: { deletedFor: { $each: [message.from, message.to] } } }
+      );
+    } else {
+      // Add current user ID to soft delete list
+      await Message.updateOne(
+        { _id: messageId },
+        { $addToSet: { deletedFor: myId } }
+      );
+    }
+
+    res.json({ status: true, message: "Message deleted successfully" });
+  } catch (err) {
+    console.error("[deleteMessage] error:", err);
+    res.status(500).json({ status: false, message: "Failed to delete message" });
+  }
+};

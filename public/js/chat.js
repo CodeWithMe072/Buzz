@@ -387,7 +387,7 @@ function createMessageElement(message) {
   const isMe = message.sender === "me" || message.user?.toString() === (State.currentUser.id || State.currentUser._id)?.toString();
   const msgEl = document.createElement("div");
   msgEl.className = `message ${isMe ? "self" : "other"}`;
-  msgEl.dataset.messageId = message.id || message.tempId;
+  msgEl.dataset.messageId = message.id || message._id || message.tempId;
 
   const bubbleEl = document.createElement("div");
   bubbleEl.className = "message-bubble";
@@ -536,7 +536,7 @@ function createMessageElement(message) {
             cameraFilter: message.cameraFilter,
             timestamp: message.timestamp || message.clientTime,
             fileSize: message.fileSize,
-            id: message.id || message.tempId
+            id: message.id || message._id || message.tempId
           });
         } else {
           showToast("Story viewer loading...", "info");
@@ -612,7 +612,7 @@ function createMessageElement(message) {
 
   } else if (message.type === "audio") {
     const audioEl = message.content
-      ? createAudioPlayer(message.content, message.id || message.tempId)
+      ? createAudioPlayer(message.content, message.id || message._id || message.tempId)
       : (() => { const d = document.createElement("div"); d.className = "message-audio loading"; d.textContent = "Loading..."; return d; })();
     bubbleEl.appendChild(audioEl);
     const footer = document.createElement("div");
@@ -693,7 +693,7 @@ function createMessageElement(message) {
         </div>
         ${isUploading
         ? `<div class="media-overlay"><div class="loader"></div></div>`
-        : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName || "document"}')">Save</button>` : ""}</div>`}
+        : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName || "document"}','${message.id || message._id || message.tempId}')">Save</button>` : ""}</div>`}
       </div>
       ${footerHTML}`;
   }
@@ -814,44 +814,121 @@ function showMessageOptions(message, msgEl, event) {
 
   const isMe = msgEl.classList.contains("self");
 
+  // Save as and open not show in gif
+  const isMediaOrDoc = (message.type === "image" || message.type === "video" || message.type === "document");
+  const mediaDocHTML = isMediaOrDoc ? `
+    <div class="context-menu-divider"></div>
+    <button class="context-menu-item open-opt">
+      <i class="ti ti-external-link"></i>
+      <span>Open</span>
+    </button>
+    <button class="context-menu-item save-opt">
+      <i class="ti ti-download"></i>
+      <span>Save as</span>
+    </button>
+  ` : '';
+
   const popup = document.createElement("div");
   popup.className = `message-options-popup ${isMe ? "self-side" : "other-side"}`;
   popup.innerHTML = `
-    <div class="reaction-row">
-      ${EMOJI_LIST.slice(0, 8).map(e => `<button class="emoji-quick-btn" data-emoji="${e}">${e}</button>`).join("")}
+    <div class="whatsapp-emoji-bar">
+      <button class="emoji-btn" data-emoji="👍">👍</button>
+      <button class="emoji-btn" data-emoji="❤️">❤️</button>
+      <button class="emoji-btn" data-emoji="😂">😂</button>
+      <button class="emoji-btn" data-emoji="😮">😮</button>
+      <button class="emoji-btn" data-emoji="😢">😢</button>
+      <button class="emoji-btn" data-emoji="🙏">🙏</button>
+      <button class="emoji-btn plus-btn" data-emoji="plus"><i class="ti ti-plus"></i></button>
     </div>
-    <div class="options-row">
-      <button class="option-btn reply-opt">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
-        Reply
+    <div class="whatsapp-context-menu">
+      <button class="context-menu-item reply-opt">
+        <i class="ti ti-arrow-back-up"></i>
+        <span>Reply</span>
       </button>
-      <button class="option-btn forward-opt">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 17 20 12 15 7" />
-          <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
-        </svg>
-        Forward
+      <button class="context-menu-item copy-opt">
+        <i class="ti ti-copy"></i>
+        <span>Copy</span>
+      </button>
+      <button class="context-menu-item forward-opt">
+        <i class="ti ti-arrow-forward-up"></i>
+        <span>Forward</span>
+      </button>
+      <button class="context-menu-item pin-opt">
+        <i class="ti ti-pin"></i>
+        <span>Pin</span>
+      </button>
+      <button class="context-menu-item meta-ai-opt">
+        <i class="ti ti-sparkles" style="color: #3b82f6;"></i>
+        <span>Ask Meta AI</span>
+      </button>
+      <button class="context-menu-item star-opt">
+        <i class="ti ti-star"></i>
+        <span>Star</span>
+      </button>
+      
+      ${mediaDocHTML}
+      
+      <div class="context-menu-divider"></div>
+      
+      <button class="context-menu-item select-opt">
+        <i class="ti ti-checkbox"></i>
+        <span>Select</span>
+      </button>
+      
+      <div class="context-menu-divider"></div>
+      
+      <button class="context-menu-item report-opt">
+        <i class="ti ti-thumb-down"></i>
+        <span>Report</span>
+      </button>
+      <button class="context-menu-item delete-opt" style="color: #ff453a;">
+        <i class="ti ti-trash" style="color: #ff453a;"></i>
+        <span>Delete</span>
       </button>
     </div>`;
 
-  // Wire emoji buttons
-  popup.querySelectorAll(".emoji-quick-btn").forEach(btn => {
+  // Wire emoji reaction buttons
+  popup.querySelectorAll(".emoji-btn:not(.plus-btn)").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const msgId = message.id || message.tempId;
+      const msgId = message.id || message._id || message.tempId;
       socket.emit("react", { messageId: msgId, to: State.activeChat, emoji: btn.dataset.emoji });
       popup.remove();
     });
   });
 
+  // Wire plus reaction button
+  popup.querySelector(".plus-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const msgId = message.id || message._id || message.tempId;
+    if (typeof window.openEmojiPickerModal === "function") {
+      window.openEmojiPickerModal(msgId, State.activeChat);
+    } else {
+      showToast("More reactions coming soon!", "info");
+    }
+    popup.remove();
+  });
+
   // Wire reply button
   popup.querySelector(".reply-opt").addEventListener("click", (e) => {
     e.stopPropagation();
-    State.replyingTo = message.id || message.tempId;
+    State.replyingTo = message.id || message._id || message.tempId;
     const preview = formatLastMessage(message);
     document.getElementById("reply-text").textContent = preview;
     document.getElementById("reply-preview").style.display = "flex";
     document.getElementById("message-input").focus();
+    popup.remove();
+  });
+
+  // Wire copy button
+  popup.querySelector(".copy-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const textToCopy = message.content || message.text || "";
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      showToast("Copied to clipboard", "success");
+    }).catch(() => {
+      showToast("Failed to copy", "error");
+    });
     popup.remove();
   });
 
@@ -862,6 +939,132 @@ function showMessageOptions(message, msgEl, event) {
     openForwardModal(message);
   });
 
+  // Wire pin button
+  popup.querySelector(".pin-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    showToast("Message pinned", "success");
+    popup.remove();
+  });
+
+  // Wire Meta AI button
+  popup.querySelector(".meta-ai-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    showToast("Meta AI is processing this message...", "info");
+    popup.remove();
+  });
+
+  // Wire star button
+  popup.querySelector(".star-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    showToast("Message starred", "success");
+    popup.remove();
+  });
+
+  // Wire select button
+  popup.querySelector(".select-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    showToast("Message selected", "info");
+    popup.remove();
+  });
+
+  // Wire report button
+  popup.querySelector(".report-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    showToast("Message reported successfully", "success");
+    popup.remove();
+  });
+
+  // Wire delete button
+  popup.querySelector(".delete-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    popup.remove();
+
+    const msgId = message.id || message._id || message.tempId;
+    const isMe = message.sender === "me" || 
+                 message.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
+                 message.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
+
+    // Create and append the confirmation modal dynamically
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay delete-message-modal";
+    modal.style.zIndex = "2200";
+    modal.innerHTML = `
+      <div class="delete-confirm-box">
+        <h3>Delete message?</h3>
+        <div class="delete-confirm-actions">
+          ${isMe ? '<button type="button" class="delete-btn everyone-btn">Delete for everyone</button>' : ''}
+          <button type="button" class="delete-btn me-btn">Delete for me</button>
+          <button type="button" class="delete-btn cancel-btn">Cancel</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const cancelBtn = modal.querySelector(".cancel-btn");
+    const meBtn = modal.querySelector(".me-btn");
+    const everyoneBtn = modal.querySelector(".everyone-btn");
+
+    cancelBtn.onclick = () => {
+      modal.remove();
+    };
+
+    // Close on overlay click
+    modal.onclick = (evt) => {
+      if (evt.target === modal) modal.remove();
+    };
+
+    const performDelete = async (type) => {
+      try {
+        const res = await apiRequest("DELETE", `/api/message/${msgId}`, { type });
+        if (res && res.status) {
+          // Emit socket deletion sync event
+          if (typeof socket !== "undefined" && socket.emit) {
+            socket.emit("delete_message", { messageId: msgId, to: State.activeChat, type });
+          }
+          showToast("Message deleted", "success");
+        } else {
+          showToast("Failed to delete message", "error");
+        }
+      } catch (err) {
+        console.error("Delete message error:", err);
+        showToast("Error deleting message", "error");
+      }
+      modal.remove();
+    };
+
+    meBtn.onclick = () => performDelete("me");
+    if (everyoneBtn) {
+      everyoneBtn.onclick = () => performDelete("everyone");
+    }
+  });
+
+  // Wire Open & Save as buttons if applicable
+  if (isMediaOrDoc) {
+    popup.querySelector(".open-opt").addEventListener("click", (e) => {
+      e.stopPropagation();
+      popup.remove();
+      if (message.type === "document") {
+        window.open(message.content, "_blank", "noopener,noreferrer");
+      } else {
+        const video = msgEl.querySelector("video");
+        if (video) video.pause();
+        if ((!viewer || viewer.chatId !== State.activeChat) && State.activeChat) {
+          viewer = new MediaViewer(State.activeChat);
+        }
+        if (viewer) {
+          viewer.open(msgEl.dataset.messageId);
+        }
+      }
+    });
+
+    popup.querySelector(".save-opt").addEventListener("click", (e) => {
+      e.stopPropagation();
+      popup.remove();
+      const fileName = message.fileName || (message.type === "image" ? "image.jpg" : message.type === "video" ? "video.mp4" : "download");
+      forceDownload(message.content, fileName, message.id || message._id || message.tempId);
+    });
+  }
+
   // ── Smart positioning ──
   // Append to messages-container (not msgEl) to avoid clipping
   const container = document.getElementById("messages-container");
@@ -871,20 +1074,27 @@ function showMessageOptions(message, msgEl, event) {
   const popupRect = popup.getBoundingClientRect();
   const msgRect = msgEl.getBoundingClientRect();
   const contRect = container.getBoundingClientRect();
-  const popW = popupRect.width || 240;
-  const popH = popupRect.height || 90;
+  const popW = Math.max(popupRect.width || 300, 300);
+  const popH = Math.max(popupRect.height || 420, 420);
 
   // Vertical: prefer above the message, flip below if not enough space
   let top = msgRect.top - contRect.top + container.scrollTop - popH - 8;
-  if (top < container.scrollTop + 4) {
+  if (top < container.scrollTop + 8) {
+    // Try below the message
     top = msgRect.bottom - contRect.top + container.scrollTop + 8;
+    // If it also overflows the bottom of the viewport, adjust it to fit inside the visible chat window
+    if (top + popH > container.scrollTop + contRect.height - 8) {
+      top = container.scrollTop + contRect.height - popH - 8;
+      if (top < container.scrollTop + 8) {
+        top = container.scrollTop + 8;
+      }
+    }
   }
 
-  // Horizontal: align to message side
-  let left = isMe
-    ? msgRect.right - contRect.left - popW        // right-align for sent
-    : msgRect.left - contRect.left;               // left-align for received
-  left = Math.max(4, Math.min(left, contRect.width - popW - 4));
+  // Horizontal: center relative to the click coordinate
+  const clickX = (event && typeof event.clientX === "number") ? event.clientX : (msgRect.left + msgRect.width / 2);
+  let left = clickX - contRect.left - (popW / 2);
+  left = Math.max(12, Math.min(left, contRect.width - popW - 12));
 
   popup.style.position = "absolute";
   popup.style.top = `${top}px`;
@@ -1330,3 +1540,85 @@ document.addEventListener("click", (e) => {
     }
   }
 });
+
+// Reusable Global Emoji Reaction Picker Modal Helper
+window.openEmojiPickerModal = function(messageId, chatId) {
+  const modal = document.getElementById("emoji-modal");
+  const grid = document.getElementById("emoji-grid");
+  const closeBtn = document.getElementById("close-emoji");
+  if (!modal || !grid) return;
+
+  // Clear previous content
+  grid.innerHTML = "";
+
+  const emojiList = [
+    // Smileys
+    "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🥸", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🫣", "🤭", "🫢", "🫡", "🤫", "🤥", "😶", "😐", "😑", "😬", "🫠", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "😵‍💫", "🫥", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤠", "🤡", "👹", "👺", "👻", "💀", "☠️", "👽", "👾", "🤖", "💩",
+    // Hearts & Symbols
+    "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟",
+    // Gestures & Hands
+    "👋", "🤚", "🖐️", "✋", "🖖", "👌", "🤌", "🤏", "✌️", "🤞", "🫰", "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇", "☝️", "👍", "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "🫶", "👐", "🤲", "🤝", "🙏", "💅", "🤳", "💪", "🧠", "👀", "💋"
+  ];
+
+  emojiList.forEach(emoji => {
+    const btn = document.createElement("button");
+    btn.className = "emoji-btn";
+    btn.textContent = emoji;
+    btn.addEventListener("click", () => {
+      if (typeof socket !== "undefined" && socket.emit) {
+        socket.emit("react", { messageId, to: chatId, emoji });
+        showToast("Reaction sent", "success");
+      }
+      modal.style.display = "none";
+    });
+    grid.appendChild(btn);
+  });
+
+  // Ensure modal is displayed above all overlays (e.g. MediaViewer)
+  modal.style.zIndex = "2200";
+  modal.style.display = "flex";
+
+  const closeHandler = () => {
+    modal.style.display = "none";
+    cleanup();
+  };
+
+  const outsideClickHandler = (e) => {
+    if (e.target === modal) {
+      modal.style.display = "none";
+      cleanup();
+    }
+  };
+
+  const cleanup = () => {
+    if (closeBtn) closeBtn.removeEventListener("click", closeHandler);
+    modal.removeEventListener("click", outsideClickHandler);
+  };
+
+  if (closeBtn) {
+    closeBtn.addEventListener("click", closeHandler);
+  }
+  modal.addEventListener("click", outsideClickHandler);
+};
+
+window.animateAndDeleteMessageFromDom = function(messageId) {
+  const msgEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
+  if (msgEl) {
+    // Add deletion class to trigger transition/animation
+    msgEl.classList.add("message-deleting");
+    // Remove element from DOM after animation completes (400ms)
+    setTimeout(() => {
+      msgEl.remove();
+    }, 400);
+
+    // Also remove the message object from the local State.messages array to keep state in sync
+    const chatId = State.messageIndex[messageId];
+    if (chatId) {
+      const msgs = State.messages[chatId] || [];
+      const index = msgs.findIndex(m => String(m.id ?? m.tempId ?? m._id) === String(messageId));
+      if (index !== -1) {
+        msgs.splice(index, 1);
+      }
+    }
+  }
+};

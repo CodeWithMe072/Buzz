@@ -6,7 +6,10 @@ export function getKey(version) {
     const envName = version ? `MEDIA_ENCRYPTION_KEY_${version}` : "MEDIA_ENCRYPTION_KEY";
     const rawKey = process.env[envName] || process.env.MEDIA_ENCRYPTION_KEY;
     if (!rawKey) {
-        // Fallback for development if no key is defined
+        if (process.env.NODE_ENV === "PROD") {
+            throw new Error("MEDIA_ENCRYPTION_KEY is required in production");
+        }
+        // Local development fallback only. Never used in production.
         return crypto.createHash("sha256").update("default-secret-key-buzz-app-123456").digest();
     }
     return crypto.createHash("sha256").update(rawKey).digest();

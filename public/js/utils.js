@@ -78,6 +78,9 @@ function showToast(message, type = 'info') {
         container.className = 'toast-container';
         document.body.appendChild(container);
     }
+    // Remove all existing toasts instantly to ensure only one toast is shown at a time
+    container.innerHTML = '';
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = message;
@@ -131,25 +134,35 @@ function startTimeTicker() {
     }, 30000);
 }
 
-async function forceDownload(url, fileName) {
+async function forceDownload(url, fileName, mediaId) {
     try {
         showToast("Downloading...", "info");
         let fetchUrl = url;
 
-        let target = url;
-        if (target.includes("/api/media")) {
-            target = "/api/media" + target.split("/api/media")[1];
-        }
-        if (target.startsWith("/api/media")) {
-            const parsed = new URL(target, window.location.origin);
-            const key = parsed.searchParams.get("key");
-            if (key) {
-                const res = await apiRequest("POST", "/api/media/decrypt", { key });
-                const data = res?.data || res?.Data || res;
-                if (data && data.token) {
-                    fetchUrl = `/api/media/stream/${data.token}`;
-                } else {
-                    throw new Error("Failed to get download decryption token");
+        if (mediaId) {
+            const res = await apiRequest("POST", "/api/media/decrypt", { mediaId });
+            const data = res?.data || res?.Data || res;
+            if (data && data.token) {
+                fetchUrl = `/api/media/stream/${data.token}`;
+            } else {
+                throw new Error("Failed to get download decryption token");
+            }
+        } else {
+            let target = url;
+            if (target.includes("/api/media")) {
+                target = "/api/media" + target.split("/api/media")[1];
+            }
+            if (target.startsWith("/api/media")) {
+                const parsed = new URL(target, window.location.origin);
+                const key = parsed.searchParams.get("key");
+                if (key) {
+                    const res = await apiRequest("POST", "/api/media/decrypt", { key });
+                    const data = res?.data || res?.Data || res;
+                    if (data && data.token) {
+                        fetchUrl = `/api/media/stream/${data.token}`;
+                    } else {
+                        throw new Error("Failed to get download decryption token");
+                    }
                 }
             }
         }

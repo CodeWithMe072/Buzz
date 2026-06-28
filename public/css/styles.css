@@ -1253,8 +1253,8 @@ body {
 }
 
 .emoji-btn {
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     border: none;
     background: transparent;
     font-size: 24px;
@@ -1818,35 +1818,119 @@ body {
 
 /* Header */
 .viewer-header {
-    padding: 15px 20px;
-    background: rgba(0, 0, 0, 0.5);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 64px;
+    padding: 0 20px;
+    background: rgba(26, 26, 26, 0.85); /* Synced with website's elevated bg */
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    z-index: 100;
+    box-sizing: border-box;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.viewer-info {
+.viewer-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+}
+
+.viewer-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.viewer-avatar-fallback {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-sizing: border-box;
+}
+
+.viewer-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
 .sender-name {
-    font-weight: 600;
+    color: #e9edef;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.media-time {
+    color: #8696a0;
+    font-size: 12px;
+    line-height: 1.2;
 }
 
 .media-counter {
-    color: #aaa;
-    font-size: 14px;
+    color: #8696a0;
+    font-size: 12px;
+    margin-left: 16px;
+    border-left: 1px solid rgba(255, 255, 255, 0.15);
+    padding-left: 16px;
+    display: inline-block;
+    vertical-align: middle;
 }
 
-.close-btn {
+.viewer-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.viewer-action-btn {
     background: none;
     border: none;
-    color: #fff;
-    font-size: 24px;
+    color: #aebac1;
+    font-size: 20px;
+    padding: 6px;
     cursor: pointer;
-    padding: 5px 10px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s, transform 0.1s;
+}
+
+.viewer-action-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e9edef;
+}
+
+.viewer-action-btn:active {
+    transform: scale(0.95);
+}
+
+.viewer-action-btn.close-btn {
+    color: #aebac1;
+    font-size: 20px;
+}
+
+.viewer-action-btn.close-btn:hover {
+    background: rgba(234, 56, 56, 0.15);
+    color: #ff4d4d;
 }
 
 /* Main Viewer Area */
@@ -1888,9 +1972,10 @@ body {
 
 .media-slide img,
 .media-slide video {
-    max-width: 90%;
-    max-height: 90%;
+    max-width: 80%; /* Fix images being cut by navigation arrows */
+    max-height: 85%; /* Protect space for top header and bottom strip */
     object-fit: contain;
+    transition: transform 0.2s ease; /* For Zoom and Rotation transition */
 }
 
 /* Navigation Arrows */
@@ -1898,31 +1983,36 @@ body {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(26, 26, 26, 0.6); /* Color matched to website theme */
     border: none;
-    color: #fff;
-    font-size: 30px;
-    width: 50px;
-    height: 50px;
+    color: #e9edef;
+    font-size: 22px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     cursor: pointer;
     z-index: 10;
-    transition: background 0.2s;
+    transition: background 0.2s, transform 0.1s;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .nav-arrow:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(26, 26, 26, 0.9);
+    color: #fff;
+}
+
+.nav-arrow:active {
+    transform: translateY(-50%) scale(0.95);
 }
 
 .nav-arrow.left {
-    left: 20px;
+    left: 24px;
 }
 
 .nav-arrow.right {
-    right: 20px;
+    right: 24px;
 }
 
 .nav-arrow:disabled {
@@ -1957,7 +2047,7 @@ body {
 }
 
 .thumbnail-item.active {
-    border-color: #25d366;
+    border-color: var(--accent-blue); /* Synced with active conversation border color */
 }
 
 .thumbnail-item img,
@@ -7835,7 +7925,6 @@ input:checked+.slider:before {
 .fwd-btn:active:not(:disabled) {
     transform: scale(0.96);
 }
-
 .fwd-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
@@ -7915,4 +8004,192 @@ input:checked+.slider:before {
 .media-slide.error .slide-state-overlay {
     display: flex;
 }
-
+
+/* ── WhatsApp-style Reactions and Context Menu ───────────────── */
+.message-options-popup {
+    position: absolute;
+    z-index: 10100 !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Center-align the emoji bar and context menu */
+    gap: 8px;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    width: auto !important;
+    min-width: unset !important;
+    animation: popupIn 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: auto;
+}
+
+.whatsapp-emoji-bar {
+   background: #1c1c1e;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 24px;
+    padding: 6px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    gap: 4px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    width: 300px;
+    box-sizing: border-box;
+}
+
+.whatsapp-emoji-bar .emoji-btn {
+       background: none;
+    border: none;
+    font-size: 19px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 50%;
+    transition: transform 0.12s, background-color 0.12s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.whatsapp-emoji-bar .emoji-btn:hover {
+    transform: scale(1.25);
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.whatsapp-emoji-bar .plus-btn {
+    font-size: 16px;
+    color: #a8a8a8;
+}
+
+.whatsapp-context-menu {
+    background: #1c1c1e;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    width: 220px; /* Independent width for context menu */
+    box-sizing: border-box;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+
+.context-menu-item {
+    background: none;
+    border: none;
+    color: #e3e3e3;
+    font-size: 14px;
+    font-weight: 400;
+    padding: 8px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+    transition: background-color 0.1s;
+    width: 100%;
+}
+
+.context-menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.context-menu-item i {
+    font-size: 18px;
+    width: 20px;
+    text-align: center;
+    color: #b0b0b0;
+}
+
+.context-menu-divider {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.08);
+    margin: 4px 8px;
+}
+
+/* Delete Message Modal styling */
+.delete-confirm-box {
+    background: #1e1e1e;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 24px;
+    width: 380px;
+    max-width: 90%;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    animation: slideUpModal 0.25s ease;
+}
+
+.delete-confirm-box h3 {
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.delete-confirm-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.delete-btn {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 24px;
+    padding: 8px 24px;
+    background: transparent;
+    color: var(--accent-blue);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    width: fit-content;
+}
+
+.delete-btn:hover {
+    background: rgba(0, 149, 246, 0.08);
+    border-color: var(--accent-blue);
+}
+
+.delete-btn.cancel-btn {
+    color: var(--text-secondary);
+}
+
+.delete-btn.cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-primary);
+}
+
+/* Soft-Delete Collapse Animation */
+.message-deleting {
+    animation: fadeCollapse 0.4s ease forwards !important;
+    pointer-events: none !important;
+}
+
+@keyframes fadeCollapse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+        max-height: 500px;
+        margin-bottom: var(--spacing-sm);
+        padding: 10px;
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.9);
+        max-height: 0;
+        margin-bottom: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        border: none;
+    }
+}
+
+

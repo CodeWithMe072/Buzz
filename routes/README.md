@@ -214,19 +214,6 @@ Manage registration, login, and user profile properties.
   }
   ```
 
-### `POST /auth/flush-redis`
-* **Access**: Public
-* **Expected Request**: No parameters.
-* **Success Output** (`200 OK`):
-  ```json
-  {
-    "success": true,
-    "message": "Redis cache cleared successfully"
-  }
-  ```
-
----
-
 ## 💬 2. Chat Routes (`chat.routes.js`)
 
 Manages message feeds, conversation clearance, media queries, and GIF lookups.

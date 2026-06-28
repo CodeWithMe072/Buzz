@@ -86,7 +86,7 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
                 if (actionsDiv) {
                     actionsDiv.innerHTML = `
                         <a href="${msg.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a>
-                        <button class="doc-btn doc-save" onclick="forceDownload('${msg.content}', '${msg.fileName || 'document'}')">Save as</button>
+                        <button class="doc-btn doc-save" onclick="forceDownload('${msg.content}', '${msg.fileName || 'document'}', '${msg.id || msg.tempId}')">Save as</button>
                     `;
                 }
             }
@@ -174,7 +174,7 @@ function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus, fil
         if (actionsDiv) {
             actionsDiv.innerHTML = `
                 <a href="${content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a>
-                <button class="doc-btn doc-save" onclick="forceDownload('${content}', '${fileName || 'document'}')">Save as</button>
+                <button class="doc-btn doc-save" onclick="forceDownload('${content}', '${fileName || 'document'}', '${tempId}')">Save as</button>
             `;
         }
     }

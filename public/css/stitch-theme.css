@@ -1,0 +1,646 @@
+/* =============================================================================
+   Stitch Theme - Premium Dark Mode Indigo Glassmorphic Custom Stylesheet
+   ============================================================================= */
+
+/* Main layout compatibility override */
+.chat-screen.active {
+    display: flex !important;
+}
+
+/* Custom Scrollbars */
+.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(112, 119, 161, 0.2); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(112, 119, 161, 0.35); }
+
+/* Glassmorphism panels */
+.glass {
+    background: rgba(45, 50, 80, 0.4) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.glass-panel {
+    background: rgba(45, 50, 80, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-bubble-in {
+    background: rgba(45, 50, 80, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-modal {
+    background: rgba(66, 71, 105, 0.8);
+    backdrop-filter: blur(32px);
+    -webkit-backdrop-filter: blur(32px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* Outgoing Message Bubbles (Self) */
+.message.self .message-bubble {
+    background: #424769 !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: #b2b6de !important;
+    border-radius: 1rem 1rem 0.25rem 1rem !important;
+    box-shadow: 0 0 0 1px rgba(192, 196, 237, 0.1) !important;
+}
+
+.message.self .message-bubble * {
+    color: #b2b6de !important;
+}
+
+.message.self .message-bubble svg {
+    stroke: #c0c4ed !important;
+    fill: none;
+}
+
+/* Incoming Message Bubbles (Other) */
+.message.other .message-bubble {
+    background: rgba(45, 50, 80, 0.6) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: #dee0ff !important;
+    border-radius: 1rem 1rem 1rem 0.25rem !important;
+    box-shadow: 0 0 0 1px rgba(192, 196, 237, 0.05) !important;
+}
+
+.message.other .message-bubble * {
+    color: #dee0ff !important;
+}
+
+.message.other .message-bubble svg {
+    stroke: #dee0ff !important;
+    fill: none;
+}
+
+/* Ensure reply-preview inside message bubbles is visible & clean */
+.message-reply-preview {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-left: 3px solid currentColor !important;
+    padding: 6px 10px !important;
+    border-radius: 8px !important;
+}
+
+/* Material Symbols alignment correction */
+.material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    display: inline-block;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Profile Modal (Account Hub) Dark Mode Overrides */
+.profile-modal-overlay {
+    background: rgba(6, 11, 40, 0.85) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+}
+
+.profile-modal-container {
+    background: #141936 !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.7) !important;
+    font-family: 'Geist', sans-serif !important;
+    border-radius: 24px !important;
+}
+
+.profile-modal-sidebar {
+    background: #0c112d !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.profile-modal-avatar-letter {
+    background: linear-gradient(135deg, #c0c4ed, #424769) !important;
+}
+
+.profile-nav-btn {
+    color: #919098 !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+}
+
+.profile-nav-btn:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+    color: #dee0ff !important;
+}
+
+.profile-nav-btn.active {
+    background: rgba(192, 196, 237, 0.1) !important;
+    border-color: rgba(192, 196, 237, 0.15) !important;
+    color: #dee0ff !important;
+    font-weight: 600 !important;
+}
+
+.profile-nav-btn.active svg {
+    color: #c0c4ed !important;
+    opacity: 1 !important;
+}
+
+.profile-modal-logout-btn {
+    background: rgba(255, 180, 171, 0.08) !important;
+    border: 1px solid rgba(255, 180, 171, 0.15) !important;
+    color: #ffb4ab !important;
+}
+
+.profile-modal-logout-btn:hover {
+    background: #ffb4ab !important;
+    color: #060b28 !important;
+    box-shadow: 0 4px 15px rgba(255, 180, 171, 0.3) !important;
+}
+
+.profile-modal-content-wrapper {
+    background: #141936 !important;
+    color: #dee0ff !important;
+}
+
+/* Whitelist switch slider override */
+.switch.mini-switch .slider {
+    background-color: #2e3351 !important;
+}
+.switch.mini-switch input:checked + .slider {
+    background-color: #424769 !important;
+}
+
+/* Form elements within sections */
+.profile-modal-section input[type="text"],
+.profile-modal-section input[type="email"],
+.profile-modal-section input[type="password"],
+.profile-modal-section select {
+    background: #181d3a !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #dee0ff !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+}
+
+.profile-modal-section input:focus,
+.profile-modal-section select:focus {
+    border-color: #c0c4ed !important;
+    box-shadow: 0 0 0 1px #c0c4ed !important;
+    outline: none !important;
+}
+
+.profile-modal-section button.btn-primary {
+    background: #c0c4ed !important;
+    color: #141938 !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+}
+
+.profile-modal-section button.btn-primary:hover {
+    opacity: 0.9 !important;
+}
+
+.profile-modal-section h3 {
+    color: #c0c4ed !important;
+}
+
+/* Ensure mobile layout doesn't break basic spacing */
+@media (max-width: 767px) {
+    .chat-layout {
+        margin-left: 0 !important;
+        margin-bottom: 64px !important; /* bottom rail space */
+        width: 100% !important;
+        height: calc(100vh - 64px) !important;
+        height: calc(100dvh - 64px) !important;
+    }
+}
+
+/* Emoji / GIF Panel Theme Overrides */
+.custom-emoji-panel {
+    background: rgba(66, 71, 105, 0.8) !important;
+    backdrop-filter: blur(32px) !important;
+    -webkit-backdrop-filter: blur(32px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
+    border-radius: 1rem !important;
+    font-family: 'Geist', sans-serif !important;
+}
+
+.emoji-panel-nav {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    display: flex !important;
+    margin-bottom: 12px !important;
+}
+
+.panel-nav-btn {
+    color: #919098 !important;
+    background: transparent !important;
+    border: none !important;
+    padding-bottom: 8px !important;
+    border-bottom: 2px solid transparent !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    flex: 1 !important;
+}
+
+.panel-nav-btn:hover {
+    color: #dee0ff !important;
+}
+
+.panel-nav-btn.active {
+    color: #c0c4ed !important;
+    border-bottom: 2px solid #c0c4ed !important;
+}
+
+.emoji-search-container input {
+    background: #181d3a !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #dee0ff !important;
+    border-radius: 8px !important;
+    padding: 8px 12px 8px 32px !important;
+    font-size: 12px !important;
+}
+
+.emoji-search-container input:focus {
+    border-color: #c0c4ed !important;
+    box-shadow: 0 0 0 1px #c0c4ed !important;
+    outline: none !important;
+}
+
+.emoji-categories-tabs button {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: #dee0ff !important;
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    font-size: 11px !important;
+    cursor: pointer !important;
+}
+
+.emoji-categories-tabs button.active {
+    background: rgba(192, 196, 237, 0.15) !important;
+    border-color: rgba(192, 196, 237, 0.3) !important;
+    color: #c0c4ed !important;
+}
+
+.emoji-no-results {
+    color: #919098 !important;
+    font-size: 12px !important;
+    text-align: center !important;
+    padding: 16px 0 !important;
+}
+
+/* =============================================================================
+   Stitch Theme Refinements - Message Bubbles, Modals, Media Viewer, settings
+   ============================================================================= */
+
+/* Document Message Bubble Overrides */
+.message-document {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+}
+
+.doc-icon-wrap {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 12px !important;
+    width: 44px !important;
+    height: 44px !important;
+}
+
+.doc-filename {
+    color: #dee0ff !important;
+}
+
+.doc-meta {
+    color: rgba(222, 224, 255, 0.6) !important;
+}
+
+.doc-actions {
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.doc-btn {
+    color: #c0c4ed !important;
+    transition: all 0.2s ease !important;
+}
+
+.doc-btn:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: #ffffff !important;
+}
+
+/* Audio Player Bubble Overrides */
+.message-audio {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+}
+
+.audio-play-btn {
+    background: #c0c4ed !important;
+    transition: transform 0.2s ease, background 0.2s ease !important;
+}
+
+.audio-play-btn:hover {
+    background: #dee0ff !important;
+}
+
+.audio-play-btn svg {
+    fill: #141938 !important;
+}
+
+.audio-time {
+    color: rgba(222, 224, 255, 0.6) !important;
+}
+
+/* Emoji / GIF Panel Heavy Glass */
+.custom-emoji-panel {
+    background: rgba(66, 71, 105, 0.8) !important;
+    backdrop-filter: blur(32px) !important;
+    -webkit-backdrop-filter: blur(32px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
+    border-radius: 1rem !important;
+}
+
+/* Modal Overlay Glass backdrop */
+.modal-overlay {
+    background: rgba(6, 11, 40, 0.7) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    z-index: 2000 !important;
+}
+
+/* Modals dialog / emoji picker overrides */
+.modal-overlay .emoji-picker {
+    background: rgba(66, 71, 105, 0.8) !important;
+    backdrop-filter: blur(32px) !important;
+    -webkit-backdrop-filter: blur(32px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 1rem !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3) !important;
+    color: #dee0ff !important;
+    font-family: 'Geist', sans-serif !important;
+}
+
+.modal-dialog-confirm,
+.modal-dialog-camera {
+    max-width: 350px !important;
+    padding: 24px !important;
+}
+
+.modal-upload-picker {
+    max-width: 400px !important;
+    padding: 24px !important;
+}
+
+/* Modal header & titles */
+.modal-overlay .emoji-header h3,
+.modal-overlay h3 {
+    color: #c0c4ed !important;
+    font-weight: 600 !important;
+    margin-top: 0 !important;
+}
+
+.modal-overlay .emoji-header .icon-btn {
+    background: transparent !important;
+    border: none !important;
+    color: #919098 !important;
+    cursor: pointer !important;
+    transition: color 0.2s ease !important;
+}
+
+.modal-overlay .emoji-header .icon-btn:hover {
+    color: #dee0ff !important;
+}
+
+/* Modal Inputs & Controls */
+.modal-overlay select,
+.modal-overlay input[type="text"] {
+    background: #181d3a !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #dee0ff !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+    font-size: 13px !important;
+}
+
+.modal-overlay select:focus,
+.modal-overlay input[type="text"]:focus {
+    border-color: #c0c4ed !important;
+    box-shadow: 0 0 0 1px #c0c4ed !important;
+    outline: none !important;
+}
+
+/* Modal Buttons */
+.modal-overlay button.custom-gif-btn.select-btn {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #dee0ff !important;
+    font-weight: 500 !important;
+    padding: 10px !important;
+    transition: all 0.2s ease !important;
+}
+
+.modal-overlay button.custom-gif-btn.select-btn:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.modal-overlay button.custom-gif-btn.upload-btn {
+    background: #424769 !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    border: none !important;
+    padding: 12px !important;
+    transition: all 0.2s ease !important;
+}
+
+.modal-overlay button.custom-gif-btn.upload-btn:disabled {
+    background: rgba(66, 71, 105, 0.2) !important;
+    color: rgba(255, 255, 255, 0.3) !important;
+    cursor: not-allowed !important;
+}
+
+.modal-overlay button.custom-gif-btn.upload-btn:not(:disabled):hover {
+    background: #3d446b !important;
+    box-shadow: 0 4px 15px rgba(66, 71, 105, 0.3) !important;
+}
+
+/* Confirm modal cancel/ok */
+#confirm-modal-cancel-btn {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #dee0ff !important;
+}
+
+#confirm-modal-cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+#confirm-modal-ok-btn {
+    background: #ef4444 !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+}
+
+#confirm-modal-ok-btn:hover {
+    background: #dc2626 !important;
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3) !important;
+}
+
+/* Camera Select Modal specific */
+#camera-select-tab-photo,
+#camera-select-tab-video {
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+
+#camera-select-front-btn,
+#camera-select-back-btn {
+    background: #424769 !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+
+#camera-select-front-btn:hover,
+#camera-select-back-btn:hover {
+    background: #3d446b !important;
+    box-shadow: 0 4px 15px rgba(66, 71, 105, 0.3) !important;
+}
+
+#camera-select-cancel-btn {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #dee0ff !important;
+}
+
+#camera-select-cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Fullscreen Media Viewer Lightbox */
+.media-viewer-overlay {
+    background: rgba(6, 11, 40, 0.95) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    z-index: 3000 !important;
+}
+
+.viewer-header {
+    background: rgba(12, 17, 45, 0.4) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    padding: 16px 24px !important;
+}
+
+.sender-name {
+    color: #ffffff !important;
+    font-size: 16px !important;
+    font-weight: 600 !important;
+}
+
+.media-counter {
+    color: rgba(222, 224, 255, 0.6) !important;
+    font-size: 13px !important;
+}
+
+.close-btn {
+    background: rgba(255, 255, 255, 0.05) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 50% !important;
+    width: 36px !important;
+    height: 36px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: #ffffff !important;
+    font-size: 20px !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    padding: 0 !important;
+}
+
+.close-btn:hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Nav arrows style */
+.nav-arrow {
+    background: rgba(255, 255, 255, 0.05) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+    width: 52px !important;
+    height: 52px !important;
+    border-radius: 50% !important;
+    transition: all 0.2s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.nav-arrow:hover {
+    background: rgba(255, 255, 255, 0.15) !important;
+    transform: translateY(-50%) scale(1.05) !important;
+}
+
+/* Thumbnail strip styling */
+.thumbnail-strip {
+    background: rgba(12, 17, 45, 0.4) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    padding: 16px !important;
+}
+
+.thumbnail-item {
+    border-radius: 12px !important;
+    border: 2px solid transparent !important;
+    overflow: hidden !important;
+    transition: all 0.2s ease !important;
+}
+
+.thumbnail-item.active {
+    border-color: #c0c4ed !important;
+    box-shadow: 0 0 12px rgba(192, 196, 237, 0.4) !important;
+}
+
+/* Whitelist Switches & Rows */
+.switch input:checked + .slider {
+    background: #424769 !important;
+    border-color: transparent !important;
+}
+
+.whitelist-row {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    margin-bottom: 8px !important;
+}
+
+.whitelist-avatar {
+    background: linear-gradient(135deg, #c0c4ed, #424769) !important;
+}
+
+/* Indigo Glass Modern Background Pattern */
+body {
+    background-color: #0c112d;
+    background-image: radial-gradient(ellipse at 20% 20%, rgba(192, 196, 237, 0.04) 0%, transparent 60%),
+                      radial-gradient(ellipse at 80% 80%, rgba(254, 184, 128, 0.03) 0%, transparent 50%);
+    font-family: 'Geist', sans-serif;
+}

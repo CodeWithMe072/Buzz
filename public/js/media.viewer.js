@@ -19,6 +19,46 @@ class MediaViewer {
         this.closeBtn = document.getElementById('closeViewer');
         this.viewerMain = document.getElementById('viewerMain');
 
+        // Zoom & Rotate state
+        this.zoomScale = 1.0;
+        this.rotationAngle = 0;
+
+        // Button references
+        this.zoomOutBtn = document.getElementById('viewerZoomOut');
+        this.zoomInBtn = document.getElementById('viewerZoomIn');
+        this.rotateBtn = document.getElementById('viewerRotate');
+        this.starBtn = document.getElementById('viewerStar');
+        this.pinBtn = document.getElementById('viewerPin');
+        this.reactBtn = document.getElementById('viewerReact');
+        this.forwardBtn = document.getElementById('viewerForward');
+        this.replyBtn = document.getElementById('viewerReply');
+        this.downloadBtn = document.getElementById('viewerDownload');
+        this.moreBtn = document.getElementById('viewerMore');
+
+        // Meta elements
+        this.viewerAvatar = document.getElementById('viewerAvatar');
+        this.viewerAvatarFallback = document.getElementById('viewerAvatarFallback');
+        this.viewerSenderName = document.getElementById('viewerSenderName');
+        this.viewerMediaTime = document.getElementById('viewerMediaTime');
+
+        if (this.viewerAvatar) {
+            this.viewerAvatar.onload = () => {
+                this.viewerAvatar.style.display = "block";
+                if (this.viewerAvatarFallback) this.viewerAvatarFallback.style.display = "none";
+            };
+            this.viewerAvatar.onerror = () => {
+                this.viewerAvatar.style.display = "none";
+                if (this.viewerAvatarFallback) {
+                    const name = this.viewerSenderName?.textContent || "Friend";
+                    this.viewerAvatarFallback.textContent = name.charAt(0).toUpperCase();
+                    this.viewerAvatarFallback.style.display = "flex";
+                    const colors = ["#ff453a", "#ff9f0a", "#30d158", "#0095f6", "#bf5af2", "#ff375f"];
+                    const charCodeSum = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    this.viewerAvatarFallback.style.background = colors[charCodeSum % colors.length];
+                }
+            };
+        }
+
         this.touchStartX = 0;
         this.touchEndX = 0;
         this.isDragging = false;
@@ -47,6 +87,7 @@ class MediaViewer {
                 duration: m.duration || null,
                 encryptedFileId: m.encryptedFileId || null,
                 createdAt: m.createdAt || m.timestamp || null,
+                sender: m.sender || null,
                 state: 'waiting' // Initial state
             }));
         } else {
@@ -80,6 +121,7 @@ class MediaViewer {
                         duration: m.duration || null,
                         encryptedFileId: encryptedFileId,
                         createdAt: m.createdAt || m.timestamp || null,
+                        sender: m.sender || null,
                         state: 'waiting'
                     };
                 }).filter(Boolean);
@@ -109,6 +151,7 @@ class MediaViewer {
                 duration: m.duration || null,
                 encryptedFileId: m.encryptedFileId || null,
                 createdAt: m.createdAt || null,
+                sender: m.sender || null,
                 state: 'waiting'
             }));
             this.renderedCount = 0;
@@ -528,6 +571,14 @@ class MediaViewer {
 
         this.updateControls();
 
+        // Reset Zoom & Rotate state
+        this.zoomScale = 1.0;
+        this.rotationAngle = 0;
+        this.applyZoomRotate();
+
+        // Update header metadata
+        this.updateHeaderMeta();
+
         // 1. Clean memory cache of distant elements
         this.cleanMemoryCache();
 
@@ -544,12 +595,271 @@ class MediaViewer {
         if (this.nextBtn) this.nextBtn.disabled = this.currentIndex === this.mediaItems.length - 1;
     }
 
+    updateHeaderMeta() {
+        const activeItem = this.mediaItems[this.currentIndex];
+        if (!activeItem) return;
+
+        let username = "Friend";
+        let avatar = "/images/default-avatar.png";
+        let timestamp = activeItem.createdAt;
+
+        // Try to find the message in State.messages
+        const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+        if (msg) {
+            const isMe = msg.sender === "me" || msg.user?.toString() === (State.currentUser.id || State.currentUser._id)?.toString();
+            username = isMe ? "You" : (State.conversations.find(c => c.id === this.chatId)?.username || "Friend");
+            avatar = isMe ? (State.currentUser.avatar || "/images/default-avatar.png") : (State.conversations.find(c => c.id === this.chatId)?.avatar || "/images/default-avatar.png");
+            timestamp = msg.createdAt || msg.timestamp;
+        } else {
+            // Fallback for security logs or moments
+            const selectEl = document.getElementById("log-user-select");
+            const selectVal = selectEl?.value;
+            const isMe = !selectVal || selectVal === "me";
+            if (isMe) {
+                username = "You";
+                avatar = State.currentUser.avatar || "/images/default-avatar.png";
+            } else {
+                const friend = State.conversations.find(c => String(c.id) === String(selectVal));
+                username = friend ? friend.username : "Friend";
+                avatar = friend ? friend.avatar || "/images/default-avatar.png" : "/images/default-avatar.png";
+            }
+        }
+
+        if (this.viewerAvatar) {
+            const isDefault = !avatar || avatar === "/images/default-avatar.png" || avatar === "/images/default-avatar.jpg";
+            if (isDefault) {
+                this.viewerAvatar.removeAttribute("src");
+                this.viewerAvatar.style.display = "none";
+                if (this.viewerAvatarFallback) {
+                    this.viewerAvatarFallback.textContent = username.charAt(0).toUpperCase();
+                    this.viewerAvatarFallback.style.display = "flex";
+                    const colors = ["#ff453a", "#ff9f0a", "#30d158", "#0095f6", "#bf5af2", "#ff375f"];
+                    const charCodeSum = username.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    this.viewerAvatarFallback.style.background = colors[charCodeSum % colors.length];
+                }
+            } else {
+                if (this.viewerAvatarFallback) this.viewerAvatarFallback.style.display = "none";
+                this.viewerAvatar.style.display = "none";
+                this.viewerAvatar.src = avatar;
+            }
+        }
+        if (this.viewerSenderName) this.viewerSenderName.textContent = username;
+        if (this.viewerMediaTime) {
+            this.viewerMediaTime.textContent = this.formatMediaTime(timestamp);
+        }
+    }
+
+    formatMediaTime(timestamp) {
+        if (!timestamp) return "";
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) return "";
+
+        const now = new Date();
+        const isToday = date.toDateString() === now.toDateString();
+        
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const isYesterday = date.toDateString() === yesterday.toDateString();
+
+        const timeOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
+        const timeStr = date.toLocaleTimeString([], timeOptions).toLowerCase();
+
+        if (isToday) {
+            return `Today at ${timeStr}`;
+        } else if (isYesterday) {
+            return `Yesterday at ${timeStr}`;
+        } else {
+            const dateOptions = { month: 'long', day: 'numeric', year: 'numeric' };
+            const dateStr = date.toLocaleDateString([], dateOptions);
+            return `${dateStr} at ${timeStr}`;
+        }
+    }
+
+    applyZoomRotate() {
+        const slide = this.container.querySelector('.media-slide.active');
+        if (!slide) return;
+        const mediaEl = slide.querySelector('img.original-image') || slide.querySelector('video') || slide.querySelector('.thumbnail-placeholder');
+        if (mediaEl) {
+            mediaEl.style.transform = `scale(${this.zoomScale}) rotate(${this.rotationAngle}deg)`;
+        }
+    }
+
     /* ─── EVENTS ─── */
 
     bindEvents() {
         this.closeBtn.onclick = () => this.close();
         this.prevBtn.onclick = () => this.navigate(-1);
         this.nextBtn.onclick = () => this.navigate(1);
+
+        // Zoom Out
+        if (this.zoomOutBtn) {
+            this.zoomOutBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.zoomScale = Math.max(0.25, this.zoomScale - 0.25);
+                this.applyZoomRotate();
+            };
+        }
+
+        // Zoom In
+        if (this.zoomInBtn) {
+            this.zoomInBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.zoomScale = Math.min(4.0, this.zoomScale + 0.25);
+                this.applyZoomRotate();
+            };
+        }
+
+        // Rotate
+        if (this.rotateBtn) {
+            this.rotateBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.rotationAngle = (this.rotationAngle + 90) % 360;
+                this.applyZoomRotate();
+            };
+        }
+
+        // Star
+        if (this.starBtn) {
+            this.starBtn.onclick = (e) => {
+                e.stopPropagation();
+                showToast("Message starred", "success");
+            };
+        }
+
+        // Pin
+        if (this.pinBtn) {
+            this.pinBtn.onclick = (e) => {
+                e.stopPropagation();
+                showToast("Message pinned", "success");
+            };
+        }
+
+        // React
+        if (this.reactBtn) {
+            this.reactBtn.onclick = (e) => {
+                e.stopPropagation();
+                // Close any existing floating emoji bars first
+                document.querySelectorAll(".viewer-emoji-bar").forEach(el => el.remove());
+
+                const emojiBar = document.createElement("div");
+                emojiBar.className = "whatsapp-emoji-bar viewer-emoji-bar";
+                emojiBar.innerHTML = `
+                    <button class="emoji-btn" data-emoji="👍">👍</button>
+                    <button class="emoji-btn" data-emoji="❤️">❤️</button>
+                    <button class="emoji-btn" data-emoji="😂">😂</button>
+                    <button class="emoji-btn" data-emoji="😮">😮</button>
+                    <button class="emoji-btn" data-emoji="😢">😢</button>
+                    <button class="emoji-btn" data-emoji="🙏">🙏</button>
+                    <button class="emoji-btn plus-btn" data-emoji="plus"><i class="ti ti-plus"></i></button>
+                `;
+
+                const rect = this.reactBtn.getBoundingClientRect();
+                emojiBar.style.position = "fixed";
+                emojiBar.style.top = `${rect.bottom + 8}px`;
+                emojiBar.style.left = `${rect.left + rect.width / 2 - 150}px`; // Center align
+                emojiBar.style.zIndex = "1100";
+                document.body.appendChild(emojiBar);
+
+                emojiBar.querySelectorAll(".emoji-btn:not(.plus-btn)").forEach(btn => {
+                    btn.addEventListener("click", (evt) => {
+                        evt.stopPropagation();
+                        const activeItem = this.mediaItems[this.currentIndex];
+                        const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+                        if (msg && typeof socket !== 'undefined' && socket.emit) {
+                            socket.emit("react", { messageId: msg.id || msg._id || msg.tempId, to: this.chatId, emoji: btn.dataset.emoji });
+                            showToast("Reaction sent", "success");
+                        } else {
+                            showToast("Unable to send reaction", "error");
+                        }
+                        emojiBar.remove();
+                    });
+                });
+
+                emojiBar.querySelector(".plus-btn").onclick = (evt) => {
+                    evt.stopPropagation();
+                    const activeItem = this.mediaItems[this.currentIndex];
+                    const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+                    const msgId = msg ? (msg.id || msg._id || msg.tempId) : activeItem.id;
+                    emojiBar.remove();
+                    if (typeof window.openEmojiPickerModal === "function") {
+                        window.openEmojiPickerModal(msgId, this.chatId);
+                    } else {
+                        showToast("More reactions coming soon!", "info");
+                    }
+                };
+
+                // Close on click outside
+                setTimeout(() => {
+                    const closeReact = (ev) => {
+                        if (!emojiBar.contains(ev.target)) {
+                            emojiBar.remove();
+                            document.removeEventListener("click", closeReact, true);
+                        }
+                    };
+                    document.addEventListener("click", closeReact, true);
+                }, 0);
+            };
+        }
+
+        // Reply
+        if (this.replyBtn) {
+            this.replyBtn.onclick = (e) => {
+                e.stopPropagation();
+                const activeItem = this.mediaItems[this.currentIndex];
+                const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+                if (msg) {
+                    this.close();
+                    State.replyingTo = msg.id || msg._id || msg.tempId;
+                    const preview = typeof formatLastMessage === "function" ? formatLastMessage(msg) : "Media";
+                    const replyTextEl = document.getElementById("reply-text");
+                    const replyPreviewEl = document.getElementById("reply-preview");
+                    if (replyTextEl && replyPreviewEl) {
+                        replyTextEl.textContent = preview;
+                        replyPreviewEl.style.display = "flex";
+                    }
+                    const inputEl = document.getElementById("message-input");
+                    if (inputEl) inputEl.focus();
+                } else {
+                    showToast("Reply not available for this item", "error");
+                }
+            };
+        }
+
+        // Forward
+        if (this.forwardBtn) {
+            this.forwardBtn.onclick = (e) => {
+                e.stopPropagation();
+                const activeItem = this.mediaItems[this.currentIndex];
+                const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+                if (msg && typeof openForwardModal === "function") {
+                    this.close();
+                    openForwardModal(msg);
+                } else {
+                    showToast("Forward not available for this item", "error");
+                }
+            };
+        }
+
+        // Download
+        if (this.downloadBtn) {
+            this.downloadBtn.onclick = (e) => {
+                e.stopPropagation();
+                const activeItem = this.mediaItems[this.currentIndex];
+                const fileName = activeItem.type === 'video' ? 'video.mp4' : activeItem.type === 'pdf' ? 'document.pdf' : 'image.jpg';
+                const slide = this.container.querySelector(`.media-slide[data-index="${this.currentIndex}"]`);
+                const mediaEl = slide ? (slide.querySelector('img.original-image') || slide.querySelector('video') || slide.querySelector('audio') || slide.querySelector('iframe.pdf-viewer')) : null;
+                const url = mediaEl?.src || activeItem.thumbnail || '';
+                forceDownload(url, fileName, activeItem.id);
+            };
+        }
+
+        // More Options
+        if (this.moreBtn) {
+            this.moreBtn.onclick = (e) => {
+                e.stopPropagation();
+                showToast("More options coming soon", "info");
+            };
+        }
 
         document.addEventListener('keydown', e => {
             if (!this.overlay.classList.contains('active')) return;

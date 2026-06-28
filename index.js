@@ -5,8 +5,8 @@ import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
 import http from "http";
 import { Server } from "socket.io";
-import "dotenv/config";
 
+import { clientOrigins, isProd } from "./config/env.js";
 import { connectMongo } from "./config/mongo.js";
 import authRoutes from "./routes/auth.routes.js";
 import connectionRoutes from "./routes/connection.routes.js";
@@ -17,16 +17,18 @@ import { startMessageStatusSyncJob } from "./jobs/messageStatusSync.js";
 import webrtcRoutes from "./routes/webrtc.routes.js";
 import componentRoutes from "./routes/component.routes.js";
 import { protect, readUserFromCookie } from "./middleware/auth.middleware.js";
+import { csrfOriginGuard } from "./middleware/security.middleware.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set("trust proxy", 1);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: clientOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -40,9 +42,7 @@ await connectMongo();
 
 /* ---------- CORS ---------- */
 app.use(cors({
-  origin: process.env.NODE_ENV === "PROD"
-    ? process.env.CLIENT_URL || "*"
-    : "*",
+  origin: clientOrigins,
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 }));
@@ -51,12 +51,13 @@ app.use(cors({
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser());
+app.use(csrfOriginGuard(clientOrigins));
 
 /* ---------- Static files with Cache-Control ---------- */
 app.use(express.static(path.join(__dirname, "public"), {
-  maxAge: process.env.NODE_ENV === "PROD" ? "1d" : 0,
+  maxAge: isProd ? "1d" : 0,
   setHeaders: (res, filepath) => {
-    if (process.env.NODE_ENV === "PROD") {
+    if (isProd) {
       if (filepath.endsWith(".html") || filepath.endsWith(".ejs")) {
         res.setHeader("Cache-Control", "no-cache");
       } else {
@@ -81,7 +82,6 @@ app.get("/", readUserFromCookie, (req, res) => {
   if (!user) {
     isServerLogin = false
   }
-  console.log("user?.showDashboard:", user?.showDashboard,isServerLogin)
   res.render("index", { isShowDashboard: user?.showDashboard ?? true, isServerLogin })
 
 });
@@ -126,7 +126,7 @@ initSocket(io);
 startMessageStatusSyncJob(io);
 
 /* ---------- Start ---------- */
-if (process.env.NODE_ENV === "PROD") {
+if (isProd) {
   server.listen(process.env.PORT || 8080, "0.0.0.0", () => {
     console.log(`[Server] Running on port ${process.env.PORT || 8080}`);
   });

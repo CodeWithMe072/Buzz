@@ -67,7 +67,7 @@ function markSeen(message) {
     console.log("[DEBUG seen] markSeen called with null message");
     return;
   }
-  console.log("[DEBUG seen] markSeen called for message:", message.id || message.tempId, "current status:", message.status);
+  console.log("[DEBUG seen] markSeen called for message:", message.id || message._id || message.tempId, "current status:", message.status);
   // Mark even if not yet "delivered" — seen implies delivered
   if (message.status?.seen) {
     console.log("[DEBUG seen] message is already seen, returning");
@@ -78,7 +78,7 @@ function markSeen(message) {
     message.status.delivered = true;
     message.status.sent      = true;
   }
-  const id = message.id || message.tempId;
+  const id = message.id || message._id || message.tempId;
   const selector = `.message[data-message-id="${id}"] .message-bubble`;
   const msgEl = document.querySelector(selector);
   console.log("[DEBUG seen] Query selector:", selector, "Found element?", !!msgEl);
@@ -452,6 +452,13 @@ function initSocket() {
     reactionsEl.innerHTML = Object.entries(counts)
       .map(([e, n]) => `<span class="reaction-badge">${e}${n > 1 ? " " + n : ""}</span>`)
       .join("");
+  });
+
+  socket.on("message_deleted", ({ messageId, type }) => {
+    console.log("[Socket] message_deleted event received:", messageId, type);
+    if (typeof window.animateAndDeleteMessageFromDom === "function") {
+      window.animateAndDeleteMessageFromDom(messageId);
+    }
   });
 
   // ── Connection request notifications ─────────────────────
