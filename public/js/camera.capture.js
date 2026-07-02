@@ -702,8 +702,8 @@
             timerEl.textContent = `${mins}:${secs.toString().padStart(2, "0")}`;
         }
         
-        // Limit maximum story video length to 60 seconds
-        if (elapsed >= 60) {
+        // Limit maximum story video length to 120 seconds (2 minutes)
+        if (elapsed >= 120) {
             stopVideoRecording();
         }
     }
