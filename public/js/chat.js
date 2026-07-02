@@ -585,11 +585,13 @@ function createMessageElement(message) {
   } else if (message.type === "image") {
     const src = message.cover || message.thumb || message.content;
     const isUploading = message.uploadStatus === "uploading";
+    const isFailed = message.uploadStatus === "failed";
     bubbleEl.innerHTML = `
       ${replyHTML}
       <div class="message-media">
         ${src ? `<img src="${src}" alt="Image" loading="lazy">` : ""}
         ${isUploading ? `<div class="media-overlay"><div class="loader"></div></div>` : ""}
+        ${isFailed ? `<div class="media-overlay"><button type="button" class="media-retry">↻</button></div>` : ""}
       </div>
       ${message.caption ? `<p class="messag-text caption">${sanitizeInput(message.caption)}</p>` : ""}
       ${footerHTML}`;
@@ -598,6 +600,7 @@ function createMessageElement(message) {
     const videoUrl = message.content;
     const coverUrl = message.cover || message.thumb;
     const isUploading = message.uploadStatus === "uploading";
+    const isFailed = message.uploadStatus === "failed";
     bubbleEl.innerHTML = `
       ${replyHTML}
       <div class="message-media video-media">
@@ -606,6 +609,7 @@ function createMessageElement(message) {
           <div class="video-play-overlay-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" style="display: block; margin-left: 3px;"><path d="M8 5v14l11-7z"/></svg></div>
         ` : (coverUrl ? `<img class="video-thumb" src="${coverUrl}" alt="Video">` : `<div class="video-placeholder">Video loading...</div>`)}
         ${isUploading ? `<div class="media-overlay"><div class="loader"></div></div>` : ""}
+        ${isFailed ? `<div class="media-overlay"><button type="button" class="media-retry">↻</button></div>` : ""}
       </div>
       ${message.caption ? `<p class="messag-text caption">${sanitizeInput(message.caption)}</p>` : ""}
       ${footerHTML}`;
@@ -683,6 +687,7 @@ function createMessageElement(message) {
   } else if (message.type === "document") {
     const { icon, color } = getFileIcon(message.fileName || "");
     const isUploading = message.uploadStatus === "uploading";
+    const isFailed = message.uploadStatus === "failed";
     bubbleEl.innerHTML = `
       ${replyHTML}
       <div class="message-document">
@@ -693,7 +698,9 @@ function createMessageElement(message) {
         </div>
         ${isUploading
         ? `<div class="media-overlay"><div class="loader"></div></div>`
-        : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName || "document"}','${message.id || message._id || message.tempId}')">Save</button>` : ""}</div>`}
+        : (isFailed
+           ? `<div class="media-overlay"><button type="button" class="media-retry">↻</button></div>`
+           : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName || "document"}','${message.id || message._id || message.tempId}')">Save</button>` : ""}</div>`)}
       </div>
       ${footerHTML}`;
   }

@@ -10,10 +10,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             .catch(err => console.error('[ServiceWorker] Registration failed:', err));
     }
 
-    // 1. Initialize Core Network Monitor
+    // 1. Initialize Core Network Monitor & IndexedDB Queue Service
     console.time("NetworkMonitor");
     if (window.NetworkMonitor) {
         NetworkMonitor.init();
+    }
+    if (window.IndexedDBQueueService) {
+        try {
+            await IndexedDBQueueService.init();
+        } catch (e) {
+            console.error("IndexedDB Queue Service initialization failed:", e);
+        }
     }
     console.timeEnd("NetworkMonitor");
 

@@ -565,6 +565,26 @@ router.delete("/api/gifs/custom/section/:sectionName", protect, async (req, res)
 });
 
 // =============================================================================
+// Upload Status
+// =============================================================================
+
+router.get("/api/upload-status/:fileId", protect, async (req, res) => {
+    try {
+        const { fileId } = req.params;
+        const chunkDir = path.join(os.tmpdir(), "chunks", fileId);
+        if (!(await fse.pathExists(chunkDir))) {
+            return res.json({ success: true, chunksReceived: [] });
+        }
+        const files = await fse.readdir(chunkDir);
+        const chunksReceived = files.map(f => Number(f)).filter(n => !isNaN(n));
+        return res.json({ success: true, chunksReceived });
+    } catch (err) {
+        console.error("[upload-status] error:", err);
+        return res.status(500).json({ error: "Failed to get upload status" });
+    }
+});
+
+// =============================================================================
 // Upload Chunk
 // =============================================================================
 

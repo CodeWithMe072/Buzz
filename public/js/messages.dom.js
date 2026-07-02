@@ -24,6 +24,24 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
         Object.assign(msg, updates);
     }
 
+    if (window.IndexedDBQueueService && (updates.uploadStatus || (updates.status && updates.status.sent !== undefined))) {
+        IndexedDBQueueService.getMessage(tempId).then(dbMsg => {
+            if (dbMsg) {
+                if (updates.uploadStatus) {
+                    dbMsg.status = updates.uploadStatus;
+                    dbMsg.retryCount = msg.retries || dbMsg.retryCount;
+                }
+                if (updates.status && updates.status.sent) dbMsg.status = "sent";
+                
+                if (dbMsg.status === "sent") {
+                    IndexedDBQueueService.deleteMessage(tempId).catch(console.error);
+                } else {
+                    IndexedDBQueueService.saveMessage(dbMsg).catch(console.error);
+                }
+            }
+        }).catch(console.error);
+    }
+
     const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
     if (!msgEl) return;
 
@@ -115,6 +133,41 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
             </svg>`;
         }
         messageStatus.innerHTML = statusIcon;
+    }
+
+    /* ─── Upload status DOM updates ─── */
+    if (updates.uploadStatus) {
+        if (msg.type === "text") {
+            const failBadge = msgEl.querySelector(".upload-fail-badge");
+            if (updates.uploadStatus === "failed" && !failBadge) {
+                const badge = document.createElement("div");
+                badge.className = "upload-fail-badge";
+                badge.textContent = "Failed to send";
+                msgEl.appendChild(badge);
+            } else if (updates.uploadStatus !== "failed" && failBadge) {
+                failBadge.remove();
+            }
+        } else {
+            const mediaContainer = msgEl.querySelector(".message-media");
+            const mediaDocument = msgEl.querySelector(".message-document");
+            const container = mediaContainer || mediaDocument;
+            if (container) {
+                const existing = container.querySelector(".media-overlay");
+                if (existing) existing.remove();
+
+                if (updates.uploadStatus === "uploading") {
+                    const overlay = document.createElement("div");
+                    overlay.className = "media-overlay";
+                    overlay.innerHTML = '<div class="loader"></div>';
+                    container.appendChild(overlay);
+                } else if (updates.uploadStatus === "failed") {
+                    const overlay = document.createElement("div");
+                    overlay.className = "media-overlay";
+                    overlay.innerHTML = '<button type="button" class="media-retry">↻</button>';
+                    container.appendChild(overlay);
+                }
+            }
+        }
     }
 
     document.getElementById("messages-container").scrollTop = 99999;

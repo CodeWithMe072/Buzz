@@ -339,9 +339,50 @@ async function uploadFileInChunks(file, msgId) {
     const CHUNK_SIZE = 2 * 1024 * 1024;
     const PARALLEL = 3;
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    const fileId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const tasks = Array.from({ length: totalChunks }, (_, i) => i);
-    let done = 0;
+    
+    // Retrieve record from IndexedDB
+    let record = null;
+    if (window.IndexedDBQueueService) {
+        record = await IndexedDBQueueService.getMessage(msgId);
+    }
+    
+    // Determine fileId
+    let fileId = record?.fileId || record?.mediaMeta?.fileId;
+    if (!fileId) {
+        fileId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        if (record) {
+            record.fileId = fileId;
+            if (record.mediaMeta) record.mediaMeta.fileId = fileId;
+            await IndexedDBQueueService.saveMessage(record);
+        }
+    }
+
+    // Query server for already uploaded chunks
+    let serverChunks = [];
+    try {
+        const token = TokenStore.getToken();
+        const res = await fetch(`/api/upload-status/${fileId}`, {
+            headers: token ? { "Authorization": "Bearer " + token } : {}
+        });
+        if (res.ok) {
+            const statusData = await res.json();
+            serverChunks = statusData.chunksReceived || [];
+        }
+    } catch (e) {
+        console.warn("Could not retrieve upload status from server:", e);
+    }
+
+    // Reconcile chunksAcked
+    let chunksAcked = Array.from(new Set([...(record?.chunksAcked || []), ...serverChunks]));
+    if (record) {
+        record.chunksAcked = chunksAcked;
+        await IndexedDBQueueService.saveMessage(record);
+    }
+
+    const tasks = Array.from({ length: totalChunks }, (_, i) => i).filter(idx => !chunksAcked.includes(idx));
+    let done = chunksAcked.length;
+
+    console.log(`Resuming upload for ${msgId}: ${done}/${totalChunks} chunks already uploaded.`);
 
     for (let i = 0; i < tasks.length; i += PARALLEL) {
         const batch = tasks.slice(i, i + PARALLEL);
@@ -372,6 +413,15 @@ async function uploadFileInChunks(file, msgId) {
                 }
             }
             done++;
+            
+            // Persist chunk ack to IndexedDB
+            if (record) {
+                if (!record.chunksAcked.includes(chunkIndex)) {
+                    record.chunksAcked.push(chunkIndex);
+                    await IndexedDBQueueService.saveMessage(record);
+                }
+            }
+
             console.log(`${msgId}: ${Math.round((done / totalChunks) * 100)}%`);
         }));
     }
@@ -393,8 +443,39 @@ async function retryUpload(msgId) {
     const chatId = State.messageIndex[msgId];
     const msg = State.messages[chatId]?.find(m => m.tempId === msgId);
     if (!msg) return;
+
     msg.uploadStatus = "uploading";
     updateMessageByTempId(msgId, { uploadStatus: "uploading" });
+
+    // Retrieve from IndexedDB
+    if (window.IndexedDBQueueService) {
+        try {
+            const dbMsg = await IndexedDBQueueService.getMessage(msgId);
+            if (dbMsg && dbMsg.mediaBlob) {
+                UploadManager.add(async () => {
+                    if (dbMsg.type === "audio") {
+                        try {
+                            await uploadAudio(msgId, dbMsg.conversationId, dbMsg.mediaBlob);
+                        } catch (err) {
+                            console.error("Audio upload retry failed:", err);
+                        }
+                    } else {
+                        try {
+                            const file = dbMsg.mediaBlob instanceof File 
+                                ? dbMsg.mediaBlob 
+                                : new File([dbMsg.mediaBlob], dbMsg.mediaMeta?.fileName || "file", { type: dbMsg.mediaMeta?.mimeType });
+                            await uploadMedia(msgId, dbMsg.conversationId, file);
+                        } catch (err) {
+                            console.error("Media upload retry failed:", err);
+                        }
+                    }
+                });
+                return;
+            }
+        } catch (e) {
+            console.error("IndexedDB error in retry:", e);
+        }
+    }
     showToast("Please reselect file to retry", "info");
 }
 

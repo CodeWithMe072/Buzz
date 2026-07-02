@@ -156,7 +156,12 @@ async function bootstrapAfterLogin() {
     }
   });
 
-  Promise.all(messagePromises).then(() => {
+  Promise.all(messagePromises).then(async () => {
+    if (window.IndexedDBQueueService) {
+      await syncPendingMessagesFromDB();
+      if (typeof OutboxQueue.init === "function") await OutboxQueue.init();
+      if (typeof UploadQueue.init === "function") await UploadQueue.init();
+    }
     State.apiMessagesLoaded = true;
     // Sort conversations by last message timestamp once all have loaded
     State.conversations.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -2111,4 +2116,54 @@ window.stopReceivingVideoStream = stopReceivingVideoStream;
 window.handleVideoStreamSDP = handleVideoStreamSDP;
 window.handleVideoStreamICE = handleVideoStreamICE;
 
+async function syncPendingMessagesFromDB() {
+  if (!window.IndexedDBQueueService) return;
+  try {
+    const unsent = await IndexedDBQueueService.getAllUnsent();
+    console.log(`[IndexedDB] Loaded ${unsent.length} unsent messages from DB`);
+    for (const dbMsg of unsent) {
+      const chatId = dbMsg.conversationId;
+      if (!State.messages[chatId]) State.messages[chatId] = [];
 
+      // Avoid duplication
+      const exists = State.messages[chatId].some(m => (m.id || m.tempId) === dbMsg.localId);
+      if (!exists) {
+        const message = {
+          id: dbMsg.localId,
+          tempId: dbMsg.localId,
+          type: dbMsg.type,
+          content: dbMsg.payload || "",
+          sender: "me",
+          user: State.currentUser?.id || State.currentUser?._id,
+          timestamp: dbMsg.createdAt,
+          replyTo: dbMsg.mediaMeta?.replyTo || dbMsg.replyTo || null,
+          reactions: {},
+          status: { sent: false, delivered: false, seen: false },
+          uploadStatus: dbMsg.status, // "pending", "uploading", "failed"
+          fileName: dbMsg.mediaMeta?.fileName || null,
+          fileSize: dbMsg.mediaMeta?.fileSize || null,
+          caption: dbMsg.mediaMeta?.caption || null,
+          cover: dbMsg.mediaMeta?.cover || null,
+          thumb: dbMsg.mediaMeta?.thumb || null,
+          duration: dbMsg.mediaMeta?.duration || null
+        };
+        
+        State.messages[chatId].unshift(message);
+        State.messageIndex[dbMsg.localId] = chatId;
+
+        // Also update conversation lastMessage / timestamp if newer
+        const conv = State.conversations.find(c => c.id === chatId);
+        if (conv && dbMsg.createdAt > (conv.timestamp || 0)) {
+          if (dbMsg.type === "text") {
+            conv.lastMessage = dbMsg.payload;
+          } else {
+            conv.lastMessage = `📎 ${dbMsg.type.charAt(0).toUpperCase() + dbMsg.type.slice(1)}`;
+          }
+          conv.timestamp = dbMsg.createdAt;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("syncPendingMessagesFromDB failed:", err);
+  }
+}
