@@ -767,6 +767,14 @@ function createMessageElement(message) {
       return;
     }
 
+    // If selection mode is active, handle selection toggling
+    if (State.selectedMessageIds && State.selectedMessageIds.size > 0 && duration < 500) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.toggleMessageSelection(message, msgEl);
+      return;
+    }
+
     // Single-tap handler on media element: open media viewer (skip options popup)
     const targetMedia = e.target.closest(".message-media");
     if (targetMedia && duration < 500 && !isRecording && !State.isSwiping) {
@@ -782,9 +790,18 @@ function createMessageElement(message) {
       if (!viewer && State.activeChat) {
         viewer = new MediaViewer(State.activeChat);
       }
-      if (viewer) viewer.open(msgEl.dataset.messageId);
+      if (viewer) viewer.open(msgEl.dataset.messageId, null, true);
     }
   }, { passive: false });
+
+  // General click handler (desktop/mouse)
+  msgEl.addEventListener("click", (e) => {
+    if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.toggleMessageSelection(message, msgEl);
+    }
+  });
 
   // Desktop: right-click
   msgEl.addEventListener("contextmenu", (e) => {
@@ -808,6 +825,14 @@ function createMessageElement(message) {
 // MESSAGE OPTIONS (reactions / reply)
 // =============================================================================
 function showMessageOptions(message, msgEl, event) {
+  // Direct to mobile selection view if on mobile/tablet size
+  if (window.innerWidth <= 768) {
+    if (typeof window.selectMessageMobile === "function") {
+      window.selectMessageMobile(message, msgEl);
+      return;
+    }
+  }
+
   // Remove any existing popup
   document.querySelectorAll(".message-options-popup").forEach(p => p.remove());
   navigator.vibrate && navigator.vibrate(20);
@@ -1052,7 +1077,7 @@ function showMessageOptions(message, msgEl, event) {
           viewer = new MediaViewer(State.activeChat);
         }
         if (viewer) {
-          viewer.open(msgEl.dataset.messageId);
+          viewer.open(msgEl.dataset.messageId, null, true);
         }
       }
     });
@@ -1118,6 +1143,52 @@ function showMessageOptions(message, msgEl, event) {
 // FORWARD MESSAGE MODAL
 // =============================================================================
 function openForwardModal(message) {
+  // Resolve messages to forward
+  let messagesToForward = [];
+  
+  let inputMessages = message;
+  if (message instanceof Set) {
+    inputMessages = Array.from(message);
+  }
+  
+  const resolveSingleMessage = (m) => {
+    if (!m) return null;
+    if (typeof m === "string") {
+      const chatId = State.messageIndex[m];
+      if (chatId) {
+        const found = (State.messages[chatId] || []).find(msg => (msg.id || msg._id || msg.tempId) === m);
+        if (found) return found;
+      }
+      for (const cid in State.messages) {
+        const found = State.messages[cid].find(msg => (msg.id || msg._id || msg.tempId) === m);
+        if (found) return found;
+      }
+      return null;
+    }
+    return m;
+  };
+
+  if (Array.isArray(inputMessages)) {
+    messagesToForward = inputMessages.map(resolveSingleMessage).filter(Boolean);
+  } else {
+    const resolved = resolveSingleMessage(inputMessages);
+    if (resolved) {
+      messagesToForward = [resolved];
+    }
+  }
+
+  if (messagesToForward.length === 0) {
+    showToast("No messages found to forward", "error");
+    return;
+  }
+
+  // Sort messages chronologically
+  messagesToForward.sort((a, b) => {
+    const timeA = a.timestamp || a.clientTime || 0;
+    const timeB = b.timestamp || b.clientTime || 0;
+    return timeA - timeB;
+  });
+
   // Remove existing modals if any
   document.querySelectorAll(".fwd-overlay").forEach(m => m.remove());
 
@@ -1230,102 +1301,108 @@ function openForwardModal(message) {
     if (selectedRecipients.length === 0) return;
 
     selectedRecipients.forEach(recipientId => {
-      const tempId = generateId();
+      messagesToForward.forEach(msg => {
+        const tempId = generateId();
 
-      // Construct message payload
-      const forwardMsgPayload = {
-        tempId,
-        to: recipientId,
-        type: message.type,
-        content: message.content,
-        caption: message.caption || null,
-        replyTo: null,
-        fileName: message.fileName || null,
-        fileSize: message.fileSize || null,
-        clientTime: Date.now(),
-        cover: message.cover || null,
-        thumb: message.thumb || null,
-        cameraFacing: message.cameraFacing || null,
-        cameraFilter: message.cameraFilter || null,
-        isDisappearing: message.isDisappearing || false
-      };
+        // Construct message payload
+        const forwardMsgPayload = {
+          tempId,
+          to: recipientId,
+          type: msg.type,
+          content: msg.content,
+          caption: msg.caption || null,
+          replyTo: null,
+          fileName: msg.fileName || null,
+          fileSize: msg.fileSize || null,
+          clientTime: Date.now(),
+          cover: msg.cover || null,
+          thumb: msg.thumb || null,
+          cameraFacing: msg.cameraFacing || null,
+          cameraFilter: msg.cameraFilter || null,
+          isDisappearing: msg.isDisappearing || false
+        };
 
-      // Add to local state messages array
-      const localMsg = {
-        tempId,
-        id: tempId,
-        type: message.type,
-        content: message.content,
-        cover: message.cover || null,
-        thumb: message.thumb || null,
-        fileName: message.fileName || null,
-        fileSize: message.fileSize || null,
-        caption: message.caption || null,
-        sender: "me",
-        user: State.currentUser.id || State.currentUser._id,
-        timestamp: Date.now(),
-        replyTo: null,
-        reactions: {},
-        status: { sent: false, delivered: false, seen: false },
-        cameraFacing: message.cameraFacing || null,
-        cameraFilter: message.cameraFilter || null,
-        isDisappearing: message.isDisappearing || false
-      };
+        // Add to local state messages array
+        const localMsg = {
+          tempId,
+          id: tempId,
+          type: msg.type,
+          content: msg.content,
+          cover: msg.cover || null,
+          thumb: msg.thumb || null,
+          fileName: msg.fileName || null,
+          fileSize: msg.fileSize || null,
+          caption: msg.caption || null,
+          sender: "me",
+          user: State.currentUser.id || State.currentUser._id,
+          timestamp: Date.now(),
+          replyTo: null,
+          reactions: {},
+          status: { sent: false, delivered: false, seen: false },
+          cameraFacing: msg.cameraFacing || null,
+          cameraFilter: msg.cameraFilter || null,
+          isDisappearing: msg.isDisappearing || false
+        };
 
-      if (!State.messages[recipientId]) State.messages[recipientId] = [];
-      State.messages[recipientId].unshift(localMsg);
-      State.messageIndex[tempId] = recipientId;
+        if (!State.messages[recipientId]) State.messages[recipientId] = [];
+        State.messages[recipientId].unshift(localMsg);
+        State.messageIndex[tempId] = recipientId;
 
-      // Update conversations sidebar last message
-      const conv = State.conversations.find(c => c.id === recipientId);
-      if (conv) {
-        conv.lastMessage = formatLastMessage(localMsg);
-        conv.timestamp = Date.now();
-      }
-
-      // If active chat is this recipient, render message
-      if (recipientId === State.activeChat) {
-        const messagesEl = document.getElementById("messages");
-        if (messagesEl) {
-          messagesEl.appendChild(createMessageElement(localMsg));
+        // Update conversations sidebar last message
+        const conv = State.conversations.find(c => c.id === recipientId);
+        if (conv) {
+          conv.lastMessage = formatLastMessage(localMsg);
+          conv.timestamp = Date.now();
         }
-        const container = document.getElementById("messages-container");
-        if (container) {
-          container.scrollTop = 99999;
+
+        // If active chat is this recipient, render message
+        if (recipientId === State.activeChat) {
+          const messagesEl = document.getElementById("messages");
+          if (messagesEl) {
+            messagesEl.appendChild(createMessageElement(localMsg));
+          }
+          const container = document.getElementById("messages-container");
+          if (container) {
+            container.scrollTop = 99999;
+          }
         }
-      }
 
-      // Queue in Outbox for reliability
-      OutboxQueue.add({
-        tempId,
-        to: recipientId,
-        type: message.type,
-        content: message.content,
-        caption: message.caption || null,
-        fileName: message.fileName || null,
-        fileSize: message.fileSize || null,
-        cover: message.cover || null,
-        thumb: message.thumb || null,
-        replyTo: null,
-        clientTime: Date.now(),
-        cameraFacing: message.cameraFacing || null,
-        cameraFilter: message.cameraFilter || null,
-        isDisappearing: message.isDisappearing || false
-      });
-
-      // Send over socket connection
-      if (socket && socket.connected) {
-        socket.emit("private_message", {
-          message: forwardMsgPayload
+        // Queue in Outbox for reliability
+        OutboxQueue.add({
+          tempId,
+          to: recipientId,
+          type: msg.type,
+          content: msg.content,
+          caption: msg.caption || null,
+          fileName: msg.fileName || null,
+          fileSize: msg.fileSize || null,
+          cover: msg.cover || null,
+          thumb: msg.thumb || null,
+          replyTo: null,
+          clientTime: Date.now(),
+          cameraFacing: msg.cameraFacing || null,
+          cameraFilter: msg.cameraFilter || null,
+          isDisappearing: msg.isDisappearing || false
         });
-      }
+
+        // Send over socket connection
+        if (socket && socket.connected) {
+          socket.emit("private_message", {
+            message: forwardMsgPayload
+          });
+        }
+      });
     });
 
     // Refresh chat list order in sidebar
     renderChatList(document.getElementById("chat-search").value.trim().toLowerCase());
 
     closeModal();
-    showToast(`Message forwarded to ${selectedRecipients.length} chat(s)`);
+    if (messagesToForward.length > 1) {
+      showToast(`${messagesToForward.length} messages forwarded to ${selectedRecipients.length} chat(s)`, "success");
+    } else {
+      showToast(`Message forwarded to ${selectedRecipients.length} chat(s)`, "success");
+    }
   });
 }
 
@@ -1536,7 +1613,7 @@ document.addEventListener("click", (e) => {
     }
     if (viewer) {
       console.log("[DEBUG Click] Calling viewer.open with:", msgEl.dataset.messageId);
-      viewer.open(msgEl.dataset.messageId);
+      viewer.open(msgEl.dataset.messageId, null, true);
     }
   }
 });
@@ -1622,3 +1699,398 @@ window.animateAndDeleteMessageFromDom = function(messageId) {
     }
   }
 };
+
+// Clear current message selection
+window.clearMessageSelection = function() {
+  document.querySelectorAll(".message.selected").forEach(el => el.classList.remove("selected"));
+  document.querySelectorAll(".mobile-emoji-bar").forEach(el => el.remove());
+  
+  const selectionHeader = document.getElementById("mobile-selection-header");
+  const chatHeader = document.querySelector(".chat-header:not(.mobile-selection-header)");
+  if (selectionHeader) selectionHeader.style.display = "none";
+  if (chatHeader) chatHeader.style.display = "flex";
+  
+  State.selectedMessageIds = null;
+  State.selectedMessage = null;
+  State.selectedMessageEl = null;
+};
+
+// Toggle single message selection in multi-selection mode
+window.toggleMessageSelection = function(message, msgEl) {
+  const msgId = message.id || message._id || message.tempId;
+  if (!State.selectedMessageIds) {
+    State.selectedMessageIds = new Set();
+  }
+  
+  if (State.selectedMessageIds.has(msgId)) {
+    State.selectedMessageIds.delete(msgId);
+    msgEl.classList.remove("selected");
+  } else {
+    State.selectedMessageIds.add(msgId);
+    msgEl.classList.add("selected");
+  }
+
+  const count = State.selectedMessageIds.size;
+  const countEl = document.getElementById("selection-count");
+  if (countEl) {
+    countEl.textContent = count;
+  }
+
+  // Dismiss floating reactions bar if not exactly 1 message selected
+  if (count !== 1) {
+    document.querySelectorAll(".mobile-emoji-bar").forEach(el => el.remove());
+  } else {
+    // If count returned to exactly 1, show reactions bar for the single remaining message
+    const remainingId = Array.from(State.selectedMessageIds)[0];
+    const remainingEl = document.querySelector(`.message[data-message-id="${remainingId}"]`);
+    if (remainingEl) {
+      const remainingChatId = State.messageIndex[remainingId];
+      if (remainingChatId) {
+        const msg = (State.messages[remainingChatId] || []).find(m => (m.id || m._id || m.tempId) === remainingId);
+        if (msg) {
+          window.showMobileEmojiBarForMessage(msg, remainingEl);
+        }
+      }
+    }
+  }
+
+  if (count === 0) {
+    clearMessageSelection();
+  }
+};
+
+// Helper to render mobile reactions bar
+window.showMobileEmojiBarForMessage = function(message, msgEl) {
+  document.querySelectorAll(".mobile-emoji-bar").forEach(el => el.remove());
+  
+  const bubble = msgEl.querySelector(".message-bubble");
+  if (!bubble) return;
+  
+  const rect = bubble.getBoundingClientRect();
+  const emojiBar = document.createElement("div");
+  emojiBar.className = "whatsapp-emoji-bar mobile-emoji-bar";
+  emojiBar.innerHTML = `
+      <button class="emoji-btn" data-emoji="👍">👍</button>
+      <button class="emoji-btn" data-emoji="❤️">❤️</button>
+      <button class="emoji-btn" data-emoji="😂">😂</button>
+      <button class="emoji-btn" data-emoji="😮">😮</button>
+      <button class="emoji-btn" data-emoji="😢">😢</button>
+      <button class="emoji-btn" data-emoji="🙏">🙏</button>
+      <button class="emoji-btn reply-btn" data-emoji="reply" style="color: #a8a8a8;" title="Reply"><i class="ti ti-arrow-back-up"></i></button>
+      <button class="emoji-btn plus-btn" data-emoji="plus" title="More reactions"><i class="ti ti-plus"></i></button>
+  `;
+
+  const barWidth = 300;
+  const viewportWidth = window.innerWidth;
+  
+  emojiBar.style.position = "fixed";
+  let left = rect.left + rect.width / 2 - barWidth / 2;
+  left = Math.max(10, Math.min(viewportWidth - barWidth - 10, left));
+  
+  let top = rect.top - 55;
+  if (top < 70) {
+    top = rect.bottom + 8;
+  }
+  
+  emojiBar.style.top = `${top}px`;
+  emojiBar.style.left = `${left}px`;
+  emojiBar.style.zIndex = "1100";
+  document.body.appendChild(emojiBar);
+
+  // Wire emojis
+  emojiBar.querySelectorAll(".emoji-btn:not(.plus-btn):not(.reply-btn)").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const msgId = message.id || message._id || message.tempId;
+      if (typeof socket !== "undefined" && socket.emit) {
+        socket.emit("react", { messageId: msgId, to: State.activeChat, emoji: btn.dataset.emoji });
+        showToast("Reaction sent", "success");
+      }
+      clearMessageSelection();
+    };
+  });
+
+  // Wire reply
+  const replyBtn = emojiBar.querySelector(".reply-btn");
+  if (replyBtn) {
+    replyBtn.onclick = (e) => {
+      e.stopPropagation();
+      const msgId = message.id || message._id || message.tempId;
+      State.replyingTo = msgId;
+      const preview = typeof formatLastMessage === "function" ? formatLastMessage(message) : "Media";
+      const replyTextEl = document.getElementById("reply-text");
+      const replyPreviewEl = document.getElementById("reply-preview");
+      if (replyTextEl && replyPreviewEl) {
+        replyTextEl.textContent = preview;
+        replyPreviewEl.style.display = "flex";
+      }
+      const inputEl = document.getElementById("message-input");
+      if (inputEl) inputEl.focus();
+      clearMessageSelection();
+    };
+  }
+
+  // Wire plus
+  const plusBtn = emojiBar.querySelector(".plus-btn");
+  if (plusBtn) {
+    plusBtn.onclick = (e) => {
+      e.stopPropagation();
+      const msgId = message.id || message._id || message.tempId;
+      clearMessageSelection();
+      if (typeof window.openEmojiPickerModal === "function") {
+        window.openEmojiPickerModal(msgId, State.activeChat);
+      }
+    };
+  }
+};
+
+// Select a message (mobile/tablet view) and initialize selection mode
+window.selectMessageMobile = function(message, msgEl) {
+  const msgId = message.id || message._id || message.tempId;
+  clearMessageSelection();
+
+  State.selectedMessageIds = new Set([msgId]);
+  State.selectedMessage = message;
+  State.selectedMessageEl = msgEl;
+  
+  msgEl.classList.add("selected");
+
+  // Show selection header
+  const selectionHeader = document.getElementById("mobile-selection-header");
+  const chatHeader = document.querySelector(".chat-header:not(.mobile-selection-header)");
+  if (selectionHeader) {
+    selectionHeader.style.display = "flex";
+    document.getElementById("selection-count").textContent = "1";
+  }
+  if (chatHeader) chatHeader.style.display = "none";
+
+  // Show reactions bar
+  window.showMobileEmojiBarForMessage(message, msgEl);
+
+  // Close selection on clicking outside
+  setTimeout(() => {
+    const handleOutsideClick = (e) => {
+      if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+        const emojiBar = document.querySelector(".mobile-emoji-bar");
+        const clickedInsideEmojiBar = emojiBar && emojiBar.contains(e.target);
+        const clickedInsideMessage = e.target.closest(".message");
+        const clickedInsideSelectionHeader = e.target.closest(".mobile-selection-header");
+        const clickedInsideDropdown = e.target.closest(".selection-dropdown-menu");
+        
+        if (!clickedInsideEmojiBar && !clickedInsideMessage && !clickedInsideSelectionHeader && !clickedInsideDropdown) {
+          clearMessageSelection();
+          document.removeEventListener("click", handleOutsideClick, true);
+        }
+      } else {
+        document.removeEventListener("click", handleOutsideClick, true);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick, true);
+  }, 0);
+};
+
+// Wire up selection action listeners globally
+document.addEventListener("click", (e) => {
+  // Close / Back button
+  if (e.target.closest("#close-selection-btn")) {
+    clearMessageSelection();
+    return;
+  }
+
+  // Star button
+  if (e.target.closest("#star-selection-btn")) {
+    if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+      showToast(`${State.selectedMessageIds.size} message${State.selectedMessageIds.size > 1 ? 's' : ''} starred`, "success");
+    }
+    clearMessageSelection();
+    return;
+  }
+
+  // Forward button
+  if (e.target.closest("#forward-selection-btn")) {
+    if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+      if (typeof openForwardModal === "function") {
+        openForwardModal(State.selectedMessageIds);
+      }
+    }
+    clearMessageSelection();
+    return;
+  }
+
+  // Copy / More button
+  if (e.target.closest("#more-selection-btn")) {
+    e.stopPropagation();
+    
+    // Remove any existing dropdown first
+    document.querySelectorAll(".selection-dropdown-menu").forEach(el => el.remove());
+
+    const dropdown = document.createElement("div");
+    dropdown.className = "whatsapp-context-menu selection-dropdown-menu";
+    dropdown.innerHTML = `
+        <button class="context-menu-item copy-opt">
+            <i class="ti ti-copy"></i>
+            <span>Copy</span>
+        </button>
+        <button class="context-menu-item forward-opt">
+            <i class="ti ti-arrow-forward-up"></i>
+            <span>Forward</span>
+        </button>
+        <button class="context-menu-item star-opt">
+            <i class="ti ti-star"></i>
+            <span>Star</span>
+        </button>
+        <button class="context-menu-item delete-opt" style="color: #ff453a;">
+            <i class="ti ti-trash" style="color: #ff453a;"></i>
+            <span>Delete</span>
+        </button>
+    `;
+
+    const btn = e.target.closest("#more-selection-btn");
+    const rect = btn.getBoundingClientRect();
+    dropdown.style.position = "fixed";
+    dropdown.style.top = `${rect.bottom + 8}px`;
+    dropdown.style.right = `${window.innerWidth - rect.right}px`;
+    dropdown.style.zIndex = "3100";
+    document.body.appendChild(dropdown);
+
+    // Bind options
+    dropdown.querySelector(".copy-opt").onclick = (evt) => {
+        evt.stopPropagation();
+        dropdown.remove();
+        if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+          const texts = [];
+          for (const msgId of State.selectedMessageIds) {
+            const chatId = State.messageIndex[msgId];
+            if (chatId) {
+              const msg = (State.messages[chatId] || []).find(m => (m.id || m._id || m.tempId) === msgId);
+              if (msg && msg.content) {
+                texts.push(msg.content);
+              }
+            }
+          }
+          if (texts.length > 0) {
+            navigator.clipboard.writeText(texts.join("\n")).then(() => {
+              showToast("Copied messages", "success");
+            }).catch(err => {
+              console.error("Failed to copy text: ", err);
+            });
+          } else {
+            showToast("No text to copy", "info");
+          }
+        }
+        clearMessageSelection();
+    };
+
+    dropdown.querySelector(".forward-opt").onclick = (evt) => {
+        evt.stopPropagation();
+        dropdown.remove();
+        const fwdBtn = document.getElementById("forward-selection-btn");
+        if (fwdBtn) fwdBtn.click();
+    };
+
+    dropdown.querySelector(".star-opt").onclick = (evt) => {
+        evt.stopPropagation();
+        dropdown.remove();
+        const starBtn = document.getElementById("star-selection-btn");
+        if (starBtn) starBtn.click();
+    };
+
+    dropdown.querySelector(".delete-opt").onclick = (evt) => {
+        evt.stopPropagation();
+        dropdown.remove();
+        const delBtn = document.getElementById("delete-selection-btn");
+        if (delBtn) delBtn.click();
+    };
+
+    // Close on click outside
+    setTimeout(() => {
+        const closeDropdown = (ev) => {
+            if (!dropdown.contains(ev.target)) {
+                dropdown.remove();
+                document.removeEventListener("click", closeDropdown, true);
+            }
+        };
+        document.addEventListener("click", closeDropdown, true);
+    }, 0);
+
+    return;
+  }
+
+  // Delete button
+  if (e.target.closest("#delete-selection-btn")) {
+    if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+      let allMine = true;
+      const msgIds = Array.from(State.selectedMessageIds);
+      
+      for (const msgId of msgIds) {
+        const chatId = State.messageIndex[msgId];
+        if (chatId) {
+          const msg = (State.messages[chatId] || []).find(m => (m.id || m._id || m.tempId) === msgId);
+          if (msg) {
+            const isMe = msg.sender === "me" || 
+                         msg.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
+                         msg.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
+            if (!isMe) {
+              allMine = false;
+            }
+          }
+        }
+      }
+
+      const modal = document.createElement("div");
+      modal.className = "modal-overlay delete-message-modal";
+      modal.style.zIndex = "2200";
+      modal.innerHTML = `
+        <div class="delete-confirm-box">
+          <h3>Delete ${msgIds.length} message${msgIds.length > 1 ? 's' : ''}?</h3>
+          <div class="delete-confirm-actions">
+            ${allMine ? '<button type="button" class="delete-btn everyone-btn">Delete for everyone</button>' : ''}
+            <button type="button" class="delete-btn me-btn">Delete for me</button>
+            <button type="button" class="delete-btn cancel-btn">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const cancelBtn = modal.querySelector(".cancel-btn");
+      const meBtn = modal.querySelector(".me-btn");
+      const everyoneBtn = modal.querySelector(".everyone-btn");
+
+      cancelBtn.onclick = () => {
+        modal.remove();
+        clearMessageSelection();
+      };
+
+      modal.onclick = (evt) => {
+        if (evt.target === modal) {
+          modal.remove();
+          clearMessageSelection();
+        }
+      };
+
+      const performDelete = async (type) => {
+        try {
+          for (const msgId of msgIds) {
+            const res = await apiRequest("DELETE", `/api/message/${msgId}`, { type });
+            if (res && res.status) {
+              if (typeof socket !== "undefined" && socket.emit) {
+                socket.emit("delete_message", { messageId: msgId, to: State.activeChat, type });
+              }
+            }
+          }
+          showToast(`Deleted ${msgIds.length} message${msgIds.length > 1 ? 's' : ''}`, "success");
+        } catch (err) {
+          console.error("Delete messages error:", err);
+          showToast("Error deleting messages", "error");
+        }
+        modal.remove();
+        clearMessageSelection();
+      };
+
+      meBtn.onclick = () => performDelete("me");
+      if (everyoneBtn) {
+        everyoneBtn.onclick = () => performDelete("everyone");
+      }
+    }
+  }
+});

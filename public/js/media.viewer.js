@@ -22,6 +22,13 @@ class MediaViewer {
         // Zoom & Rotate state
         this.zoomScale = 1.0;
         this.rotationAngle = 0;
+        this.translateX = 0;
+        this.translateY = 0;
+        this.lastTranslateX = 0;
+        this.lastTranslateY = 0;
+        this.isPanning = false;
+        this.panStartX = 0;
+        this.panStartY = 0;
 
         // Button references
         this.zoomOutBtn = document.getElementById('viewerZoomOut');
@@ -34,6 +41,7 @@ class MediaViewer {
         this.replyBtn = document.getElementById('viewerReply');
         this.downloadBtn = document.getElementById('viewerDownload');
         this.moreBtn = document.getElementById('viewerMore');
+        this.backBtn = document.getElementById('viewerBack');
 
         // Meta elements
         this.viewerAvatar = document.getElementById('viewerAvatar');
@@ -80,7 +88,7 @@ class MediaViewer {
         if (this.data && this.data.length) {
             this.mediaItems = this.data.map((m, index) => ({
                 index,
-                id: m.id ?? m.tempId ?? m._id,
+                id: m.id || m._id || m.tempId,
                 type: m.type,
                 thumbnail: m.thumbnail || m.thumb || m.cover || null,
                 size: m.size || m.fileSize || 0,
@@ -114,9 +122,9 @@ class MediaViewer {
 
                     return {
                         index,
-                        id: m.id ?? m.tempId ?? m._id,
+                        id: m.id || m._id || m.tempId,
                         type: isPdf ? 'pdf' : m.type,
-                        thumbnail: m.thumb || m.cover || `/api/thumbnail/${m.id ?? m.tempId ?? m._id}`,
+                        thumbnail: m.thumb || m.cover || `/api/thumbnail/${m.id || m._id || m.tempId}`,
                         size: m.fileSize || 0,
                         duration: m.duration || null,
                         encryptedFileId: encryptedFileId,
@@ -139,14 +147,18 @@ class MediaViewer {
 
     /* ─── LIFECYCLE ─── */
 
-    open(indexOrId, initialItems = null) {
-        console.log("[DEBUG MediaViewer] open called with:", indexOrId, "initialItems:", initialItems);
+    open(indexOrId, initialItems = null, onlyChatMedia = false) {
+        this.onlyChatMedia = onlyChatMedia;
+        if (onlyChatMedia) {
+            this.data = null;
+        }
+        console.log("[DEBUG MediaViewer] open called with:", indexOrId, "initialItems:", initialItems, "onlyChatMedia:", onlyChatMedia);
         if (initialItems && initialItems.length) {
             this.mediaItems = initialItems.map((m, index) => ({
                 index,
-                id: m.id ?? m.tempId ?? m._id,
+                id: m.id || m._id || m.tempId,
                 type: m.type,
-                thumbnail: m.thumbnail || m.thumb || m.cover || `/api/thumbnail/${m.id ?? m.tempId ?? m._id}`,
+                thumbnail: m.thumbnail || m.thumb || m.cover || `/api/thumbnail/${m.id || m._id || m.tempId}`,
                 size: m.size || m.fileSize || 0,
                 duration: m.duration || null,
                 encryptedFileId: m.encryptedFileId || null,
@@ -155,10 +167,10 @@ class MediaViewer {
                 state: 'waiting'
             }));
             this.renderedCount = 0;
-            this.hasMore = initialItems.length === 10;
+            this.hasMore = initialItems.length === 10 && !onlyChatMedia;
         } else {
             this.collectMediaItems();
-            this.hasMore = true;
+            this.hasMore = !onlyChatMedia;
         }
         this.isLoading = false;
         this.lastCreatedAt = this.mediaItems[this.mediaItems.length - 1]?.createdAt || null;
@@ -176,6 +188,16 @@ class MediaViewer {
         this.currentIndex = index;
         this.overlay.classList.add('active');
         document.body.style.overflow = 'hidden';
+
+        // Bind dynamic keydown listener
+        this.keydownHandler = (e) => {
+            if (!this.overlay.classList.contains('active')) return;
+            if (e.key === 'ArrowLeft') this.navigate(-1);
+            if (e.key === 'ArrowRight') this.navigate(1);
+            if (e.key === 'Escape') this.close();
+        };
+        document.addEventListener('keydown', this.keydownHandler);
+
         this.render(true);
     }
 
@@ -183,6 +205,12 @@ class MediaViewer {
         this.overlay.classList.remove('active');
         document.body.style.overflow = '';
         
+        // Remove keydown listener to prevent leaks
+        if (this.keydownHandler) {
+            document.removeEventListener('keydown', this.keydownHandler);
+            this.keydownHandler = null;
+        }
+
         // Cancel any pending decryption request
         if (this.activeDecryptController) {
             this.activeDecryptController.abort();
@@ -201,7 +229,7 @@ class MediaViewer {
     }
 
     async loadMoreFromDB() {
-        if (this.isLoading || !this.hasMore) return;
+        if (this.onlyChatMedia || this.isLoading || !this.hasMore) return;
         this.isLoading = true;
         try {
             const data = await window.fetchMedia(this.chatId, this.lastCreatedAt, 10);
@@ -212,7 +240,7 @@ class MediaViewer {
             if (mediaMessages.length > 0) {
                 this.lastCreatedAt = mediaMessages[mediaMessages.length - 1].createdAt;
                 mediaMessages.forEach(m => {
-                    const id = m.id ?? m.tempId ?? m._id;
+                    const id = m.id || m._id || m.tempId;
                     if (this.mediaItems.some(item => String(item.id) === String(id))) return;
                     
                     this.mediaItems.push({
@@ -240,7 +268,7 @@ class MediaViewer {
     async navigate(direction) {
         const next = this.currentIndex + direction;
         if (next < 0) return;
-        if (direction > 0 && next >= this.mediaItems.length - 4) {
+        if (!this.onlyChatMedia && direction > 0 && next >= this.mediaItems.length - 4) {
             await this.loadMoreFromDB();
         }
         if (next >= this.mediaItems.length) return;
@@ -337,7 +365,7 @@ class MediaViewer {
         thumb.appendChild(thumbImg);
         thumb.addEventListener('click', async () => {
             this.currentIndex = index;
-            if (this.currentIndex >= this.mediaItems.length - 4) {
+            if (!this.onlyChatMedia && this.currentIndex >= this.mediaItems.length - 4) {
                 await this.loadMoreFromDB();
             }
             if (this.currentIndex >= this.renderedCount - 1) this.renderMore();
@@ -552,8 +580,9 @@ class MediaViewer {
 
     updateMedia() {
         // Toggle active class on slides
-        this.container.querySelectorAll('.media-slide').forEach((slide, i) => {
-            const active = i === this.currentIndex;
+        this.container.querySelectorAll('.media-slide').forEach((slide) => {
+            const indexAttr = Number(slide.dataset.index);
+            const active = indexAttr === this.currentIndex;
             slide.classList.toggle('active', active);
             
             const video = slide.querySelector('video');
@@ -564,9 +593,11 @@ class MediaViewer {
             }
         });
 
-        this.thumbnailContainer.querySelectorAll('.thumbnail-item').forEach((t, i) => {
-            t.classList.toggle('active', i === this.currentIndex);
-            if (i === this.currentIndex) t.scrollIntoView({ block: 'nearest', inline: 'center' });
+        this.thumbnailContainer.querySelectorAll('.thumbnail-item').forEach((t) => {
+            const indexAttr = Number(t.dataset.index);
+            const active = indexAttr === this.currentIndex;
+            t.classList.toggle('active', active);
+            if (active) t.scrollIntoView({ block: 'nearest', inline: 'center' });
         });
 
         this.updateControls();
@@ -574,6 +605,10 @@ class MediaViewer {
         // Reset Zoom & Rotate state
         this.zoomScale = 1.0;
         this.rotationAngle = 0;
+        this.translateX = 0;
+        this.translateY = 0;
+        this.lastTranslateX = 0;
+        this.lastTranslateY = 0;
         this.applyZoomRotate();
 
         // Update header metadata
@@ -604,7 +639,7 @@ class MediaViewer {
         let timestamp = activeItem.createdAt;
 
         // Try to find the message in State.messages
-        const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+        const msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
         if (msg) {
             const isMe = msg.sender === "me" || msg.user?.toString() === (State.currentUser.id || State.currentUser._id)?.toString();
             username = isMe ? "You" : (State.conversations.find(c => c.id === this.chatId)?.username || "Friend");
@@ -680,7 +715,8 @@ class MediaViewer {
         if (!slide) return;
         const mediaEl = slide.querySelector('img.original-image') || slide.querySelector('video') || slide.querySelector('.thumbnail-placeholder');
         if (mediaEl) {
-            mediaEl.style.transform = `scale(${this.zoomScale}) rotate(${this.rotationAngle}deg)`;
+            mediaEl.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.zoomScale}) rotate(${this.rotationAngle}deg)`;
+            mediaEl.style.cursor = this.zoomScale > 1.0 ? 'grab' : 'zoom-in';
         }
     }
 
@@ -688,6 +724,9 @@ class MediaViewer {
 
     bindEvents() {
         this.closeBtn.onclick = () => this.close();
+        if (this.backBtn) {
+            this.backBtn.onclick = () => this.close();
+        }
         this.prevBtn.onclick = () => this.navigate(-1);
         this.nextBtn.onclick = () => this.navigate(1);
 
@@ -696,6 +735,12 @@ class MediaViewer {
             this.zoomOutBtn.onclick = (e) => {
                 e.stopPropagation();
                 this.zoomScale = Math.max(0.25, this.zoomScale - 0.25);
+                if (this.zoomScale <= 1.0) {
+                    this.translateX = 0;
+                    this.translateY = 0;
+                    this.lastTranslateX = 0;
+                    this.lastTranslateY = 0;
+                }
                 this.applyZoomRotate();
             };
         }
@@ -764,7 +809,7 @@ class MediaViewer {
                     btn.addEventListener("click", (evt) => {
                         evt.stopPropagation();
                         const activeItem = this.mediaItems[this.currentIndex];
-                        const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+                        const msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
                         if (msg && typeof socket !== 'undefined' && socket.emit) {
                             socket.emit("react", { messageId: msg.id || msg._id || msg.tempId, to: this.chatId, emoji: btn.dataset.emoji });
                             showToast("Reaction sent", "success");
@@ -778,7 +823,7 @@ class MediaViewer {
                 emojiBar.querySelector(".plus-btn").onclick = (evt) => {
                     evt.stopPropagation();
                     const activeItem = this.mediaItems[this.currentIndex];
-                    const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+                    const msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
                     const msgId = msg ? (msg.id || msg._id || msg.tempId) : activeItem.id;
                     emojiBar.remove();
                     if (typeof window.openEmojiPickerModal === "function") {
@@ -806,7 +851,7 @@ class MediaViewer {
             this.replyBtn.onclick = (e) => {
                 e.stopPropagation();
                 const activeItem = this.mediaItems[this.currentIndex];
-                const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+                const msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
                 if (msg) {
                     this.close();
                     State.replyingTo = msg.id || msg._id || msg.tempId;
@@ -830,7 +875,7 @@ class MediaViewer {
             this.forwardBtn.onclick = (e) => {
                 e.stopPropagation();
                 const activeItem = this.mediaItems[this.currentIndex];
-                const msg = (State.messages[this.chatId] || []).find(m => String(m.id ?? m.tempId ?? m._id) === String(activeItem.id));
+                const msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
                 if (msg && typeof openForwardModal === "function") {
                     this.close();
                     openForwardModal(msg);
@@ -857,37 +902,351 @@ class MediaViewer {
         if (this.moreBtn) {
             this.moreBtn.onclick = (e) => {
                 e.stopPropagation();
-                showToast("More options coming soon", "info");
+                // Close any existing dropdowns first
+                document.querySelectorAll(".viewer-dropdown-menu").forEach(el => el.remove());
+
+                const activeItem = this.mediaItems[this.currentIndex];
+                const msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
+                if (!msg) return;
+
+                const targetEl = document.querySelector(`.message[data-message-id="${msg.id || msg._id || msg.tempId}"]`);
+                const showInChatHTML = targetEl ? `
+                    <button class="context-menu-item show-opt">
+                        <i class="ti ti-message"></i>
+                        <span>Show in chat</span>
+                    </button>
+                ` : '';
+
+                const dropdown = document.createElement("div");
+                dropdown.className = "whatsapp-context-menu viewer-dropdown-menu";
+                dropdown.innerHTML = `
+                    <button class="context-menu-item rotate-opt">
+                        <i class="ti ti-rotate"></i>
+                        <span>Rotate</span>
+                    </button>
+                    ${showInChatHTML}
+                    <button class="context-menu-item delete-opt" style="color: #ff453a;">
+                        <i class="ti ti-trash" style="color: #ff453a;"></i>
+                        <span>Delete</span>
+                    </button>
+                `;
+
+                const rect = this.moreBtn.getBoundingClientRect();
+                dropdown.style.position = "fixed";
+                dropdown.style.top = `${rect.bottom + 8}px`;
+                dropdown.style.right = `${window.innerWidth - rect.right}px`;
+                dropdown.style.zIndex = "3100";
+                document.body.appendChild(dropdown);
+
+                // Rotate action
+                dropdown.querySelector(".rotate-opt").onclick = (evt) => {
+                    evt.stopPropagation();
+                    this.rotationAngle = (this.rotationAngle + 90) % 360;
+                    this.applyZoomRotate();
+                    dropdown.remove();
+                };
+
+                // Show in chat action
+                const showOpt = dropdown.querySelector(".show-opt");
+                if (showOpt) {
+                    showOpt.onclick = (evt) => {
+                        evt.stopPropagation();
+                        dropdown.remove();
+                        this.close();
+
+                        // Scroll to message bubble
+                        if (targetEl) {
+                            targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            // Flash/blink highlight effect
+                            targetEl.classList.add("message-highlight-blink");
+                            setTimeout(() => {
+                                targetEl.classList.remove("message-highlight-blink");
+                            }, 2000);
+                        } else {
+                            showToast("Message not found in view", "info");
+                        }
+                    };
+                }
+
+                // Delete action
+                dropdown.querySelector(".delete-opt").onclick = (evt) => {
+                    evt.stopPropagation();
+                    dropdown.remove();
+                    
+                    const msgId = msg.id || msg._id || msg.tempId;
+                    const isMe = msg.sender === "me" || 
+                                 msg.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
+                                 msg.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
+
+                    // Create and append the confirmation modal dynamically
+                    const modal = document.createElement("div");
+                    modal.className = "modal-overlay delete-message-modal";
+                    modal.style.zIndex = "3200";
+                    modal.innerHTML = `
+                      <div class="delete-confirm-box">
+                        <h3>Delete message?</h3>
+                        <div class="delete-confirm-actions">
+                          ${isMe ? '<button type="button" class="delete-btn everyone-btn">Delete for everyone</button>' : ''}
+                          <button type="button" class="delete-btn me-btn">Delete for me</button>
+                          <button type="button" class="delete-btn cancel-btn">Cancel</button>
+                        </div>
+                      </div>
+                    `;
+                    document.body.appendChild(modal);
+
+                    const cancelBtn = modal.querySelector(".cancel-btn");
+                    const meBtn = modal.querySelector(".me-btn");
+                    const everyoneBtn = modal.querySelector(".everyone-btn");
+
+                    cancelBtn.onclick = () => {
+                      modal.remove();
+                    };
+
+                    modal.onclick = (event) => {
+                      if (event.target === modal) modal.remove();
+                    };
+
+                    const performDelete = async (type) => {
+                      try {
+                        const res = await apiRequest("DELETE", `/api/message/${msgId}`, { type });
+                        if (res && res.status) {
+                          // Emit socket deletion sync event
+                          if (typeof socket !== "undefined" && socket.emit) {
+                            socket.emit("delete_message", { messageId: msgId, to: State.activeChat, type });
+                          }
+                          showToast("Message deleted", "success");
+                          
+                          // Animate and delete message from DOM immediately
+                          if (typeof window.animateAndDeleteMessageFromDom === "function") {
+                            window.animateAndDeleteMessageFromDom(msgId);
+                          }
+                          
+                          // Update viewer index or close viewer
+                          this.mediaItems.splice(this.currentIndex, 1);
+                          if (this.mediaItems.length === 0) {
+                              this.close();
+                          } else {
+                              if (this.currentIndex >= this.mediaItems.length) {
+                                  this.currentIndex = this.mediaItems.length - 1;
+                              }
+                              // Re-index remaining items
+                              this.mediaItems.forEach((item, idx) => item.index = idx);
+                              this.render(true);
+                          }
+                        } else {
+                          showToast("Error deleting message", "error");
+                        }
+                      } catch (err) {
+                        console.error("Delete media message error:", err);
+                        showToast("Error deleting message", "error");
+                      }
+                      modal.remove();
+                    };
+
+                    meBtn.onclick = () => performDelete("me");
+                    if (everyoneBtn) {
+                      everyoneBtn.onclick = () => performDelete("everyone");
+                    }
+                };
+
+                // Close on click outside
+                setTimeout(() => {
+                    const closeDropdown = (ev) => {
+                        if (!dropdown.contains(ev.target)) {
+                            dropdown.remove();
+                            document.removeEventListener("click", closeDropdown, true);
+                        }
+                    };
+                    document.addEventListener("click", closeDropdown, true);
+                }, 0);
             };
         }
 
-        document.addEventListener('keydown', e => {
-            if (!this.overlay.classList.contains('active')) return;
-            if (e.key === 'ArrowLeft') this.navigate(-1);
-            if (e.key === 'ArrowRight') this.navigate(1);
-            if (e.key === 'Escape') this.close();
-        });
+        // Tap/click event listeners for double-tap zoom / single-tap toggle fullscreen
+        let lastTap = 0;
+        let clickTimeout = null;
+        let touchStartPos = { x: 0, y: 0 };
 
-        this.viewerMain.addEventListener('touchstart', e => {
-            this.touchStartX = e.changedTouches[0].screenX;
+        this.container.addEventListener('touchstart', (e) => {
+            if (e.touches && e.touches.length > 0) {
+                touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
         }, { passive: true });
 
-        this.viewerMain.addEventListener('touchend', e => {
-            this.touchEndX = e.changedTouches[0].screenX;
-            this.handleSwipe();
+        this.container.addEventListener('touchend', (e) => {
+            const mediaEl = e.target.closest('img, video');
+            if (!mediaEl) return;
+
+            if (e.changedTouches && e.changedTouches.length > 0) {
+                const touchEndPos = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+                const dx = touchEndPos.x - touchStartPos.x;
+                const dy = touchEndPos.y - touchStartPos.y;
+                // If user dragged/swiped, skip tap action
+                if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+                    return;
+                }
+            }
+
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTap;
+            if (tapLength < 300 && tapLength > 0) {
+                // Double tap zoom
+                e.preventDefault();
+                if (clickTimeout) {
+                    clearTimeout(clickTimeout);
+                    clickTimeout = null;
+                }
+                this.zoomScale = this.zoomScale === 1.0 ? 2.5 : 1.0;
+                if (this.zoomScale === 1.0) {
+                    this.translateX = 0;
+                    this.translateY = 0;
+                    this.lastTranslateX = 0;
+                    this.lastTranslateY = 0;
+                }
+                this.applyZoomRotate();
+            } else {
+                // Single tap fullscreen toggle
+                clickTimeout = setTimeout(() => {
+                    if (e.target.closest('button, input, video') && e.target.tagName !== 'IMG') {
+                        return;
+                    }
+                    this.overlay.classList.toggle('fullscreen-clean');
+                }, 250);
+            }
+            lastTap = currentTime;
+        });
+
+        // Mouse double click zoom (Desktop)
+        this.container.addEventListener('dblclick', (e) => {
+            const mediaEl = e.target.closest('img, video');
+            if (mediaEl) {
+                e.stopPropagation();
+                if (clickTimeout) {
+                    clearTimeout(clickTimeout);
+                    clickTimeout = null;
+                }
+                this.zoomScale = this.zoomScale === 1.0 ? 2.5 : 1.0;
+                if (this.zoomScale === 1.0) {
+                    this.translateX = 0;
+                    this.translateY = 0;
+                    this.lastTranslateX = 0;
+                    this.lastTranslateY = 0;
+                }
+                this.applyZoomRotate();
+            }
+        });
+
+        // Mouse single click fullscreen toggle (Desktop)
+        this.container.addEventListener('click', (e) => {
+            // Avoid duplicate triggers on touch-enabled devices
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                return;
+            }
+            if (e.target.closest('button, input, video') && e.target.tagName !== 'IMG') {
+                return;
+            }
+            e.stopPropagation();
+
+            if (clickTimeout) {
+                clearTimeout(clickTimeout);
+                clickTimeout = null;
+            }
+
+            clickTimeout = setTimeout(() => {
+                this.overlay.classList.toggle('fullscreen-clean');
+            }, 250);
+        });
+
+
+
+        // Desktop mouse panning listeners
+        this.viewerMain.addEventListener('mousedown', (e) => {
+            if (this.zoomScale <= 1.0) {
+                this.isDragging = true;
+                this.touchStartX = e.clientX;
+                return;
+            }
+            // Zoomed in -> start panning
+            const mediaEl = e.target.closest('img, video');
+            if (!mediaEl) return;
+
+            e.preventDefault();
+            this.isPanning = true;
+            this.panStartX = e.clientX;
+            this.panStartY = e.clientY;
+            mediaEl.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!this.isPanning) return;
+            const dx = e.clientX - this.panStartX;
+            const dy = e.clientY - this.panStartY;
+            this.translateX = this.lastTranslateX + dx;
+            this.translateY = this.lastTranslateY + dy;
+            this.applyZoomRotate();
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (this.isPanning) {
+                this.isPanning = false;
+                this.lastTranslateX = this.translateX;
+                this.lastTranslateY = this.translateY;
+
+                const activeSlide = this.container.querySelector('.media-slide.active');
+                const mediaEl = activeSlide ? (activeSlide.querySelector('img.original-image') || activeSlide.querySelector('video')) : null;
+                if (mediaEl) {
+                    mediaEl.style.cursor = this.zoomScale > 1.0 ? 'grab' : 'zoom-in';
+                }
+                return;
+            }
+            if (this.isDragging) {
+                this.isDragging = false;
+                this.touchEndX = e.clientX;
+                this.handleSwipe();
+            }
+        });
+
+        // Mobile touch panning listeners
+        this.viewerMain.addEventListener('touchstart', (e) => {
+            if (this.zoomScale <= 1.0) {
+                this.touchStartX = e.changedTouches[0].screenX;
+                return;
+            }
+            // Zoomed in -> start panning
+            const mediaEl = e.target.closest('img, video');
+            if (!mediaEl) return;
+
+            this.isPanning = true;
+            this.panStartX = e.touches[0].clientX;
+            this.panStartY = e.touches[0].clientY;
         }, { passive: true });
 
-        this.viewerMain.addEventListener('mousedown', e => {
-            this.isDragging = true;
-            this.touchStartX = e.clientX;
-        });
+        this.viewerMain.addEventListener('touchmove', (e) => {
+            if (!this.isPanning) return;
+            // Prevent browser scroll/bounce when panning zoomed image
+            e.preventDefault();
 
-        this.viewerMain.addEventListener('mouseup', e => {
-            if (!this.isDragging) return;
-            this.isDragging = false;
-            this.touchEndX = e.clientX;
-            this.handleSwipe();
-        });
+            const currentX = e.touches[0].clientX;
+            const currentY = e.touches[0].clientY;
+            const dx = currentX - this.panStartX;
+            const dy = currentY - this.panStartY;
+            this.translateX = this.lastTranslateX + dx;
+            this.translateY = this.lastTranslateY + dy;
+            this.applyZoomRotate();
+        }, { passive: false });
+
+        this.viewerMain.addEventListener('touchend', (e) => {
+            if (this.zoomScale <= 1.0) {
+                this.touchEndX = e.changedTouches[0].screenX;
+                this.handleSwipe();
+                return;
+            }
+            if (this.isPanning) {
+                this.isPanning = false;
+                this.lastTranslateX = this.translateX;
+                this.lastTranslateY = this.translateY;
+            }
+        }, { passive: true });
 
         this.thumbnailContainer.addEventListener("scroll", async () => {
             const nearEnd =
@@ -904,6 +1263,7 @@ class MediaViewer {
     }
 
     handleSwipe() {
+        if (this.zoomScale > 1.0) return;
         const diff = this.touchStartX - this.touchEndX;
         if (Math.abs(diff) < 50) return;
         diff > 0 ? this.navigate(1) : this.navigate(-1);
@@ -914,7 +1274,7 @@ class MediaViewer {
         const isPdf = msg.type === "document" && msg.fileName && msg.fileName.toLowerCase().endsWith(".pdf");
         if (!(msg.type === "image" || msg.type === "video" || msg.type === "gif" || msg.type === "audio" || isPdf)) return;
         
-        const id = msg.id ?? msg.tempId ?? msg._id;
+        const id = msg.id || msg._id || msg.tempId;
         if (this.mediaItems.some(item => String(item.id) === String(id))) return;
 
         // Extract encryptedFileId if possible

@@ -812,9 +812,8 @@ body {
 /* Message Bubbles */
 .message {
     display: flex;
-    /* gap: var(--spacing-sm); */
-    max-width: 80%;
-    min-width: 0;
+    width: 100%;
+    max-width: 100%;
     animation: messageSlide 0.3s ease;
     position: relative;
 }
@@ -832,20 +831,17 @@ body {
 }
 
 .message.self {
-    align-self: flex-end;
-    /* flex-direction: row-reverse; */
+    align-items: flex-end;
     flex-direction: column;
 }
 
 .message.other {
-    align-self: flex-start;
+    align-items: flex-start;
     flex-direction: column;
-
 }
 
 .message-bubble {
     position: relative;
-    /* padding: 10px 0px 15px 14px; */
     border-radius: var(--radius-lg);
     font-size: 14px;
     line-height: 1.4;
@@ -857,7 +853,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    max-width: 100%;
+    max-width: 80%;
     min-width: 0;
     overflow: hidden;
 }
@@ -1281,9 +1277,9 @@ body {
 
 .toast-container {
     position: fixed;
-    top: var(--spacing-md);
-    right: var(--spacing-md);
-    z-index: 2000;
+    bottom: 20px;
+    left: 80px;
+    z-index: 100000;
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
@@ -1291,34 +1287,37 @@ body {
 }
 
 .toast {
-    background: var(--elevated-bg);
-    color: var(--text-primary);
-    padding: var(--spacing-md) var(--spacing-lg);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-lg);
-    animation: toastSlide 0.3s ease;
-    min-width: 200px;
+    background: #e9edef;
+    color: #111b21;
+    padding: 12px 24px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    animation: toastSlideUp 0.3s cubic-bezier(0.1, 0.8, 0.25, 1);
+    min-width: 250px;
+    max-width: 320px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+    word-break: break-word;
 }
 
-@keyframes toastSlide {
+.toast.success,
+.toast.error,
+.toast.info {
+    background: #e9edef;
+    color: #111b21;
+}
+
+@keyframes toastSlideUp {
     from {
         opacity: 0;
-        transform: translateX(100%);
+        transform: translateY(100px);
     }
-
     to {
         opacity: 1;
-        transform: translateX(0);
+        transform: translateY(0);
     }
-}
-
-.toast.success {
-    background: var(--status-online);
-}
-
-.toast.error {
-    background: #ed4956;
 }
 
 /* =============================================================================
@@ -1402,12 +1401,7 @@ body {
     }
 
     .toast-container {
-        left: var(--spacing-md);
-        right: var(--spacing-md);
-    }
-
-    .toast {
-        width: 100%;
+        display: none !important;
     }
 }
 
@@ -2085,7 +2079,51 @@ body {
     }
 
     .viewer-header {
-        padding: 10px 15px;
+        padding: 0 10px !important;
+        height: 56px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+    }
+
+    .viewer-left {
+        gap: 8px !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+    }
+
+    .viewer-meta {
+        gap: 0px !important;
+        min-width: 0 !important;
+        flex: 1 !important;
+    }
+
+    .sender-name {
+        font-size: 14px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    .media-time {
+        font-size: 11px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+
+    .media-counter {
+        display: none !important;
+    }
+
+    .viewer-actions {
+        gap: 6px !important;
+        flex-shrink: 0 !important;
+    }
+
+    .viewer-action-btn {
+        font-size: 18px !important;
+        padding: 4px !important;
     }
 
     .thumbnail-strip {
@@ -2095,6 +2133,20 @@ body {
     .thumbnail-item {
         width: 50px;
         height: 50px;
+    }
+
+    /* Media Viewer Mobile Navigation Adjustments */
+    #viewerBack {
+        display: flex !important;
+    }
+    #closeViewer,
+    #viewerZoomIn,
+    #viewerZoomOut,
+    #viewerRotate,
+    #viewerStar,
+    #viewerPin,
+    #viewerReact {
+        display: none !important;
     }
 }
 
@@ -8190,6 +8242,77 @@ input:checked+.slider:before {
         padding-bottom: 0;
         border: none;
     }
+}
+
+/* Mobile Selection Header & Message Selected View */
+.message.selected {
+    position: relative;
+    transition: background-color 0.2s ease;
+}
+
+.message.selected::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -2px;
+    bottom: -2px;
+    background-color: rgba(0, 149, 246, 0.22) !important;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.mobile-selection-header {
+    background-color: #1c272e !important;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.mobile-selection-header .icon-btn {
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.mobile-selection-header .icon-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Media Viewer UI Fullscreen Transitions & Animations */
+.viewer-header,
+.thumbnail-strip {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+
+.media-viewer-overlay.fullscreen-clean .viewer-header {
+    transform: translateY(-100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.media-viewer-overlay.fullscreen-clean .thumbnail-strip {
+    transform: translateY(100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.media-viewer-overlay.fullscreen-clean .nav-arrow {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Scroll and highlight flash animation */
+@keyframes highlightBlink {
+    0%, 100% { background-color: transparent; }
+    50% { background-color: rgba(0, 149, 246, 0.3); }
+}
+
+.message-highlight-blink .message-bubble {
+    animation: highlightBlink 0.5s ease 3;
 }
 
 

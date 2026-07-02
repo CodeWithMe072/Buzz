@@ -734,6 +734,9 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
 // =============================================================================
 
 const mediaRateLimiter = async (req, res, next) => {
+    if (process.env.NODE_ENV === "test" || process.env.NODE_ENV !== "PROD") {
+        return next();
+    }
     try {
         const userId = req.user?._id?.toString() || req.ip;
         const key = `ratelimit:media:${userId}`;

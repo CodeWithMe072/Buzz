@@ -71,6 +71,7 @@ function getFileIcon(fileName) {
 }
 
 function showToast(message, type = 'info') {
+    if (window.innerWidth < 768) return;
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -86,9 +87,9 @@ function showToast(message, type = 'info') {
     toast.textContent = message;
     container.appendChild(toast);
     setTimeout(() => {
-        toast.style.animation = 'toastSlide 0.3s ease reverse';
+        toast.style.animation = 'toastSlideUp 0.3s ease reverse';
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, 2000);
 }
 
 function showLoader() {

@@ -50,7 +50,7 @@ export function createRateLimiter({
   keyGenerator = getIp,
 }) {
   return async (req, res, next) => {
-    if (process.env.NODE_ENV === "test") {
+    if (process.env.NODE_ENV === "test" || process.env.NODE_ENV !== "PROD") {
       return next();
     }
     try {

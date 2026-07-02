@@ -6,24 +6,28 @@
 // =============================================================================
 // CONNECTION BANNER
 // =============================================================================
+let lastConnectionState = "online";
+
 function updateConnectionBanner(customMsg = null) {
-  let banner = document.getElementById("connection-banner");
-  if (!banner) {
-    banner = document.createElement("div");
-    banner.id = "connection-banner";
-    banner.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:9999;
-      padding:8px 16px;font-size:13px;text-align:center;font-weight:500;
-      transition:all 0.3s ease;display:none;`;
-    document.body.prepend(banner);
-  }
+  // Completely remove top-level connection-banner DOM if exists
+  const banner = document.getElementById("connection-banner");
+  if (banner) banner.remove();
+
   if (NetworkMonitor.canSend) {
-    banner.style.display = "none";
+    if (lastConnectionState !== "online") {
+      showToast("Connected to server", "success");
+      lastConnectionState = "online";
+    }
   } else if (!NetworkMonitor.isOnline) {
-    banner.textContent = "You are offline. Messages will send when you reconnect.";
-    banner.style.cssText += "background:#e53e3e;color:#fff;display:block;";
+    if (lastConnectionState !== "offline") {
+      showToast("You are offline. Messages will send when you reconnect.", "error");
+      lastConnectionState = "offline";
+    }
   } else {
-    banner.textContent = customMsg || "Reconnecting to server...";
-    banner.style.cssText += "background:#d69e2e;color:#fff;display:block;";
+    if (lastConnectionState !== "reconnecting") {
+      showToast(customMsg || "Reconnecting to server...", "info");
+      lastConnectionState = "reconnecting";
+    }
   }
 }
 
