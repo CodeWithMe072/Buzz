@@ -2,6 +2,8 @@
  * media.viewer.js — MediaViewer class for fullscreen image/video/audio/pdf browsing.
  */
 
+const audioDefaultThumbnail = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" rx="10" fill="%231a1a1a"/><rect x="25" y="40" width="6" height="20" rx="3" fill="%23667eea"/><rect x="37" y="30" width="6" height="40" rx="3" fill="%23764ba2"/><rect x="49" y="20" width="6" height="60" rx="3" fill="%23667eea"/><rect x="61" y="30" width="6" height="40" rx="3" fill="%23764ba2"/><rect x="73" y="40" width="6" height="20" rx="3" fill="%23667eea"/></svg>`;
+
 class MediaViewer {
     constructor(chatId, data = []) {
         this.chatId = chatId;
@@ -90,7 +92,7 @@ class MediaViewer {
                 index,
                 id: m.id || m._id || m.tempId,
                 type: m.type,
-                thumbnail: m.thumbnail || m.thumb || m.cover || null,
+                thumbnail: m.type === 'audio' ? audioDefaultThumbnail : (m.thumbnail || m.thumb || m.cover || null),
                 size: m.size || m.fileSize || 0,
                 duration: m.duration || null,
                 encryptedFileId: m.encryptedFileId || null,
@@ -124,7 +126,7 @@ class MediaViewer {
                         index,
                         id: m.id || m._id || m.tempId,
                         type: isPdf ? 'pdf' : m.type,
-                        thumbnail: m.thumb || m.cover || `/api/thumbnail/${m.id || m._id || m.tempId}`,
+                        thumbnail: m.type === 'audio' ? audioDefaultThumbnail : (m.thumb || m.cover || `/api/thumbnail/${m.id || m._id || m.tempId}`),
                         size: m.fileSize || 0,
                         duration: m.duration || null,
                         encryptedFileId: encryptedFileId,
@@ -158,7 +160,7 @@ class MediaViewer {
                 index,
                 id: m.id || m._id || m.tempId,
                 type: m.type,
-                thumbnail: m.thumbnail || m.thumb || m.cover || `/api/thumbnail/${m.id || m._id || m.tempId}`,
+                thumbnail: m.type === 'audio' ? audioDefaultThumbnail : (m.thumbnail || m.thumb || m.cover || `/api/thumbnail/${m.id || m._id || m.tempId}`),
                 size: m.size || m.fileSize || 0,
                 duration: m.duration || null,
                 encryptedFileId: m.encryptedFileId || null,
@@ -223,6 +225,22 @@ class MediaViewer {
             el.removeAttribute('src');
             el.load();
         });
+
+        // Pause and remove custom audio players
+        this.container.querySelectorAll('.message-audio').forEach(el => {
+            const audioId = el.dataset.audioId;
+            if (audioId) {
+                const audioObj = audioPlayers.get(audioId);
+                if (audioObj) {
+                    audioObj.pause();
+                    audioObj.src = '';
+                    audioObj.load();
+                    audioPlayers.delete(audioId);
+                }
+            }
+            el.remove();
+        });
+
         this.container.innerHTML = '';
         this.thumbnailContainer.innerHTML = '';
         this.renderedCount = 0;
@@ -247,7 +265,7 @@ class MediaViewer {
                         index: this.mediaItems.length,
                         id,
                         type: m.type,
-                        thumbnail: m.thumbnail || `/api/thumbnail/${id}`,
+                        thumbnail: m.type === 'audio' ? audioDefaultThumbnail : (m.thumbnail || `/api/thumbnail/${id}`),
                         size: m.size || m.fileSize || 0,
                         duration: m.duration || null,
                         encryptedFileId: m.encryptedFileId || null,
@@ -361,6 +379,7 @@ class MediaViewer {
             }
         };
         if (item.type === 'video') thumb.classList.add('video');
+        if (item.type === 'audio') thumb.classList.add('audio');
 
         thumb.appendChild(thumbImg);
         thumb.addEventListener('click', async () => {
@@ -490,23 +509,34 @@ class MediaViewer {
             });
 
         } else if (item.type === 'audio') {
-            let audio = slide.querySelector('audio');
-            if (!audio) {
-                audio = document.createElement('audio');
-                audio.controls = true;
-                slide.appendChild(audio);
+            let audioContainer = slide.querySelector('.message-audio');
+            if (!audioContainer) {
+                const placeholder = slide.querySelector('.thumbnail-placeholder');
+                if (placeholder) {
+                    placeholder.style.display = 'none';
+                }
+                audioContainer = createAudioPlayer(streamUrl, item.id);
+                slide.appendChild(audioContainer);
             }
-            audio.src = streamUrl;
-            audio.preload = "auto";
             
-            audio.onplay = () => {
-                this.setMediaState(index, 'playing');
-            };
-            
-            audio.play().catch(err => {
-                console.warn("[MediaViewer] Autoplay prevented:", err);
+            const audioObj = audioPlayers.get(item.id);
+            if (audioObj) {
+                audioObj.play().then(() => {
+                    this.setMediaState(index, 'playing');
+                    const playBtn = audioContainer.querySelector('.audio-play-btn');
+                    if (playBtn) {
+                        playBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="4" width="4" height="16"/>
+                            <rect x="14" y="4" width="4" height="16"/>
+                        </svg>`;
+                    }
+                }).catch(err => {
+                    console.warn("[MediaViewer] Audio autoplay failed or prevented:", err);
+                    this.setMediaState(index, 'streamReady');
+                });
+            } else {
                 this.setMediaState(index, 'streamReady');
-            });
+            }
 
         } else if (item.type === 'pdf') {
             let iframe = slide.querySelector('iframe.pdf-viewer');
@@ -561,6 +591,23 @@ class MediaViewer {
                     audio.remove();
                 }
 
+                const audioContainer = slide.querySelector('.message-audio');
+                if (audioContainer) {
+                    const audioObj = audioPlayers.get(this.mediaItems[idx]?.id);
+                    if (audioObj) {
+                        audioObj.pause();
+                        audioObj.src = '';
+                        audioObj.load();
+                        audioPlayers.delete(this.mediaItems[idx]?.id);
+                    }
+                    audioContainer.remove();
+                }
+
+                const placeholder = slide.querySelector('.thumbnail-placeholder');
+                if (placeholder) {
+                    placeholder.style.display = 'block';
+                }
+
                 const img = slide.querySelector('img.original-image');
                 if (img) {
                     img.src = '';
@@ -587,9 +634,23 @@ class MediaViewer {
             
             const video = slide.querySelector('video');
             const audio = slide.querySelector('audio');
+            const audioContainer = slide.querySelector('.message-audio');
             if (!active) {
                 if (video) video.pause();
                 if (audio) audio.pause();
+                if (audioContainer) {
+                    const audioId = audioContainer.dataset.audioId;
+                    if (audioId) {
+                        const audioObj = audioPlayers.get(audioId);
+                        if (audioObj) {
+                            audioObj.pause();
+                            const playBtn = audioContainer.querySelector('.audio-play-btn');
+                            if (playBtn) {
+                                playBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+                            }
+                        }
+                    }
+                }
             }
         });
 
@@ -1293,7 +1354,7 @@ class MediaViewer {
             index,
             id,
             type: isPdf ? 'pdf' : msg.type,
-            thumbnail: msg.thumb || msg.cover || `/api/thumbnail/${id}`,
+            thumbnail: msg.type === 'audio' ? audioDefaultThumbnail : (msg.thumb || msg.cover || `/api/thumbnail/${id}`),
             size: msg.fileSize || 0,
             duration: msg.duration || null,
             encryptedFileId: encryptedFileId,

@@ -134,7 +134,7 @@ export const getMedia = async (req, res) => {
         { from: myId, to: userId },
         { from: userId, to: myId },
       ],
-      type: { $in: ["image", "video"] }
+      type: { $in: ["image", "video", "audio", "gif"] }
     };
 
     if (before) {

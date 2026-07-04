@@ -15,12 +15,20 @@ const REQUIRED_PROD_ENV = [
 
 export const isProd = process.env.NODE_ENV === "PROD";
 
-export const clientOrigins = isProd
+const parsedOrigins = isProd
   ? (process.env.CLIENT_URL || "")
       .split(",")
       .map((origin) => origin.trim())
       .filter(Boolean)
-  : "*";
+  : [];
+
+if (isProd) {
+  parsedOrigins.push("https://web.telegram.org");
+  parsedOrigins.push("https://tg-webview");
+  parsedOrigins.push("https://telegram.org");
+}
+
+export const clientOrigins = isProd ? parsedOrigins : "*";
 
 if (isProd) {
   const missing = REQUIRED_PROD_ENV.filter((name) => !process.env[name]);

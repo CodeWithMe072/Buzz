@@ -1591,10 +1591,10 @@ document.addEventListener("click", (e) => {
 
 // Global delegate click handler for media messages (open MediaViewer)
 document.addEventListener("click", (e) => {
-  const media = e.target.closest(".message-media");
+  const media = e.target.closest(".message-media, .message-audio");
   if (media) {
-    // If the click is inside custom video player controls, do not open the MediaViewer
-    if (e.target.closest(".custom-video-controls") || e.target.closest(".video-center-play-overlay")) {
+    // If the click is inside custom video player controls or audio play button, do not open the MediaViewer
+    if (e.target.closest(".custom-video-controls") || e.target.closest(".video-center-play-overlay") || e.target.closest(".audio-play-btn")) {
       return;
     }
 
@@ -1609,6 +1609,22 @@ document.addEventListener("click", (e) => {
     const video = media.querySelector("video");
     if (video) {
       video.pause();
+    }
+
+    // Pause any playing audio in the chat bubble before opening the viewer
+    const audioContainer = media.closest(".message-audio");
+    if (audioContainer) {
+      const audioId = audioContainer.dataset.audioId;
+      if (audioId) {
+        const audioObj = audioPlayers.get(audioId);
+        if (audioObj) {
+          audioObj.pause();
+          const playBtn = audioContainer.querySelector('.audio-play-btn');
+          if (playBtn) {
+            playBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+          }
+        }
+      }
     }
 
     const msgEl = media.closest(".message");

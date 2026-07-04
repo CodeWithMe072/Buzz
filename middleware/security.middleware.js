@@ -31,12 +31,27 @@ export function csrfOriginGuard(allowedOrigins) {
     const referer = normalizeOrigin(req.headers.referer);
     const requestOrigin = origin || referer;
 
+    const userAgent = req.headers["user-agent"] || "";
+    const isTelegramClient = /telegram/i.test(userAgent);
+
     if (!requestOrigin) {
+      if (isTelegramClient) {
+        return next();
+      }
       return res.status(403).json({ status: false, message: "Missing request origin" });
     }
 
     if (allowed && !allowed.has(requestOrigin)) {
-      return res.status(403).json({ status: false, message: "Invalid request origin" });
+      const isTelegramOrigin = 
+        requestOrigin === "https://web.telegram.org" ||
+        requestOrigin === "https://tg-webview" ||
+        requestOrigin === "https://telegram.org" ||
+        requestOrigin.endsWith(".telegram.org") ||
+        isTelegramClient;
+
+      if (!isTelegramOrigin) {
+        return res.status(403).json({ status: false, message: "Invalid request origin" });
+      }
     }
 
     next();
