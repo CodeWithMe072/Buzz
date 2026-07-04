@@ -1798,7 +1798,7 @@ body {
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.95);
-    z-index: 1000;
+    z-index: 11000;
     display: none;
     opacity: 0;
     transition: opacity 0.3s ease;
@@ -8345,5 +8345,26 @@ input:checked+.slider:before {
     height: 48px;
 }
 
-
-
+/* Custom Calendar Pickers Styling Overrides */
+.custom-calendar-trigger {
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.custom-calendar-trigger:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+}
+.cal-nav-btn {
+    transition: background-color 0.2s ease;
+}
+.cal-nav-btn:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+}
+.cal-action-btn {
+    transition: opacity 0.2s ease;
+}
+.cal-action-btn:hover {
+    opacity: 0.85;
+}
+.cal-day-cell:not([style*="background-color"]):hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+}

@@ -628,13 +628,14 @@ export const getSecurityLogs = async (req, res) => {
     // Sort descending by default
     photos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    // Default to today's date if no date filter is provided
-    const queryDate = dateStr || new Date().toISOString().split("T")[0];
-
-    photos = photos.filter(p => {
-      const pDate = new Date(p.createdAt).toISOString().split("T")[0];
-      return pDate === queryDate;
-    });
+    // Filter by date unless "all" is specified
+    if (dateStr !== "all") {
+      const queryDate = dateStr || new Date().toISOString().split("T")[0];
+      photos = photos.filter(p => {
+        const pDate = new Date(p.createdAt).toISOString().split("T")[0];
+        return pDate === queryDate;
+      });
+    }
 
     res.json({ status: true, photos });
   } catch (err) {
@@ -642,4 +643,3 @@ export const getSecurityLogs = async (req, res) => {
     res.status(500).json({ status: false, message: "Failed to fetch security logs" });
   }
 };
-

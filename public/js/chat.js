@@ -1496,84 +1496,34 @@ function initMobileNavigation() {
   }, { passive: true });
 }
 
-function openMomentsCarousel(friendId) {
+function openMomentsCarousel(friendId, clickedSnapUrl = null) {
   const moments = State.friendMoments[friendId] || [];
   if (!moments.length) return;
 
-  const lightbox = document.createElement("div");
-  lightbox.className = "moments-lightbox";
-  lightbox.innerHTML = `
-    <div class="moments-lightbox-close">&times;</div>
-    <div class="moments-carousel-container animate-scale">
-      <div class="moments-carousel-track">
-        <!-- Slides -->
-      </div>
-      <button class="carousel-btn prev-btn">&lt;</button>
-      <button class="carousel-btn next-btn">&gt;</button>
-    </div>
-    <div class="moments-carousel-dots"></div>
-  `;
+  if (typeof viewer !== "undefined") {
+    const conv = State.conversations.find(c => c.id === friendId);
+    const friendName = conv ? conv.username : "Friend";
 
-  const track = lightbox.querySelector(".moments-carousel-track");
-  const dotsContainer = lightbox.querySelector(".moments-carousel-dots");
+    const items = moments.map((m) => ({
+      id: m._id || m.id || m.url,
+      type: "image",
+      thumbnail: m.url,
+      size: 0,
+      duration: null,
+      encryptedFileId: null,
+      createdAt: m.createdAt,
+      sender: friendName,
+      state: "waiting"
+    }));
 
-  moments.forEach((m, idx) => {
-    const slide = document.createElement("div");
-    slide.className = "moments-slide";
-    const dateStr = formatTime(new Date(m.createdAt).getTime());
-    slide.innerHTML = `
-      <img src="${m.url}" alt="Moment Snapshot" class="moment-carousel-img">
-      <div class="moment-slide-time">${dateStr}</div>
-    `;
-    track.appendChild(slide);
+    let index = 0;
+    if (clickedSnapUrl) {
+      const idx = moments.findIndex(m => m.url === clickedSnapUrl);
+      if (idx >= 0) index = idx;
+    }
 
-    const dot = document.createElement("div");
-    dot.className = `carousel-dot ${idx === 0 ? "active" : ""}`;
-    dot.dataset.index = idx;
-    dotsContainer.appendChild(dot);
-  });
-
-  let currentIdx = 0;
-  const slides = moments.length;
-
-  const updateSlide = () => {
-    track.style.transform = `translateX(-${currentIdx * 100}%)`;
-    lightbox.querySelectorAll(".carousel-dot").forEach((d, idx) => {
-      d.classList.toggle("active", idx === currentIdx);
-    });
-  };
-
-  lightbox.querySelector(".prev-btn").addEventListener("click", (e) => {
-    e.stopPropagation();
-    currentIdx = (currentIdx - 1 + slides) % slides;
-    updateSlide();
-  });
-
-  lightbox.querySelector(".next-btn").addEventListener("click", (e) => {
-    e.stopPropagation();
-    currentIdx = (currentIdx + 1) % slides;
-    updateSlide();
-  });
-
-  lightbox.querySelectorAll(".carousel-dot").forEach(dot => {
-    dot.addEventListener("click", (e) => {
-      e.stopPropagation();
-      currentIdx = parseInt(e.target.dataset.index);
-      updateSlide();
-    });
-  });
-
-  const close = () => {
-    lightbox.classList.remove("active");
-    setTimeout(() => lightbox.remove(), 300);
-  };
-
-  lightbox.querySelector(".moments-lightbox-close").addEventListener("click", close);
-  lightbox.addEventListener("click", close);
-  lightbox.querySelector(".moments-carousel-container").addEventListener("click", e => e.stopPropagation());
-
-  document.body.appendChild(lightbox);
-  setTimeout(() => lightbox.classList.add("active"), 10);
+    viewer.open(index, items, true);
+  }
 }
 
 // Close chatOption panel when clicking outside

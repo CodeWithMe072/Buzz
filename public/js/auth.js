@@ -764,6 +764,13 @@ function renderPeopleTab(tab) {
     });
 
   } else if (tab === "logs") {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+    const todayDisplay = `${dd}-${mm}-${yyyy}`;
+
     container.innerHTML = `
       <div class="profile-section-title-wrap" style="margin-bottom: 24px;">
         <h2 class="profile-section-title">Security Logs</h2>
@@ -778,9 +785,18 @@ function renderPeopleTab(tab) {
           </div>
           <div style="display: flex; flex-direction: column; gap: 4px;">
             <span style="font-size: 12px; color: var(--text-secondary);">Date Filter</span>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              <input type="date" id="log-date-filter" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 6px; padding: 5px 10px; font-size: 13px; outline: none; cursor: pointer;">
-              <button id="log-clear-date" class="gov-btn" style="padding: 6px 10px; font-size: 11px; margin: 0; min-height: unset; background: rgba(255,255,255,0.1); border: none;">Clear</button>
+            <div class="log-calendar-wrapper" style="position: relative; display: inline-block;">
+              <div class="custom-calendar-trigger premium-input" id="log-date-filter-trigger" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; font-size: 13px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #fff; cursor: pointer; min-width: 140px; height: 32px; box-sizing: border-box;">
+                <span class="calendar-trigger-text" style="font-variant-numeric: tabular-nums;">${todayDisplay}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.6;">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+              </div>
+              <input type="hidden" id="log-date-filter" value="${todayStr}">
+              <div class="custom-calendar-popup" style="display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 12000; width: 280px; background: #161616; border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 12px; color: #fff; font-family: system-ui, sans-serif; box-sizing: border-box; user-select: none;"></div>
             </div>
           </div>
         </div>
@@ -808,8 +824,6 @@ function renderPeopleTab(tab) {
     `;
 
     const select = container.querySelector("#log-user-select");
-    const dateFilter = container.querySelector("#log-date-filter");
-    const clearDateBtn = container.querySelector("#log-clear-date");
 
     if (State.sharedLogsUsers && State.sharedLogsUsers.length) {
       State.sharedLogsUsers.forEach(u => {
@@ -820,10 +834,13 @@ function renderPeopleTab(tab) {
       });
     }
 
-    select.addEventListener("change", () => loadAndRenderLogs(container));
-    dateFilter.addEventListener("change", () => loadAndRenderLogs(container));
-    clearDateBtn.addEventListener("click", () => {
-      dateFilter.value = "";
+    select.addEventListener("change", () => {
+      const filterInput = container.querySelector("#log-date-filter");
+      if (filterInput) {
+        filterInput.value = todayStr;
+        const triggerText = container.querySelector("#log-date-filter-trigger .calendar-trigger-text");
+        if (triggerText) triggerText.textContent = todayDisplay;
+      }
       loadAndRenderLogs(container);
     });
 
@@ -1012,19 +1029,41 @@ async function renderMomentsTab(container) {
     State.selectedMomentFriendId = activeFriendId;
   }
 
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+  const todayDisplay = `${dd}-${mm}-${yyyy}`;
+
   container.innerHTML = `
     <div class="moments-tab-container">
       <div class="moments-stories-row"></div>
       <div class="moments-gallery-section">
-        <div class="moments-gallery-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 100%;">
+        <div class="moments-gallery-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; width: 100%; gap: 12px; flex-wrap: wrap;">
           <span class="moments-gallery-title" style="margin: 0;"></span>
-          <button class="modal-moment-request-btn" id="modal-moment-request-btn" style="display: none;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-              <circle cx="12" cy="13" r="4"/>
-            </svg>
-            Click Snapshot
-          </button>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="moments-calendar-wrapper" style="position: relative; display: inline-block;">
+              <div class="custom-calendar-trigger premium-input" id="moments-date-filter-trigger" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 12px; font-size: 13px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.2); color: #fff; cursor: pointer; min-width: 140px; height: 32px; box-sizing: border-box;">
+                <span class="calendar-trigger-text" style="font-variant-numeric: tabular-nums;">${todayDisplay}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.6;">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+              </div>
+              <input type="hidden" id="moments-date-filter" value="${todayStr}">
+              <div class="custom-calendar-popup" style="display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 12000; width: 280px; background: #161616; border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); padding: 12px; color: #fff; font-family: system-ui, sans-serif; box-sizing: border-box; user-select: none;"></div>
+            </div>
+            <button class="modal-moment-request-btn" id="modal-moment-request-btn" style="display: none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              Click Snapshot
+            </button>
+          </div>
         </div>
         <div class="moments-gallery-grid"></div>
       </div>
@@ -1095,6 +1134,15 @@ async function renderMomentsTab(container) {
       State.selectedMomentFriendId = friend.id;
       container.querySelectorAll(".story-item").forEach(el => el.classList.remove("active"));
       itemEl.classList.add("active");
+
+      // Reset date filter input and text to today
+      const filterInput = container.querySelector("#moments-date-filter");
+      if (filterInput) {
+        filterInput.value = todayStr;
+        const triggerText = container.querySelector("#moments-date-filter-trigger .calendar-trigger-text");
+        if (triggerText) triggerText.textContent = todayDisplay;
+      }
+
       renderFriendGallery(friend.id, momentsObj, galleryTitle, galleryGrid);
     });
     storiesRow.appendChild(itemEl);
@@ -1124,13 +1172,45 @@ function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
   }
 
   gridEl.innerHTML = "";
+  
+  // Re-build activeDates for the selected friend
+  const activeDates = new Set();
   const snaps = data.moments || [];
-  if (snaps.length === 0) {
-    gridEl.innerHTML = `<div class="gallery-empty"><p>No snapshots</p></div>`;
+  snaps.forEach(snap => {
+    const dStr = new Date(snap.createdAt).toISOString().split("T")[0];
+    activeDates.add(dStr);
+  });
+
+  // Get calendar wrapper and update it dynamically
+  const calendarWrapper = document.querySelector(".moments-calendar-wrapper");
+  if (calendarWrapper) {
+    initCustomCalendar(calendarWrapper, "moments-date-filter", activeDates, () => {
+      // Re-render gallery grid when date changes
+      renderFriendGallery(friendId, momentsObj, titleEl, gridEl);
+    });
+  }
+
+  const dateFilterEl = document.getElementById("moments-date-filter");
+  const filterDateVal = dateFilterEl ? dateFilterEl.value : ""; // "YYYY-MM-DD"
+
+  let filteredSnaps = snaps;
+  if (filterDateVal) {
+    filteredSnaps = snaps.filter(snap => {
+      const snapDate = new Date(snap.createdAt);
+      const yyyy = snapDate.getFullYear();
+      const mm = String(snapDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(snapDate.getDate()).padStart(2, '0');
+      const snapDateStr = `${yyyy}-${mm}-${dd}`;
+      return snapDateStr === filterDateVal;
+    });
+  }
+
+  if (filteredSnaps.length === 0) {
+    gridEl.innerHTML = `<div class="gallery-empty"><p>${filterDateVal ? "No snapshots on this date" : "No snapshots"}</p></div>`;
     return;
   }
 
-  snaps.forEach((snap) => {
+  filteredSnaps.forEach((snap) => {
     const card = document.createElement("div");
     card.className = "moment-gallery-card premium-card";
     const timeStr = formatRelativeTime(new Date(snap.createdAt));
@@ -1139,7 +1219,9 @@ function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
       <div class="moment-gallery-overlay"><span class="moment-gallery-time">${timeStr}</span></div>
     `;
     card.addEventListener("click", () => {
-      if (typeof openMomentsCarousel === "function") openMomentsCarousel(friendId);
+      if (typeof openMomentsCarousel === "function") {
+        openMomentsCarousel(friendId, snap.url);
+      }
     });
     gridEl.appendChild(card);
   });
@@ -1374,48 +1456,87 @@ function renderModalSecurityLogWhitelist(whitelistList) {
 
 async function loadAndRenderLogs(container) {
   const select = container.querySelector("#log-user-select");
-  const dateFilter = container.querySelector("#log-date-filter");
   const gallery = container.querySelector("#profile-modal-logs-gallery");
-  if (!select || !dateFilter || !gallery) return;
+  if (!select || !gallery) return;
 
   const selectedUserId = select.value === "me" ? "" : select.value;
-  const selectedDate = dateFilter.value || "";
   
   // Highlight row in table
   updateTableSelection(container, select.value);
 
-  State.securityLogsCache = State.securityLogsCache || {};
-  const cacheKey = `${selectedUserId || "me"}:${selectedDate}`;
-  let photos = State.securityLogsCache[cacheKey];
+  // 1. Fetch ALL logs for the user if not cached
+  State.securityLogsHistory = State.securityLogsHistory || {};
+  const cacheKey = selectedUserId || "me";
+  let allPhotos = State.securityLogsHistory[cacheKey];
 
-  if (!photos) {
+  if (!allPhotos) {
     gallery.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-secondary); padding: 20px;">Loading logs...</div>`;
-    const res = await fetchSecurityLogs(selectedUserId, selectedDate);
+    const res = await fetchSecurityLogs(selectedUserId, "all");
     if (res.code === 200 && res.Data?.photos) {
-      photos = res.Data.photos;
-      State.securityLogsCache[cacheKey] = photos;
+      allPhotos = res.Data.photos;
+      State.securityLogsHistory[cacheKey] = allPhotos;
     }
   }
 
-  if (photos) {
-    gallery.innerHTML = "";
-    if (!photos.length) {
-      gallery.innerHTML = `<div class="gallery-empty" style="grid-column: span 3; text-align: center; padding: 20px; color: var(--text-secondary);"><p>No security logs found.</p></div>`;
-      return;
-    }
-    photos.forEach((photo) => {
-      const photoCard = document.createElement("div");
-      photoCard.className = "log-photo-card";
-      photoCard.innerHTML = `
-        <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
-        <div class="log-card-overlay"><span class="log-time">${formatRelativeTime(new Date(photo.createdAt))}</span></div>
-      `;
-      photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt));
-      gallery.appendChild(photoCard);
+  // Extract active dates
+  const activeDates = new Set();
+  if (allPhotos) {
+    allPhotos.forEach(p => {
+      const pDate = new Date(p.createdAt).toISOString().split("T")[0];
+      activeDates.add(pDate);
     });
-  } else {
-    gallery.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-danger); padding: 20px;">Failed to load logs.</div>`;
   }
+
+  // 2. Initialize or update the custom calendar with the active dates
+  const calendarWrapper = container.querySelector(".log-calendar-wrapper");
+  if (calendarWrapper) {
+    initCustomCalendar(calendarWrapper, "log-date-filter", activeDates, () => {
+      // On select, reload/filter local list
+      filterAndRenderLogsGrid(container, allPhotos);
+    });
+  }
+
+  // 3. Render filtered grid
+  filterAndRenderLogsGrid(container, allPhotos);
+}
+
+function filterAndRenderLogsGrid(container, allPhotos) {
+  const gallery = container.querySelector("#profile-modal-logs-gallery");
+  const input = container.querySelector("#log-date-filter");
+  if (!gallery || !input) return;
+
+  if (!allPhotos) {
+    gallery.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-danger); padding: 20px;">Failed to load logs.</div>`;
+    return;
+  }
+
+  const selectedDate = input.value; // "YYYY-MM-DD" or empty
+  
+  // Default to today's date if no date filter is provided
+  const queryDate = selectedDate || new Date().toISOString().split("T")[0];
+
+  const filtered = allPhotos.filter(p => {
+    const pDate = new Date(p.createdAt).toISOString().split("T")[0];
+    return pDate === queryDate;
+  });
+
+  gallery.innerHTML = "";
+  if (!filtered.length) {
+    const displayDateStr = selectedDate ? selectedDate.split("-").reverse().join("-") : "today";
+    gallery.innerHTML = `<div class="gallery-empty" style="grid-column: span 3; text-align: center; padding: 20px; color: var(--text-secondary);"><p>No security logs found for ${displayDateStr}.</p></div>`;
+    return;
+  }
+
+  filtered.forEach((photo) => {
+    const photoCard = document.createElement("div");
+    photoCard.className = "log-photo-card";
+    photoCard.innerHTML = `
+      <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
+      <div class="log-card-overlay"><span class="log-time">${formatRelativeTime(new Date(photo.createdAt))}</span></div>
+    `;
+    photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt));
+    gallery.appendChild(photoCard);
+  });
 }
 
 function renderLogSourcesTable(container) {
@@ -2167,3 +2288,189 @@ async function syncPendingMessagesFromDB() {
     console.error("syncPendingMessagesFromDB failed:", err);
   }
 }
+
+function initCustomCalendar(calendarWrapper, inputId, activeDates = new Set(), onDateSelect = null) {
+  const trigger = calendarWrapper.querySelector(".custom-calendar-trigger");
+  const popup = calendarWrapper.querySelector(".custom-calendar-popup");
+  const input = calendarWrapper.querySelector(`#${inputId}`);
+  const triggerText = trigger.querySelector(".calendar-trigger-text");
+
+  let displayDate = new Date();
+
+  const formatDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const r = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${r}`;
+  };
+
+  const formatDisplay = (dateStr) => {
+    if (!dateStr) return "Select Date";
+    const [y, m, d] = dateStr.split("-");
+    return `${d}-${m}-${y}`;
+  };
+
+  const render = () => {
+    const year = displayDate.getFullYear();
+    const month = displayDate.getMonth();
+    const selectedDate = input.value;
+
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    
+    let html = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-size: 14px; font-weight: 600; color: #fff;">${monthNames[month]} ${year}</span>
+        <div style="display: flex; gap: 8px;">
+          <button class="cal-nav-btn prev-month-btn" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 6px;">↑</button>
+          <button class="cal-nav-btn next-month-btn" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 6px;">↓</button>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; font-weight: 600; color: #8e8e8e; margin-bottom: 8px;">
+        <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 6px; column-gap: 4px; text-align: center; font-size: 12px;">
+    `;
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const prevTotalDays = new Date(year, month, 0).getDate();
+
+    // Prev month days
+    for (let i = firstDay - 1; i >= 0; i--) {
+      const dVal = prevTotalDays - i;
+      const prevMonth = month === 0 ? 11 : month - 1;
+      const prevYear = month === 0 ? year - 1 : year;
+      const dateStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(dVal).padStart(2, '0')}`;
+      const isActive = activeDates.has(dateStr);
+      html += getDayCellHTML(dVal, dateStr, false, selectedDate, isActive);
+    }
+
+    // Current month days
+    for (let dVal = 1; dVal <= totalDays; dVal++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dVal).padStart(2, '0')}`;
+      const isActive = activeDates.has(dateStr);
+      html += getDayCellHTML(dVal, dateStr, true, selectedDate, isActive);
+    }
+
+    // Next month days
+    const remainingCells = 42 - (firstDay + totalDays);
+    for (let dVal = 1; dVal <= remainingCells; dVal++) {
+      const nextMonth = month === 11 ? 0 : month + 1;
+      const nextYear = month === 11 ? year + 1 : year;
+      const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(dVal).padStart(2, '0')}`;
+      const isActive = activeDates.has(dateStr);
+      html += getDayCellHTML(dVal, dateStr, false, selectedDate, isActive);
+    }
+
+    html += `
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px;">
+        <button class="cal-action-btn clear-btn" style="background: none; border: none; color: #0095f6; cursor: pointer; font-weight: 600; padding: 4px 8px;">Clear</button>
+        <button class="cal-action-btn today-btn" style="background: none; border: none; color: #0095f6; cursor: pointer; font-weight: 600; padding: 4px 8px;">Today</button>
+      </div>
+    `;
+
+    popup.innerHTML = html;
+
+    // Attach navigation listeners
+    popup.querySelector(".prev-month-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      displayDate.setMonth(displayDate.getMonth() - 1);
+      render();
+    });
+
+    popup.querySelector(".next-month-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      displayDate.setMonth(displayDate.getMonth() + 1);
+      render();
+    });
+
+    // Attach day cell listeners
+    popup.querySelectorAll(".cal-day-cell").forEach(cell => {
+      cell.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const dateStr = cell.dataset.date;
+        input.value = dateStr;
+        triggerText.textContent = formatDisplay(dateStr);
+        popup.style.display = "none";
+        if (onDateSelect) onDateSelect(dateStr);
+      });
+    });
+
+    // Attach action listeners
+    popup.querySelector(".clear-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      input.value = "";
+      triggerText.textContent = "Select Date";
+      popup.style.display = "none";
+      if (onDateSelect) onDateSelect("");
+    });
+
+    popup.querySelector(".today-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const todayStr = formatDate(new Date());
+      input.value = todayStr;
+      triggerText.textContent = formatDisplay(todayStr);
+      popup.style.display = "none";
+      if (onDateSelect) onDateSelect(todayStr);
+    });
+  };
+
+  // Toggle on trigger click
+  trigger.onclick = (e) => {
+    e.stopPropagation();
+    const isShowing = popup.style.display === "block";
+
+    // Close all other custom calendar popups
+    document.querySelectorAll(".custom-calendar-popup").forEach(p => p.style.display = "none");
+
+    if (!isShowing) {
+      const currentVal = input.value;
+      displayDate = currentVal ? new Date(currentVal) : new Date();
+      render();
+      popup.style.display = "block";
+    } else {
+      popup.style.display = "none";
+    }
+  };
+
+  // Close calendar popup on click outside
+  const clickOutsideHandler = (e) => {
+    if (!calendarWrapper.contains(e.target)) {
+      popup.style.display = "none";
+    }
+  };
+  document.removeEventListener("click", calendarWrapper._clickOutsideHandler);
+  calendarWrapper._clickOutsideHandler = clickOutsideHandler;
+  document.addEventListener("click", clickOutsideHandler);
+
+  // Sync display formatting initially
+  if (input.value) {
+    triggerText.textContent = formatDisplay(input.value);
+  } else {
+    triggerText.textContent = "Select Date";
+  }
+}
+
+function getDayCellHTML(dayNum, dateStr, isCurrentMonth, selectedDate, isActive) {
+  let style = "width: 28px; height: 28px; line-height: 28px; margin: auto; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s;";
+  
+  if (!isCurrentMonth) {
+    style += " color: rgba(255,255,255,0.25);";
+  } else {
+    style += " color: #ffffff;";
+  }
+
+  if (isActive) {
+    // Elegant green border and light background to match premium styling
+    style += " background-color: rgba(34, 197, 94, 0.2); border: 1.5px solid #22c55e; color: #22c55e; font-weight: bold;";
+  }
+
+  if (selectedDate === dateStr) {
+    // Precise selected layout with blue selection box matching screenshot style
+    style += " background-color: #0095f6 !important; color: #ffffff !important; border: none !important; box-shadow: 0 0 8px rgba(0, 149, 246, 0.6);";
+  }
+
+  return `<div class="cal-day-cell" data-date="${dateStr}" style="${style}" onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter='none'">${dayNum}</div>`;
+}
+
