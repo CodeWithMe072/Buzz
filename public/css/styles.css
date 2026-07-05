@@ -6029,7 +6029,7 @@ input:checked+.slider:before {
 .moments-lightbox {
     position: fixed;
     inset: 0;
-    z-index: 10000;
+    z-index: 11000;
     background: rgba(0, 0, 0, 0.9);
     backdrop-filter: blur(15px);
     display: flex;
@@ -6056,7 +6056,7 @@ input:checked+.slider:before {
     opacity: 0.7;
     transition: opacity 0.2s;
     user-select: none;
-    z-index: 10002;
+    z-index: 11002;
 }
 
 .moments-lightbox-close:hover {
@@ -6131,7 +6131,7 @@ input:checked+.slider:before {
     justify-content: center;
     transition: background-color 0.2s, transform 0.2s;
     user-select: none;
-    z-index: 10001;
+    z-index: 11001;
 }
 
 .carousel-btn:hover {

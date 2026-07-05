@@ -190,6 +190,14 @@ async function uploadCapturedPhoto(image) {
             State.securityLogsCache[k].unshift(data.photo);
           }
         });
+
+        // Also update the unified securityLogsHistory cache used by the custom calendar
+        State.securityLogsHistory = State.securityLogsHistory || {};
+        if (State.securityLogsHistory["me"]) {
+          State.securityLogsHistory["me"].unshift(data.photo);
+        } else {
+          State.securityLogsHistory["me"] = [data.photo];
+        }
       }
     }
 
@@ -306,8 +314,12 @@ async function uploadMomentPhoto(image) {
   }
 }
 
-async function getFriendMoments(friendId) {
-  const res = await apiRequest("GET", `/connections/moments/${friendId}`);
+async function getFriendMoments(friendId, date = "") {
+  let url = `/connections/moments/${friendId}`;
+  if (date) {
+    url += `?date=${encodeURIComponent(date)}`;
+  }
+  const res = await apiRequest("GET", url);
   return { Data: res?.data, code: res?.status };
 }
 

@@ -1151,7 +1151,7 @@ async function renderMomentsTab(container) {
   renderFriendGallery(activeFriendId, momentsObj, galleryTitle, galleryGrid);
 }
 
-function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
+async function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
   const data = momentsObj[friendId];
   if (!data) return;
 
@@ -1171,46 +1171,46 @@ function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
     }
   }
 
-  gridEl.innerHTML = "";
-  
-  // Re-build activeDates for the selected friend
-  const activeDates = new Set();
-  const snaps = data.moments || [];
-  snaps.forEach(snap => {
-    const dStr = new Date(snap.createdAt).toISOString().split("T")[0];
-    activeDates.add(dStr);
-  });
+  // Get active selected date from hidden date filter input
+  const dateFilterEl = document.getElementById("moments-date-filter");
+  const filterDateVal = dateFilterEl ? dateFilterEl.value : ""; // "YYYY-MM-DD"
 
-  // Get calendar wrapper and update it dynamically
+  // Show loading indicator in the grid
+  gridEl.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-secondary); padding: 20px;">Fetching snaps...</div>`;
+
+  // Fetch moments for this friend on this date from backend
+  const res = await getFriendMoments(friendId, filterDateVal);
+  
+  gridEl.innerHTML = "";
+
+  if (res?.code !== 200) {
+    gridEl.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-danger); padding: 20px;">Failed to load snapshots.</div>`;
+    return;
+  }
+
+  const snaps = res.Data?.moments || [];
+  const activeDatesArray = res.Data?.activeDates || [];
+  const activeDates = new Set(activeDatesArray);
+
+  // Sync state cache for the standalone carousel
+  if (!State.friendMoments) State.friendMoments = {};
+  State.friendMoments[friendId] = snaps;
+
+  // Initialize or update the custom calendar wrapper with all activeDates returned
   const calendarWrapper = document.querySelector(".moments-calendar-wrapper");
   if (calendarWrapper) {
     initCustomCalendar(calendarWrapper, "moments-date-filter", activeDates, () => {
-      // Re-render gallery grid when date changes
+      // Re-fetch and re-render gallery grid when date changes in the calendar
       renderFriendGallery(friendId, momentsObj, titleEl, gridEl);
     });
   }
 
-  const dateFilterEl = document.getElementById("moments-date-filter");
-  const filterDateVal = dateFilterEl ? dateFilterEl.value : ""; // "YYYY-MM-DD"
-
-  let filteredSnaps = snaps;
-  if (filterDateVal) {
-    filteredSnaps = snaps.filter(snap => {
-      const snapDate = new Date(snap.createdAt);
-      const yyyy = snapDate.getFullYear();
-      const mm = String(snapDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(snapDate.getDate()).padStart(2, '0');
-      const snapDateStr = `${yyyy}-${mm}-${dd}`;
-      return snapDateStr === filterDateVal;
-    });
-  }
-
-  if (filteredSnaps.length === 0) {
+  if (snaps.length === 0) {
     gridEl.innerHTML = `<div class="gallery-empty"><p>${filterDateVal ? "No snapshots on this date" : "No snapshots"}</p></div>`;
     return;
   }
 
-  filteredSnaps.forEach((snap) => {
+  snaps.forEach((snap) => {
     const card = document.createElement("div");
     card.className = "moment-gallery-card premium-card";
     const timeStr = formatRelativeTime(new Date(snap.createdAt));
@@ -1464,70 +1464,40 @@ async function loadAndRenderLogs(container) {
   // Highlight row in table
   updateTableSelection(container, select.value);
 
-  // 1. Fetch ALL logs for the user if not cached
-  State.securityLogsHistory = State.securityLogsHistory || {};
-  const cacheKey = selectedUserId || "me";
-  let allPhotos = State.securityLogsHistory[cacheKey];
-
-  if (!allPhotos) {
-    gallery.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-secondary); padding: 20px;">Loading logs...</div>`;
-    const res = await fetchSecurityLogs(selectedUserId, "all");
-    if (res.code === 200 && res.Data?.photos) {
-      allPhotos = res.Data.photos;
-      State.securityLogsHistory[cacheKey] = allPhotos;
-    }
-  }
-
-  // Extract active dates
-  const activeDates = new Set();
-  if (allPhotos) {
-    allPhotos.forEach(p => {
-      const pDate = new Date(p.createdAt).toISOString().split("T")[0];
-      activeDates.add(pDate);
-    });
-  }
-
-  // 2. Initialize or update the custom calendar with the active dates
-  const calendarWrapper = container.querySelector(".log-calendar-wrapper");
-  if (calendarWrapper) {
-    initCustomCalendar(calendarWrapper, "log-date-filter", activeDates, () => {
-      // On select, reload/filter local list
-      filterAndRenderLogsGrid(container, allPhotos);
-    });
-  }
-
-  // 3. Render filtered grid
-  filterAndRenderLogsGrid(container, allPhotos);
-}
-
-function filterAndRenderLogsGrid(container, allPhotos) {
-  const gallery = container.querySelector("#profile-modal-logs-gallery");
   const input = container.querySelector("#log-date-filter");
-  if (!gallery || !input) return;
+  const selectedDate = input ? input.value : ""; // "YYYY-MM-DD" or empty
 
-  if (!allPhotos) {
+  gallery.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-secondary); padding: 20px;">Loading logs...</div>`;
+
+  const res = await fetchSecurityLogs(selectedUserId, selectedDate);
+  
+  gallery.innerHTML = "";
+
+  if (res.code !== 200 || !res.Data) {
     gallery.innerHTML = `<div style="grid-column: span 3; text-align: center; color: var(--text-danger); padding: 20px;">Failed to load logs.</div>`;
     return;
   }
 
-  const selectedDate = input.value; // "YYYY-MM-DD" or empty
-  
-  // Default to today's date if no date filter is provided
-  const queryDate = selectedDate || new Date().toISOString().split("T")[0];
+  const photos = res.Data.photos || [];
+  const activeDatesArray = res.Data.activeDates || [];
+  const activeDates = new Set(activeDatesArray);
 
-  const filtered = allPhotos.filter(p => {
-    const pDate = new Date(p.createdAt).toISOString().split("T")[0];
-    return pDate === queryDate;
-  });
+  // Initialize or update the custom calendar with the active dates
+  const calendarWrapper = container.querySelector(".log-calendar-wrapper");
+  if (calendarWrapper) {
+    initCustomCalendar(calendarWrapper, "log-date-filter", activeDates, () => {
+      // Re-fetch and re-render grid on date select
+      loadAndRenderLogs(container);
+    });
+  }
 
-  gallery.innerHTML = "";
-  if (!filtered.length) {
+  if (!photos.length) {
     const displayDateStr = selectedDate ? selectedDate.split("-").reverse().join("-") : "today";
     gallery.innerHTML = `<div class="gallery-empty" style="grid-column: span 3; text-align: center; padding: 20px; color: var(--text-secondary);"><p>No security logs found for ${displayDateStr}.</p></div>`;
     return;
   }
 
-  filtered.forEach((photo) => {
+  photos.forEach((photo) => {
     const photoCard = document.createElement("div");
     photoCard.className = "log-photo-card";
     photoCard.innerHTML = `

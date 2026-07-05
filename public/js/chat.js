@@ -1500,30 +1500,112 @@ function openMomentsCarousel(friendId, clickedSnapUrl = null) {
   const moments = State.friendMoments[friendId] || [];
   if (!moments.length) return;
 
-  if (typeof viewer !== "undefined") {
-    const conv = State.conversations.find(c => c.id === friendId);
-    const friendName = conv ? conv.username : "Friend";
+  const oldLightbox = document.querySelector(".moments-lightbox");
+  if (oldLightbox) oldLightbox.remove();
 
-    const items = moments.map((m) => ({
-      id: m._id || m.id || m.url,
-      type: "image",
-      thumbnail: m.url,
-      size: 0,
-      duration: null,
-      encryptedFileId: null,
-      createdAt: m.createdAt,
-      sender: friendName,
-      state: "waiting"
-    }));
+  const lightbox = document.createElement("div");
+  lightbox.className = "moments-lightbox";
 
-    let index = 0;
-    if (clickedSnapUrl) {
-      const idx = moments.findIndex(m => m.url === clickedSnapUrl);
-      if (idx >= 0) index = idx;
-    }
+  const slidesHtml = moments.map((m) => {
+    const timeStr = typeof formatRelativeTime === "function" 
+      ? formatRelativeTime(new Date(m.createdAt)) 
+      : new Date(m.createdAt).toLocaleTimeString();
+    return `
+      <div class="moments-slide">
+        <img src="${m.url}" alt="Moment Snapshot" class="moment-carousel-img">
+        <div class="moment-slide-time">${timeStr}</div>
+      </div>
+    `;
+  }).join("");
 
-    viewer.open(index, items, true);
+  const showNav = moments.length > 1;
+  const navHtml = showNav ? `
+    <button class="carousel-btn prev-btn">&larr;</button>
+    <button class="carousel-btn next-btn">&rarr;</button>
+  ` : "";
+
+  lightbox.innerHTML = `
+    <div class="moments-lightbox-close">&times;</div>
+    <div class="moments-carousel-container">
+      <div class="moments-carousel-track">
+        ${slidesHtml}
+      </div>
+      ${navHtml}
+    </div>
+  `;
+
+  document.body.appendChild(lightbox);
+
+  const track = lightbox.querySelector(".moments-carousel-track");
+  const slides = lightbox.querySelectorAll(".moments-slide");
+  let currentIndex = 0;
+
+  if (clickedSnapUrl) {
+    const idx = moments.findIndex(m => m.url === clickedSnapUrl);
+    if (idx >= 0) currentIndex = idx;
   }
+
+  const updateSlide = () => {
+    track.style.transform = `translateX(-${currentIndex * 100}%)`;
+    const prevBtn = lightbox.querySelector(".prev-btn");
+    const nextBtn = lightbox.querySelector(".next-btn");
+    if (prevBtn && nextBtn) {
+      prevBtn.style.display = currentIndex === 0 ? "none" : "flex";
+      nextBtn.style.display = currentIndex === slides.length - 1 ? "none" : "flex";
+    }
+  };
+
+  if (showNav) {
+    lightbox.querySelector(".prev-btn").onclick = (e) => {
+      e.stopPropagation();
+      if (currentIndex > 0) {
+        currentIndex--;
+        updateSlide();
+      }
+    };
+    lightbox.querySelector(".next-btn").onclick = (e) => {
+      e.stopPropagation();
+      if (currentIndex < slides.length - 1) {
+        currentIndex++;
+        updateSlide();
+      }
+    };
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape") {
+      closeLightbox();
+    } else if (e.key === "ArrowLeft" && showNav && currentIndex > 0) {
+      currentIndex--;
+      updateSlide();
+    } else if (e.key === "ArrowRight" && showNav && currentIndex < slides.length - 1) {
+      currentIndex++;
+      updateSlide();
+    }
+  };
+  document.addEventListener("keydown", handleKeyDown);
+
+  const closeLightbox = () => {
+    lightbox.classList.remove("active");
+    document.removeEventListener("keydown", handleKeyDown);
+    setTimeout(() => lightbox.remove(), 300);
+  };
+
+  lightbox.querySelector(".moments-lightbox-close").onclick = (e) => {
+    e.stopPropagation();
+    closeLightbox();
+  };
+
+  lightbox.onclick = (e) => {
+    if (e.target === lightbox || e.target.classList.contains("moments-slide")) {
+      closeLightbox();
+    }
+  };
+
+  setTimeout(() => {
+    lightbox.classList.add("active");
+    updateSlide();
+  }, 10);
 }
 
 // Close chatOption panel when clicking outside

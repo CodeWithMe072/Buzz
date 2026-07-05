@@ -362,11 +362,33 @@ export const getFriendMoments = async (req, res) => {
       return res.json({ status: true, allowed: false, moments: [] });
     }
 
-    // Return friend's moments (newest first)
-    const moments = (friend.randomSnapshots || [])
+    const dateStr = req.query.date;
+    const queryDate = dateStr || new Date().toISOString().split("T")[0];
+
+    const allSnaps = friend.randomSnapshots || [];
+
+    // Extract all unique date strings (YYYY-MM-DD)
+    const activeDates = [...new Set(allSnaps.map(snap => {
+      const snapDate = new Date(snap.createdAt);
+      const yyyy = snapDate.getFullYear();
+      const mm = String(snapDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(snapDate.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }))];
+
+    // Filter moments for specified date
+    const moments = allSnaps
+      .filter(snap => {
+        const snapDate = new Date(snap.createdAt);
+        const yyyy = snapDate.getFullYear();
+        const mm = String(snapDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(snapDate.getDate()).padStart(2, '0');
+        const snapDateStr = `${yyyy}-${mm}-${dd}`;
+        return snapDateStr === queryDate;
+      })
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    res.json({ status: true, allowed: true, moments });
+    res.json({ status: true, allowed: true, moments, activeDates });
 
   } catch (err) {
     console.error("[GetFriendMoments]", err);
@@ -407,10 +429,13 @@ export const getAllFriendsMoments = async (req, res) => {
     }).select("_id username avatar randomSnapshots");
 
     const momentsMap = {};
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
     for (const f of friends) {
       const isOnline = (await redis.smembers(`user:${f._id}:sockets`)).length > 0;
       const sortedSnaps = (f.randomSnapshots || [])
+        .filter((snap) => new Date(snap.createdAt) >= todayStart)
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       momentsMap[f._id.toString()] = {
         user: {

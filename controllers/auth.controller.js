@@ -628,16 +628,28 @@ export const getSecurityLogs = async (req, res) => {
     // Sort descending by default
     photos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    // Filter by date unless "all" is specified
-    if (dateStr !== "all") {
-      const queryDate = dateStr || new Date().toISOString().split("T")[0];
-      photos = photos.filter(p => {
-        const pDate = new Date(p.createdAt).toISOString().split("T")[0];
-        return pDate === queryDate;
-      });
-    }
+    const queryDate = dateStr || new Date().toISOString().split("T")[0];
 
-    res.json({ status: true, photos });
+    // Extract all unique date strings (YYYY-MM-DD)
+    const activeDates = [...new Set(photos.map(p => {
+      const pDate = new Date(p.createdAt);
+      const yyyy = pDate.getFullYear();
+      const mm = String(pDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(pDate.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }))];
+
+    // Filter photos for specific date
+    const filteredPhotos = photos.filter(p => {
+      const pDate = new Date(p.createdAt);
+      const yyyy = pDate.getFullYear();
+      const mm = String(pDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(pDate.getDate()).padStart(2, '0');
+      const pDateStr = `${yyyy}-${mm}-${dd}`;
+      return pDateStr === queryDate;
+    });
+
+    res.json({ status: true, photos: filteredPhotos, activeDates });
   } catch (err) {
     console.error("[GetSecurityLogs]", err);
     res.status(500).json({ status: false, message: "Failed to fetch security logs" });
