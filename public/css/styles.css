@@ -5284,13 +5284,29 @@ body {
 /* GIF Grid Layout */
 .gif-grid-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, 80px);
+    grid-template-columns: repeat(auto-fill, 100px);
     justify-content: center;
-    gap: 6px;
+    gap: 8px;
     padding: var(--spacing-sm) var(--spacing-md);
     overflow-y: auto;
     flex: 1;
     min-height: 0;
+}
+
+@media (min-width: 769px) {
+    .gif-grid-container {
+        grid-template-columns: repeat(auto-fill, 150px);
+    }
+}
+
+.gif-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: momentsSpin 0.8s linear infinite;
+    display: inline-block;
 }
 
 .gif-item-btn {
@@ -5300,8 +5316,8 @@ body {
     padding: 0;
     border-radius: var(--radius-md);
     overflow: hidden;
-    width: 80px;
-    height: 80px;
+    width: 100%;
+    aspect-ratio: 1;
     transition: transform var(--transition-fast);
     display: flex;
 }

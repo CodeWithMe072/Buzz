@@ -553,6 +553,12 @@ const EmojiPanel = (() => {
 
   const $ = id => document.getElementById(id);
   let userCustomGifs = [];
+  let userCustomGifsSections = ["My GIFs"];
+  let currentCustomSection = "";
+  let isCustomGifLoading = false;
+  let currentGifQuery = "";
+  let isGifLoading = false;
+  const gifCache = {};
 
   function showCustomConfirm(title, message, onConfirm) {
     const modal = $("custom-confirm-modal");
@@ -852,7 +858,7 @@ const EmojiPanel = (() => {
             showToast("Upload successfully completed!", "success");
 
             // Reload custom GIFs and highlight the newly uploaded/created section tab
-            await loadCustomGifsAndTrending(`custom-section-${section}`);
+            await loadCustomGifsAndTrending(`custom-section-${section}`, true);
           } else {
             const errResult = await uploadRes.json().catch(() => ({}));
             showToast(errResult.error || "Upload failed", "error");
@@ -952,18 +958,32 @@ const EmojiPanel = (() => {
       return;
     }
     customGifsLoaded = true;
+
+    if (forceRefresh) {
+      for (const k in gifCache) {
+        if (k.startsWith("custom:")) {
+          delete gifCache[k];
+        }
+      }
+    }
     try {
       const token = TokenStore.getToken();
       const headers = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const customRes = await fetch(`/api/gifs/custom`, { headers });
+      const customRes = await fetch(`/api/gifs/custom?sectionsOnly=true`, { headers });
       if (customRes.ok) {
         const customJson = await customRes.json();
-        userCustomGifs = customJson.data || [];
+        userCustomGifsSections = customJson.data || [];
+        if (!userCustomGifsSections.includes("My GIFs")) {
+          userCustomGifsSections.unshift("My GIFs");
+        }
+      } else {
+        userCustomGifsSections = ["My GIFs"];
       }
     } catch (err) {
-      console.error("Failed to load custom GIFs:", err);
+      console.error("Failed to load custom GIF sections:", err);
+      userCustomGifsSections = ["My GIFs"];
     }
 
     // Determine active tab to keep or set
@@ -1007,14 +1027,7 @@ const EmojiPanel = (() => {
     const nav = $("emoji-panel-nav");
     if (!nav) return;
 
-    // Get unique section names from userCustomGifs
-    const sections = [];
-    userCustomGifs.forEach(gif => {
-      const sec = gif.section || "My GIFs";
-      if (!sections.includes(sec)) {
-        sections.push(sec);
-      }
-    });
+    const sections = userCustomGifsSections;
 
     nav.innerHTML = "";
 
@@ -1063,42 +1076,110 @@ const EmojiPanel = (() => {
     nav.appendChild(uploadBtn);
   }
 
-  async function loadTrendingGifs() {
-    const container = $("gif-grid-container");
-    if (!container) return;
-    container.innerHTML = `<div class="emoji-no-results">Loading trending GIFs...</div>`;
-    try {
-      const res = await getGifs();
-      renderGifs(res.Data.data);
-    } catch (err) {
-      container.innerHTML = `<div class="emoji-no-results">Failed to load GIFs</div>`;
+  function handleGifScroll(e) {
+    const container = e.target;
+    if (container.scrollHeight - container.scrollTop <= container.clientHeight + 80) {
+      fetchAndAppendGifs(true);
     }
   }
 
-  async function searchGifs(query) {
+  function setupGifScrollListener() {
     const container = $("gif-grid-container");
     if (!container) return;
-    container.innerHTML = `<div class="emoji-no-results">Searching...</div>`;
+    container.removeEventListener("scroll", handleGifScroll);
+    container.addEventListener("scroll", handleGifScroll);
+  }
+
+  async function fetchAndAppendGifs(isLoadMore = false) {
+    const container = $("gif-grid-container");
+    if (!container) return;
+
+    const cacheKey = currentGifQuery ? `search:${currentGifQuery}` : "trending";
+    if (!gifCache[cacheKey]) {
+      gifCache[cacheKey] = {
+        gifs: [],
+        offset: 0,
+        reachedEnd: false
+      };
+    }
+
+    const state = gifCache[cacheKey];
+
+    if (isLoadMore && state.reachedEnd) {
+      return;
+    }
+
+    if (isGifLoading) return;
+    isGifLoading = true;
+
+    let loader = container.querySelector(".gif-scroll-loader");
+    if (!loader) {
+      loader = document.createElement("div");
+      loader.className = "gif-scroll-loader";
+      loader.innerHTML = `<span class="gif-spinner"></span> Loading...`;
+      loader.style.cssText = "grid-column: 1 / -1; text-align: center; color: var(--text-secondary); padding: 12px; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px;";
+      container.appendChild(loader);
+    } else {
+      loader.style.display = "flex";
+      container.appendChild(loader); // Move to bottom
+    }
+
     try {
-      const res = await getSearchGif(query);
-      renderGifs(res.Data.data, query);
+      const pageSize = window.innerWidth <= 768 ? 10 : 14;
+      const currentOffset = isLoadMore ? state.offset : 0;
+
+      let res;
+      if (currentGifQuery) {
+        res = await getSearchGif(currentGifQuery, pageSize, currentOffset);
+      } else {
+        res = await getGifs(pageSize, currentOffset);
+      }
+
+      const newGifs = res?.Data?.data || [];
+
+      if (isLoadMore) {
+        state.gifs = state.gifs.concat(newGifs);
+        state.offset += newGifs.length;
+      } else {
+        state.gifs = newGifs;
+        state.offset = newGifs.length;
+      }
+
+      if (newGifs.length < pageSize) {
+        state.reachedEnd = true;
+      } else {
+        state.reachedEnd = false;
+      }
+
+      if (loader) loader.style.display = "none";
+      renderGifsFromCache(cacheKey);
+
     } catch (err) {
-      container.innerHTML = `<div class="emoji-no-results">Failed to search GIFs</div>`;
+      console.error("Failed to load GIFs:", err);
+      if (loader) loader.style.display = "none";
+      if (!isLoadMore) {
+        container.innerHTML = `<div class="emoji-no-results">Failed to load GIFs</div>`;
+      }
+    } finally {
+      isGifLoading = false;
     }
   }
 
-  function renderGifs(gifs, searchQuery = "") {
+  function renderGifsFromCache(cacheKey) {
     const container = $("gif-grid-container");
     if (!container) return;
+
+    const state = gifCache[cacheKey];
     container.innerHTML = "";
 
-    if (gifs && gifs.length > 0) {
-      const header = document.createElement("div");
-      header.className = "gif-category-header";
-      header.textContent = searchQuery ? `Results for "${searchQuery}"` : "Trending GIFs";
-      container.appendChild(header);
+    const header = document.createElement("div");
+    header.className = "gif-category-header";
+    header.style.gridColumn = "1 / -1";
+    header.textContent = currentGifQuery ? `Results for "${currentGifQuery}"` : "Trending GIFs";
+    container.appendChild(header);
 
-      gifs.forEach(gif => {
+    if (state.gifs.length > 0) {
+      state.gifs.forEach(gif => {
         const url = gif.images.fixed_height_downsampled?.url || gif.images.fixed_height?.url;
         if (!url) return;
         const btn = document.createElement("button");
@@ -1108,12 +1189,253 @@ const EmojiPanel = (() => {
         btn.addEventListener("click", () => sendSpecialTypeMessage("gif", url));
         container.appendChild(btn);
       });
+
+      // Recreate loader element for future loads
+      const loader = document.createElement("div");
+      loader.className = "gif-scroll-loader";
+      loader.innerHTML = `<span class="gif-spinner"></span> Loading...`;
+      loader.style.cssText = "grid-column: 1 / -1; text-align: center; color: var(--text-secondary); padding: 12px; font-size: 13px; display: none; align-items: center; justify-content: center; gap: 8px;";
+      container.appendChild(loader);
     } else {
       container.innerHTML = `<div class="emoji-no-results">No GIFs found</div>`;
     }
   }
 
-  function renderCustomSectionGifs(sectionName, query = "") {
+  async function loadTrendingGifs() {
+    currentGifQuery = "";
+    const cacheKey = "trending";
+    setupGifScrollListener();
+    if (gifCache[cacheKey] && gifCache[cacheKey].gifs.length > 0) {
+      renderGifsFromCache(cacheKey);
+    } else {
+      const container = $("gif-grid-container");
+      if (container) {
+        container.innerHTML = `<div class="emoji-no-results">Loading trending GIFs...</div>`;
+      }
+      await fetchAndAppendGifs(false);
+    }
+  }
+
+  async function searchGifs(query) {
+    currentGifQuery = query;
+    const cacheKey = `search:${query}`;
+    setupGifScrollListener();
+    if (gifCache[cacheKey] && gifCache[cacheKey].gifs.length > 0) {
+      renderGifsFromCache(cacheKey);
+    } else {
+      const container = $("gif-grid-container");
+      if (container) {
+        container.innerHTML = `<div class="emoji-no-results">Searching...</div>`;
+      }
+      await fetchAndAppendGifs(false);
+    }
+  }
+
+  function createCustomGifItem(gif, sectionName) {
+    const itemContainer = document.createElement("div");
+    itemContainer.className = "gif-item-wrapper";
+    itemContainer.style.position = "relative";
+    itemContainer.style.display = "inline-block";
+    itemContainer.style.width = "100%";
+    itemContainer.style.aspectRatio = "1";
+
+    const btn = document.createElement("button");
+    btn.className = "gif-item-btn";
+    btn.type = "button";
+    btn.style.width = "100%";
+    btn.style.height = "100%";
+    const urlLower = (gif.url || "").toLowerCase();
+    const isVideo = urlLower.endsWith(".mp4") || urlLower.endsWith(".m4v") || urlLower.endsWith(".m4bb");
+    if (isVideo) {
+      btn.innerHTML = `<video src="${gif.url}" muted autoplay loop playsinline style="width: 100%; height: 100%; object-fit: cover; pointer-events: none;"></video>`;
+    } else {
+      btn.innerHTML = `<img src="${gif.url}" alt="GIF" loading="lazy">`;
+    }
+    btn.addEventListener("click", () => sendSpecialTypeMessage("gif", gif.url));
+
+    const delSingleBtn = document.createElement("button");
+    delSingleBtn.type = "button";
+    delSingleBtn.className = "gif-delete-single-btn";
+    delSingleBtn.innerHTML = `&times;`;
+    delSingleBtn.style.position = "absolute";
+    delSingleBtn.style.top = "4px";
+    delSingleBtn.style.right = "4px";
+    delSingleBtn.style.background = "rgba(0, 0, 0, 0.6)";
+    delSingleBtn.style.border = "none";
+    delSingleBtn.style.color = "#ef4444";
+    delSingleBtn.style.fontSize = "16px";
+    delSingleBtn.style.width = "18px";
+    delSingleBtn.style.height = "18px";
+    delSingleBtn.style.borderRadius = "50%";
+    delSingleBtn.style.display = "flex";
+    delSingleBtn.style.alignItems = "center";
+    delSingleBtn.style.justifyContent = "center";
+    delSingleBtn.style.cursor = "pointer";
+    delSingleBtn.style.lineHeight = "1";
+    delSingleBtn.style.zIndex = "2";
+    delSingleBtn.style.transition = "all 0.2s";
+    delSingleBtn.title = "Delete GIF";
+
+    delSingleBtn.addEventListener("mouseover", () => {
+      delSingleBtn.style.background = "#ef4444";
+      delSingleBtn.style.color = "#ffffff";
+    });
+    delSingleBtn.addEventListener("mouseout", () => {
+      delSingleBtn.style.background = "rgba(0, 0, 0, 0.6)";
+      delSingleBtn.style.color = "#ef4444";
+    });
+
+    delSingleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      showCustomConfirm(
+        "Delete GIF",
+        "Are you sure you want to delete this custom GIF/video?",
+        async () => {
+          try {
+            const token = TokenStore.getToken();
+            const headers = {};
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
+            const res = await fetch(`/api/gifs/custom/${gif._id}`, {
+              method: "DELETE",
+              headers
+            });
+
+            if (res.ok) {
+              showToast("GIF deleted successfully", "success");
+              const cacheKey = `custom:${sectionName}`;
+              delete gifCache[cacheKey];
+              fetchAndAppendCustomGifs(false);
+            } else {
+              showToast("Failed to delete GIF", "error");
+            }
+          } catch (err) {
+            console.error("Delete GIF error:", err);
+            showToast("Failed to delete GIF", "error");
+          }
+        }
+      );
+    });
+
+    itemContainer.appendChild(btn);
+    itemContainer.appendChild(delSingleBtn);
+    return itemContainer;
+  }
+
+  function handleCustomGifScroll(e) {
+    const container = e.target;
+    if (container.scrollHeight - container.scrollTop <= container.clientHeight + 80) {
+      fetchAndAppendCustomGifs(true);
+    }
+  }
+
+  function setupCustomGifScrollListener() {
+    const container = $("custom-section-grid-container");
+    if (!container) return;
+    container.removeEventListener("scroll", handleCustomGifScroll);
+    container.addEventListener("scroll", handleCustomGifScroll);
+  }
+
+  async function fetchAndAppendCustomGifs(isLoadMore = false) {
+    const container = $("custom-section-grid-container");
+    if (!container) return;
+
+    const cacheKey = `custom:${currentCustomSection}`;
+    if (!gifCache[cacheKey]) {
+      gifCache[cacheKey] = {
+        gifs: [],
+        offset: 0,
+        reachedEnd: false
+      };
+    }
+
+    const state = gifCache[cacheKey];
+
+    if (isLoadMore && state.reachedEnd) {
+      return;
+    }
+
+    if (isCustomGifLoading) return;
+    isCustomGifLoading = true;
+
+    let loader = container.querySelector(".gif-scroll-loader");
+    if (!loader) {
+      loader = document.createElement("div");
+      loader.className = "gif-scroll-loader";
+      loader.innerHTML = `<span class="gif-spinner"></span> Loading...`;
+      loader.style.cssText = "grid-column: 1 / -1; text-align: center; color: var(--text-secondary); padding: 12px; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px;";
+      container.appendChild(loader);
+    } else {
+      loader.style.display = "flex";
+      container.appendChild(loader);
+    }
+
+    try {
+      const pageSize = window.innerWidth <= 768 ? 10 : 14;
+      const currentOffset = isLoadMore ? state.offset : 0;
+
+      const token = TokenStore.getToken();
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/gifs/custom?section=${encodeURIComponent(currentCustomSection)}&limit=${pageSize}&offset=${currentOffset}`, { headers });
+      if (!res.ok) throw new Error("Failed to fetch custom GIFs");
+
+      const json = await res.json();
+      const newGifs = json.data || [];
+
+      if (isLoadMore) {
+        state.gifs = state.gifs.concat(newGifs);
+        state.offset += newGifs.length;
+      } else {
+        state.gifs = newGifs;
+        state.offset = newGifs.length;
+      }
+
+      if (newGifs.length < pageSize) {
+        state.reachedEnd = true;
+      } else {
+        state.reachedEnd = false;
+      }
+
+      if (loader) loader.style.display = "none";
+      renderCustomGifsFromCache(cacheKey);
+
+    } catch (err) {
+      console.error("Failed to load custom GIFs:", err);
+      if (loader) loader.style.display = "none";
+      if (!isLoadMore) {
+        container.innerHTML = `<div class="emoji-no-results">Failed to load custom GIFs</div>`;
+      }
+    } finally {
+      isCustomGifLoading = false;
+    }
+  }
+
+  function renderCustomGifsFromCache(cacheKey) {
+    const container = $("custom-section-grid-container");
+    if (!container) return;
+
+    const state = gifCache[cacheKey];
+    container.innerHTML = "";
+
+    if (state.gifs.length > 0) {
+      state.gifs.forEach(gif => {
+        const item = createCustomGifItem(gif, currentCustomSection);
+        container.appendChild(item);
+      });
+
+      const loader = document.createElement("div");
+      loader.className = "gif-scroll-loader";
+      loader.innerHTML = `<span class="gif-spinner"></span> Loading...`;
+      loader.style.cssText = "grid-column: 1 / -1; text-align: center; color: var(--text-secondary); padding: 12px; font-size: 13px; display: none; align-items: center; justify-content: center; gap: 8px;";
+      container.appendChild(loader);
+    } else {
+      container.innerHTML = `<div class="emoji-no-results">No GIFs found in this section</div>`;
+    }
+  }
+
+  function renderCustomSectionGifs(sectionName) {
     const container = $("custom-section-grid-container");
     if (!container) return;
     container.innerHTML = "";
@@ -1123,7 +1445,6 @@ const EmojiPanel = (() => {
       titleEl.textContent = sectionName;
     }
 
-    // Add to section button (Add More)
     const addBtn = $("add-to-section-btn");
     if (addBtn) {
       const newAddBtn = addBtn.cloneNode(true);
@@ -1156,7 +1477,7 @@ const EmojiPanel = (() => {
 
               if (res.ok) {
                 showToast(`Deleted section "${sectionName}" successfully`, "success");
-                await loadCustomGifsAndTrending("emojis");
+                await loadCustomGifsAndTrending("emojis", true);
               } else {
                 showToast("Failed to delete section", "error");
               }
@@ -1169,110 +1490,43 @@ const EmojiPanel = (() => {
       });
     }
 
-    let filtered = userCustomGifs.filter(cg => (cg.section || "My GIFs") === sectionName);
+    currentCustomSection = sectionName;
+    const cacheKey = `custom:${sectionName}`;
+    setupCustomGifScrollListener();
 
-    if (query) {
-      const q = query.toLowerCase();
-      filtered = filtered.filter(cg => (cg.fileName || "").toLowerCase().includes(q));
+    if (gifCache[cacheKey] && gifCache[cacheKey].gifs.length > 0) {
+      renderCustomGifsFromCache(cacheKey);
+    } else {
+      container.innerHTML = `<div class="emoji-no-results">Loading custom GIFs...</div>`;
+      fetchAndAppendCustomGifs(false);
     }
-
-    if (filtered.length === 0) {
-      container.innerHTML = `<div class="emoji-no-results">No GIFs found in this section</div>`;
-      return;
-    }
-
-    filtered.forEach(gif => {
-      const itemContainer = document.createElement("div");
-      itemContainer.className = "gif-item-wrapper";
-      itemContainer.style.position = "relative";
-      itemContainer.style.display = "inline-block";
-      itemContainer.style.width = "100%";
-      itemContainer.style.aspectRatio = "1";
-
-      const btn = document.createElement("button");
-      btn.className = "gif-item-btn";
-      btn.type = "button";
-      btn.style.width = "100%";
-      btn.style.height = "100%";
-      const urlLower = (gif.url || "").toLowerCase();
-      const isVideo = urlLower.endsWith(".mp4") || urlLower.endsWith(".m4v") || urlLower.endsWith(".m4bb");
-      if (isVideo) {
-        btn.innerHTML = `<video src="${gif.url}" muted autoplay loop playsinline style="width: 100%; height: 100%; object-fit: cover; pointer-events: none;"></video>`;
-      } else {
-        btn.innerHTML = `<img src="${gif.url}" alt="GIF" loading="lazy">`;
-      }
-      btn.addEventListener("click", () => sendSpecialTypeMessage("gif", gif.url));
-
-      const delSingleBtn = document.createElement("button");
-      delSingleBtn.type = "button";
-      delSingleBtn.className = "gif-delete-single-btn";
-      delSingleBtn.innerHTML = `&times;`;
-      delSingleBtn.style.position = "absolute";
-      delSingleBtn.style.top = "4px";
-      delSingleBtn.style.right = "4px";
-      delSingleBtn.style.background = "rgba(0, 0, 0, 0.6)";
-      delSingleBtn.style.border = "none";
-      delSingleBtn.style.color = "#ef4444";
-      delSingleBtn.style.fontSize = "16px";
-      delSingleBtn.style.width = "18px";
-      delSingleBtn.style.height = "18px";
-      delSingleBtn.style.borderRadius = "50%";
-      delSingleBtn.style.display = "flex";
-      delSingleBtn.style.alignItems = "center";
-      delSingleBtn.style.justifyContent = "center";
-      delSingleBtn.style.cursor = "pointer";
-      delSingleBtn.style.lineHeight = "1";
-      delSingleBtn.style.zIndex = "2";
-      delSingleBtn.style.transition = "all 0.2s";
-      delSingleBtn.title = "Delete GIF";
-
-      delSingleBtn.addEventListener("mouseover", () => {
-        delSingleBtn.style.background = "#ef4444";
-        delSingleBtn.style.color = "#ffffff";
-      });
-      delSingleBtn.addEventListener("mouseout", () => {
-        delSingleBtn.style.background = "rgba(0, 0, 0, 0.6)";
-        delSingleBtn.style.color = "#ef4444";
-      });
-
-      delSingleBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        showCustomConfirm(
-          "Delete GIF",
-          "Are you sure you want to delete this custom GIF/video?",
-          async () => {
-            try {
-              const token = TokenStore.getToken();
-              const headers = {};
-              if (token) headers["Authorization"] = `Bearer ${token}`;
-
-              const res = await fetch(`/api/gifs/custom/${gif._id}`, {
-                method: "DELETE",
-                headers
-              });
-
-              if (res.ok) {
-                showToast("GIF deleted successfully", "success");
-                await loadCustomGifsAndTrending(`custom-section-${sectionName}`);
-              } else {
-                showToast("Failed to delete GIF", "error");
-              }
-            } catch (err) {
-              console.error("Delete GIF error:", err);
-              showToast("Failed to delete GIF", "error");
-            }
-          }
-        );
-      });
-
-      itemContainer.appendChild(btn);
-      itemContainer.appendChild(delSingleBtn);
-      container.appendChild(itemContainer);
-    });
   }
 
   function filterCustomSectionGifs(sectionName, query) {
-    renderCustomSectionGifs(sectionName, query);
+    const cacheKey = `custom:${sectionName}`;
+    if (!gifCache[cacheKey]) return;
+
+    const container = $("custom-section-grid-container");
+    if (!container) return;
+
+    if (!query) {
+      renderCustomGifsFromCache(cacheKey);
+      return;
+    }
+
+    const q = query.toLowerCase();
+    const filtered = gifCache[cacheKey].gifs.filter(cg => (cg.fileName || "").toLowerCase().includes(q));
+
+    container.innerHTML = "";
+
+    if (filtered.length > 0) {
+      filtered.forEach(gif => {
+        const item = createCustomGifItem(gif, sectionName);
+        container.appendChild(item);
+      });
+    } else {
+      container.innerHTML = `<div class="emoji-no-results">No matching custom GIFs found</div>`;
+    }
   }
 
   function openUploadModal(preselectedSection) {

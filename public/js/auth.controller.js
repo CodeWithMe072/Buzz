@@ -270,13 +270,12 @@ async function getICETurn() {
   const res = await apiRequest("GET", `/api/webrtc/ice-servers`);
   return { Data: res?.data, code: res?.status };
 }
-async function getGifs() {
-  const res = await apiRequest("GET", `/api/gifs/trending`);
-  console.log(res)
+async function getGifs(limit = 14, offset = 0) {
+  const res = await apiRequest("GET", `/api/gifs/trending?limit=${limit}&offset=${offset}`);
   return { Data: res?.data, code: res?.status };
 }
-async function getSearchGif(query) {
-  const res = await apiRequest("GET", `/api/gifs/search?q=${encodeURIComponent(query)}`);
+async function getSearchGif(query, limit = 14, offset = 0) {
+  const res = await apiRequest("GET", `/api/gifs/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`);
   return { Data: res?.data, code: res?.status };
 }
 

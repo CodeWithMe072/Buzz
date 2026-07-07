@@ -253,24 +253,27 @@ const FALLBACK_GIFS = [
 ];
 
 export const getTrendingGifs = async (req, res) => {
-  // try {
-  //   const apiKey = process.env.GIPHY_API_KEY;
-  //   if (apiKey) {
-  //     const response = await fetch(`https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=24&rating=g`);
-  //     if (response.ok) {
-  //       const json = await response.json();
-  //       return res.json(json);
-  //     } else {
-  //       const errJson = await response.json().catch(() => ({}));
-  //       console.warn("[Giphy API Warning] Trending request failed:", errJson);
-  //     }
-  //   }
-  // } catch (err) {
-  //   console.error("[getTrendingGifs] error fetching Giphy:", err);
-  // }
+  const limit = parseInt(req.query.limit) || 14;
+  const offset = parseInt(req.query.offset) || 0;
+
+  try {
+    const apiKey = process.env.GIPHY_API_KEY;
+    if (apiKey) {
+      const response = await fetch(`https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=${limit}&offset=${offset}&rating=g`);
+      if (response.ok) {
+        const json = await response.json();
+        return res.json(json);
+      } else {
+        const errJson = await response.json().catch(() => ({}));
+        console.warn("[Giphy API Warning] Trending request failed:", errJson);
+      }
+    }
+  } catch (err) {
+    console.error("[getTrendingGifs] error fetching Giphy:", err);
+  }
 
   // Fallback if no apiKey is set, or if it failed/banned
-  const fallbackData = FALLBACK_GIFS.map(g => ({
+  const fallbackData = FALLBACK_GIFS.slice(offset, offset + limit).map(g => ({
     images: {
       fixed_height: { url: g.url },
       fixed_height_downsampled: { url: g.url }
@@ -280,25 +283,27 @@ export const getTrendingGifs = async (req, res) => {
 };
 
 export const searchGifs = async (req, res) => {
-  // try {
-  //   const { q } = req.query;
-  //   const apiKey = process.env.GIPHY_API_KEY;
-  //   if (apiKey && q) {
-  //     const response = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=24&rating=g`);
-  //     if (response.ok) {
-  //       const json = await response.json();
-  //       return res.json(json);
-  //     } else {
-  //       const errJson = await response.json().catch(() => ({}));
-  //       console.warn("[Giphy API Warning] Search request failed:", errJson);
-  //     }
-  //   }
-  // } catch (err) {
-  //   console.error("[searchGifs] error fetching Giphy:", err);
-  // }
+  const { q } = req.query;
+  const limit = parseInt(req.query.limit) || 14;
+  const offset = parseInt(req.query.offset) || 0;
+
+  try {
+    const apiKey = process.env.GIPHY_API_KEY;
+    if (apiKey && q) {
+      const response = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}&rating=g`);
+      if (response.ok) {
+        const json = await response.json();
+        return res.json(json);
+      } else {
+        const errJson = await response.json().catch(() => ({}));
+        console.warn("[Giphy API Warning] Search request failed:", errJson);
+      }
+    }
+  } catch (err) {
+    console.error("[searchGifs] error fetching Giphy:", err);
+  }
 
   // Fallback search
-  const { q } = req.query;
   const searchStr = (q || "").toLowerCase().trim();
   let filtered = FALLBACK_GIFS;
   if (searchStr) {
@@ -306,7 +311,7 @@ export const searchGifs = async (req, res) => {
       g.tags.some(tag => tag.includes(searchStr))
     );
   }
-  const fallbackData = filtered.map(g => ({
+  const fallbackData = filtered.slice(offset, offset + limit).map(g => ({
     images: {
       fixed_height: { url: g.url },
       fixed_height_downsampled: { url: g.url }

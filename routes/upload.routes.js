@@ -524,7 +524,22 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
 
 router.get("/api/gifs/custom", protect, async (req, res) => {
     try {
-        const gifs = await CustomGif.find({ user: req.user._id }).sort({ createdAt: -1 });
+        if (req.query.sectionsOnly === "true") {
+            const sections = await CustomGif.distinct("section", { user: req.user._id });
+            return res.json({ status: true, data: sections });
+        }
+
+        const section = req.query.section || "My GIFs";
+        const limit = parseInt(req.query.limit) || 14;
+        const offset = parseInt(req.query.offset) || 0;
+
+        const query = { user: req.user._id, section };
+
+        const gifs = await CustomGif.find(query)
+            .sort({ createdAt: -1 })
+            .skip(offset)
+            .limit(limit);
+
         res.json({ status: true, data: gifs });
     } catch (err) {
         console.error("[gifs/custom] error:", err);
