@@ -5,6 +5,11 @@ import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
 import http from "http";
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import { redis } from "./lib/redis.js";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
+import RedisStore from "rate-limit-redis";
 
 import { clientOrigins, isProd } from "./config/env.js";
 import { connectMongo } from "./config/mongo.js";
@@ -17,7 +22,8 @@ import { startMessageStatusSyncJob } from "./jobs/messageStatusSync.js";
 import webrtcRoutes from "./routes/webrtc.routes.js";
 import componentRoutes from "./routes/component.routes.js";
 import { protect, readUserFromCookie } from "./middleware/auth.middleware.js";
-import { csrfOriginGuard } from "./middleware/security.middleware.js";
+import { csrfOriginGuard, advancedSecurityLimiter } from "./middleware/security.middleware.js";
+import crypto from "crypto";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,10 +41,31 @@ const io = new Server(server, {
   pingTimeout: 30000,
   pingInterval: 20000,
 });
+
+// Configure Socket.io Redis Adapter with separate pub/sub connections
+const pubClient = redis.duplicate();
+const subClient = redis.duplicate();
+io.adapter(createAdapter(pubClient, subClient));
+
 const PORT = process.env.PORT || 5500;
 
 /* ---------- Database ---------- */
 await connectMongo();
+
+/* ---------- Compression ---------- */
+app.use(compression());
+
+/* ---------- Cookies & Authentication Parsing ---------- */
+app.use(cookieParser());
+app.use(readUserFromCookie);
+
+/* ---------- Global Rate Limiter (Redis-backed Account & Device Security Limiter) ---------- */
+const limiter = advancedSecurityLimiter({
+  keyPrefix: "global",
+  windowSeconds: 60,
+  max: 200, // Limit each client IP/user/device to 200 requests per minute globally
+});
+app.use(limiter);
 
 /* ---------- CORS ---------- */
 app.use(cors({
@@ -50,7 +77,6 @@ app.use(cors({
 /* ---------- Body Parsing ---------- */
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
-app.use(cookieParser());
 app.use(csrfOriginGuard(clientOrigins));
 
 /* ---------- Static files with Cache-Control ---------- */
@@ -76,14 +102,23 @@ app.set("views", path.join(__dirname, "views"));
 
 /* ---------- Page routes ---------- */
 // All pages are served from index.ejs — client-side JS handles screens
-app.get("/", readUserFromCookie, (req, res) => {
-  const user = req.user
-  let isServerLogin = true
-  if (!user) {
-    isServerLogin = false
+app.get("/", (req, res) => {
+  // Ensure they have a device ID cookie
+  if (!req.cookies?.deviceId) {
+    const newDeviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+    res.cookie("deviceId", newDeviceId, {
+      httpOnly: true,
+      secure: isProd,
+      maxAge: 365 * 24 * 60 * 60 * 1000 // 1 year
+    });
   }
-  res.render("index", { isShowDashboard: user?.showDashboard ?? true, isServerLogin })
 
+  const user = req.user;
+  let isServerLogin = true;
+  if (!user) {
+    isServerLogin = false;
+  }
+  res.render("index", { isShowDashboard: user?.showDashboard ?? true, isServerLogin });
 });
 
 // Redirect any other page hit back to "/" so the SPA handles it

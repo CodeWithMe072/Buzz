@@ -154,6 +154,7 @@ const messageSchema = new mongoose.Schema(
 
 /* ---------- Compound indexes ---------- */
 messageSchema.index({ from: 1, to: 1, createdAt: -1 });
+messageSchema.index({ to: 1, from: 1, createdAt: -1 });
 messageSchema.index({ to: 1, createdAt: -1 });
 messageSchema.index({ deletedFor: 1 });
 

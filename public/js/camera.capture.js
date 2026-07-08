@@ -14,6 +14,7 @@
     let capturedBlob = null;
     let capturedFileType = ""; // "image/jpeg" or "video/webm"
     let currentFlashMode = "off"; // "off", "on", "auto"
+    let currentDraftId = null;
     
     // Story Viewer Timers
     let storyDurationTimer = null;
@@ -101,7 +102,14 @@
         const retakeBtn = document.getElementById("camera-preview-retake-btn");
         if (retakeBtn && retakeBtn.dataset.listenerAttached !== "true") {
             retakeBtn.dataset.listenerAttached = "true";
-            retakeBtn.addEventListener("click", resetCameraCaptureToLive);
+            retakeBtn.addEventListener("click", () => resetCameraCaptureToLive(true));
+        }
+
+        // Save to Draft Action Button
+        const saveDraftBtn = document.getElementById("camera-preview-draft-btn");
+        if (saveDraftBtn && saveDraftBtn.dataset.listenerAttached !== "true") {
+            saveDraftBtn.dataset.listenerAttached = "true";
+            saveDraftBtn.addEventListener("click", saveManualDraft);
         }
 
         // Send Captured File to Chat Action Button
@@ -109,6 +117,20 @@
         if (sendBtn && sendBtn.dataset.listenerAttached !== "true") {
             sendBtn.dataset.listenerAttached = "true";
             sendBtn.addEventListener("click", sendCapturedMedia);
+        }
+
+        // Drafts Gallery Button
+        const draftsBtn = document.getElementById("camera-drafts-btn");
+        if (draftsBtn && draftsBtn.dataset.listenerAttached !== "true") {
+            draftsBtn.dataset.listenerAttached = "true";
+            draftsBtn.addEventListener("click", openDraftsGalleryOverlay);
+        }
+
+        // Drafts Gallery Close Button
+        const draftsCloseBtn = document.getElementById("camera-drafts-close-btn");
+        if (draftsCloseBtn && draftsCloseBtn.dataset.listenerAttached !== "true") {
+            draftsCloseBtn.dataset.listenerAttached = "true";
+            draftsCloseBtn.addEventListener("click", closeDraftsGalleryOverlay);
         }
 
         // Disappearing Story Viewer Close Actions
@@ -134,6 +156,7 @@
 
         overlay.style.display = "flex";
         setCaptureMode("photo"); // reset default mode
+        updateDraftsBadgeCount();
         await startLiveCameraStream();
     }
 
@@ -732,9 +755,18 @@
         const previewControls = document.getElementById("camera-preview-controls-section");
         if (actionControls) actionControls.style.display = "none";
         if (previewControls) previewControls.style.display = "flex";
+
+        if (!currentDraftId) {
+            currentDraftId = generateId();
+        }
+        saveCameraDraft(currentDraftId, {
+            blob: capturedBlob,
+            type: capturedFileType.includes("video") ? "video" : "image",
+            status: "pending_preview"
+        });
     }
 
-    function resetCameraCaptureToLive() {
+    function resetCameraCaptureToLive(shouldDeleteDraft = false) {
         const actionControls = document.getElementById("camera-capture-controls-section");
         const previewControls = document.getElementById("camera-preview-controls-section");
         const imgPreview = document.getElementById("camera-capture-img-preview");
@@ -758,6 +790,12 @@
         currentFilter = "normal";
         selectCameraFilter("normal");
 
+        if (currentDraftId) {
+            if (shouldDeleteDraft === true) {
+                deleteCameraDraft(currentDraftId);
+            }
+            currentDraftId = null;
+        }
 
         capturedBlob = null;
         capturedFileType = "";
@@ -775,6 +813,11 @@
 
     async function sendCapturedMedia() {
         if (!capturedBlob || !State.activeChat) return;
+
+        // Transition draft to queued state immediately so it leaves drafts gallery & count
+        if (currentDraftId) {
+            await saveCameraDraft(currentDraftId, { status: "queued" });
+        }
 
         const sendBtn = document.getElementById("camera-preview-send-btn");
         if (sendBtn) {
@@ -805,7 +848,7 @@
     async function uploadCapturedDisappearingMedia(file) {
         const to = State.activeChat;
         const mediaType = file.type.startsWith("image/") ? "image" : "video";
-        const tempId = generateId();
+        const tempId = currentDraftId || generateId();
 
         const message = {
             tempId,
@@ -845,7 +888,15 @@
         UploadManager.add(async () => {
             const controller = new AbortController();
             UploadControllers[tempId] = controller;
-            UploadQueue.add(tempId, { tempId, receiver: to, file, type: mediaType });
+            UploadQueue.add(tempId, { 
+                tempId, 
+                receiver: to, 
+                file, 
+                type: mediaType,
+                isDisappearing: true,
+                cameraFacing: message.cameraFacing,
+                cameraFilter: message.cameraFilter
+            });
 
             try {
                 // Chunk upload helper from input.js
@@ -895,6 +946,14 @@
                 UploadQueue.remove(tempId);
             } catch (err) {
                 updateMessageByTempId(tempId, { uploadStatus: "failed" });
+                if (window.IndexedDBQueueService) {
+                    window.IndexedDBQueueService.getMessage(tempId).then(record => {
+                        if (record) {
+                            record.status = "failed_upload";
+                            window.IndexedDBQueueService.saveMessage(record);
+                        }
+                    }).catch(console.error);
+                }
                 throw err;
             } finally {
                 delete UploadControllers[tempId];
@@ -1255,6 +1314,263 @@
             const valEl = day.querySelector(".dynamic-day-val");
             if (valEl) valEl.textContent = dayStr;
             day.style.display = "block";
+        }
+    }
+
+    async function saveCameraDraft(draftId, details) {
+        if (!window.IndexedDBQueueService) return;
+
+        try {
+            let record = await window.IndexedDBQueueService.getMessage(draftId);
+            
+            if (record) {
+                if (details.status) record.status = details.status;
+                if (details.blob) {
+                    record.mediaBlob = details.blob;
+                    record.mediaMeta.fileSize = details.blob.size;
+                    record.mediaMeta.mimeType = details.blob.type;
+                }
+                await window.IndexedDBQueueService.saveMessage(record);
+            } else {
+                const fileId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+                const isVideo = details.type === "video";
+                const extension = details.blob?.type?.includes("video") ? "webm" : "jpg";
+                const fileName = `captured-story-${Date.now()}.${extension}`;
+
+                record = {
+                    localId: draftId,
+                    conversationId: State.activeChat || "drafts",
+                    type: details.type,
+                    payload: null,
+                    mediaBlob: details.blob,
+                    fileId: fileId,
+                    mediaMeta: {
+                        fileName: fileName,
+                        fileSize: details.blob?.size || 0,
+                        mimeType: details.blob?.type || (isVideo ? "video/webm" : "image/jpeg"),
+                        replyTo: null,
+                        caption: null,
+                        cover: null,
+                        thumb: null,
+                        duration: null,
+                        fileId: fileId,
+                        isDisappearing: true,
+                        cameraFacing: currentCameraFacing,
+                        cameraFilter: currentFilter
+                    },
+                    status: details.status || "pending_preview",
+                    chunkTotal: details.blob ? Math.ceil(details.blob.size / (2 * 1024 * 1024)) : null,
+                    chunksAcked: [],
+                    createdAt: Date.now(),
+                    retryCount: 0
+                };
+                await window.IndexedDBQueueService.saveMessage(record);
+            }
+            updateDraftsBadgeCount();
+        } catch (err) {
+            console.error("Failed to save camera draft:", err);
+        }
+    }
+
+    async function deleteCameraDraft(draftId) {
+        if (!window.IndexedDBQueueService) return;
+        try {
+            await window.IndexedDBQueueService.deleteDraft(draftId);
+            updateDraftsBadgeCount();
+        } catch (err) {
+            console.error("Failed to delete draft:", err);
+        }
+    }
+
+    async function updateDraftsBadgeCount() {
+        const badge = document.getElementById("camera-drafts-badge");
+        if (!badge || !window.IndexedDBQueueService) return;
+        
+        try {
+            const drafts = await window.IndexedDBQueueService.getAllDrafts();
+            const count = drafts.length;
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = "flex";
+            } else {
+                badge.style.display = "none";
+            }
+        } catch (err) {
+            console.error("Failed to update drafts badge:", err);
+        }
+    }
+
+    async function renderDraftsGallery() {
+        const grid = document.getElementById("camera-drafts-grid");
+        const emptyState = document.getElementById("camera-drafts-empty");
+        if (!grid || !window.IndexedDBQueueService) return;
+
+        grid.innerHTML = "";
+        
+        try {
+            const drafts = await window.IndexedDBQueueService.getAllDrafts();
+            if (drafts.length === 0) {
+                grid.style.display = "none";
+                if (emptyState) emptyState.style.display = "flex";
+                return;
+            }
+
+            grid.style.display = "grid";
+            if (emptyState) emptyState.style.display = "none";
+
+            drafts.forEach(draft => {
+                const item = document.createElement("div");
+                item.className = "draft-item";
+                item.style.cssText = `
+                    position: relative;
+                    aspect-ratio: 9/16;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    background: #1c1c1e;
+                    border: 1px solid rgba(255,255,255,0.1);
+                    cursor: pointer;
+                `;
+
+                let statusLabel = "";
+                let statusBg = "rgba(0,0,0,0.6)";
+                if (draft.status === "pending_preview") {
+                    statusLabel = "Preview";
+                    statusBg = "rgba(168, 85, 247, 0.85)";
+                } else if (draft.status === "manual_draft") {
+                    statusLabel = "Draft";
+                    statusBg = "rgba(59, 130, 246, 0.85)";
+                } else if (draft.status === "failed_upload") {
+                    statusLabel = "Failed";
+                    statusBg = "rgba(239, 68, 68, 0.85)";
+                }
+
+                let mediaUrl = "";
+                if (draft.mediaBlob) {
+                    mediaUrl = URL.createObjectURL(draft.mediaBlob);
+                }
+
+                if (draft.type === "video") {
+                    item.innerHTML = `
+                        <video src="${mediaUrl}" muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+                        <div style="position: absolute; inset: 0; background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.8));"></div>
+                        <span style="position: absolute; top: 8px; left: 8px; font-size: 10px; font-weight: 700; background: ${statusBg}; color: white; padding: 2px 6px; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.5px;">${statusLabel}</span>
+                        <span style="position: absolute; bottom: 8px; left: 8px; display: flex; align-items: center; gap: 4px; font-size: 10px; color: #aaa;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                            </svg>
+                            ${new Date(draft.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                        </span>
+                        <button class="delete-draft-btn" data-id="${draft.localId}" style="position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.7); border: none; color: #ff4d4d; width: 24px; height: 24px; border-radius: 50%; font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10;">&times;</button>
+                    `;
+                } else {
+                    item.innerHTML = `
+                        <img src="${mediaUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
+                        <div style="position: absolute; inset: 0; background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.8));"></div>
+                        <span style="position: absolute; top: 8px; left: 8px; font-size: 10px; font-weight: 700; background: ${statusBg}; color: white; padding: 2px 6px; border-radius: 8px; text-transform: uppercase; letter-spacing: 0.5px;">${statusLabel}</span>
+                        <span style="position: absolute; bottom: 8px; left: 8px; display: flex; align-items: center; gap: 4px; font-size: 10px; color: #aaa;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                            </svg>
+                            ${new Date(draft.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                        </span>
+                        <button class="delete-draft-btn" data-id="${draft.localId}" style="position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.7); border: none; color: #ff4d4d; width: 24px; height: 24px; border-radius: 50%; font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10;">&times;</button>
+                    `;
+                }
+
+                const delBtn = item.querySelector(".delete-draft-btn");
+                delBtn.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    const draftId = delBtn.dataset.id;
+                    await deleteCameraDraft(draftId);
+                    renderDraftsGallery();
+                });
+
+                item.addEventListener("click", () => {
+                    openDraftInPreview(draft);
+                });
+
+                grid.appendChild(item);
+            });
+        } catch (err) {
+            console.error("Failed to render drafts gallery:", err);
+        }
+    }
+
+    function openDraftInPreview(draft) {
+        capturedBlob = draft.mediaBlob;
+        capturedFileType = draft.mediaMeta?.mimeType || (draft.type === "video" ? "video/webm" : "image/jpeg");
+        currentDraftId = draft.localId;
+        currentCameraFacing = draft.mediaMeta?.cameraFacing || "user";
+        currentFilter = draft.mediaMeta?.cameraFilter || "normal";
+
+        closeDraftsGalleryOverlay();
+
+        const imgPreview = document.getElementById("camera-capture-img-preview");
+        const videoPreview = document.getElementById("camera-capture-video-preview");
+        const videoEl = document.getElementById("camera-capture-video");
+
+        if (videoEl) videoEl.style.display = "none";
+
+        const objectUrl = URL.createObjectURL(capturedBlob);
+        if (draft.type === "video") {
+            if (videoPreview) {
+                videoPreview.src = objectUrl;
+                videoPreview.style.display = "block";
+                if (currentCameraFacing === "user") {
+                    videoPreview.classList.add("mirrored-media");
+                } else {
+                    videoPreview.classList.remove("mirrored-media");
+                }
+                videoPreview.play();
+            }
+            if (imgPreview) {
+                imgPreview.src = "";
+                imgPreview.style.display = "none";
+            }
+        } else {
+            if (imgPreview) {
+                imgPreview.src = objectUrl;
+                imgPreview.style.display = "block";
+            }
+            if (videoPreview) {
+                videoPreview.pause();
+                videoPreview.src = "";
+                videoPreview.style.display = "none";
+            }
+        }
+
+        updateCameraOverlayVisibility(false);
+        showPreviewStateControls();
+    }
+
+    function openDraftsGalleryOverlay() {
+        const overlay = document.getElementById("camera-drafts-overlay");
+        if (overlay) {
+            overlay.style.display = "flex";
+            renderDraftsGallery();
+        }
+    }
+
+    function closeDraftsGalleryOverlay() {
+        const overlay = document.getElementById("camera-drafts-overlay");
+        if (overlay) {
+            overlay.style.display = "none";
+        }
+    }
+
+    async function saveManualDraft() {
+        if (!currentDraftId) return;
+        
+        try {
+            await saveCameraDraft(currentDraftId, { status: "manual_draft" });
+            showToast("Saved to Drafts", "success");
+            closeCameraCaptureOverlay();
+        } catch (err) {
+            console.error("Failed to save manual draft:", err);
+            showToast("Failed to save draft", "error");
         }
     }
 

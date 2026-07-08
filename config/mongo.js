@@ -10,8 +10,12 @@ try {
 
 export const connectMongo = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("[MongoDB] Connected");
+    const maxPoolSize = parseInt(process.env.MONGO_MAX_POOL_SIZE) || 20;
+    await mongoose.connect(process.env.MONGO_URI, {
+      maxPoolSize,
+      minPoolSize: 10,
+    });
+    console.log(`[MongoDB] Connected (poolSize: ${maxPoolSize})`);
   } catch (err) {
     console.error("[MongoDB] Connection failed:", err.message);
     process.exit(1);

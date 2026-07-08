@@ -3,6 +3,22 @@ import { Connection } from "../models/connection.model.js";
 import { User } from "../models/user.model.js";
 import { redis } from "../lib/redis.js";
 
+// Cache invalidation helper
+export const invalidateConnectionCache = async (userId1, userId2) => {
+  try {
+    if (userId1) {
+      await redis.del(`cache:connections:${userId1.toString()}`);
+      await redis.del(`cache:me:${userId1.toString()}`);
+    }
+    if (userId2) {
+      await redis.del(`cache:connections:${userId2.toString()}`);
+      await redis.del(`cache:me:${userId2.toString()}`);
+    }
+  } catch (err) {
+    console.error("[invalidateConnectionCache] error:", err.message);
+  }
+};
+
 /* ═══════════════════════════════════════════════════════════
    SEND REQUEST
    POST /connections/send
@@ -57,6 +73,8 @@ export const sendRequest = async (req, res) => {
       sender: senderId,
       receiver: receiverId,
     });
+
+    await invalidateConnectionCache(senderId, receiverId);
 
     res.status(201).json({
       status: true,
@@ -117,6 +135,8 @@ export const respondToRequest = async (req, res) => {
     connection.status = action === "accept" ? "accepted" : "rejected";
     await connection.save();
 
+    await invalidateConnectionCache(connection.sender, connection.receiver);
+
     res.json({
       status: true,
       message: `Request ${connection.status}`,
@@ -137,10 +157,16 @@ export const respondToRequest = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const listConnections = async (req, res) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user._id.toString();
+    const cacheKey = `cache:connections:${userId}`;
+
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
 
     const connections = await Connection.find({
-      $or: [{ sender: userId }, { receiver: userId }],
+      $or: [{ sender: req.user._id }, { receiver: req.user._id }],
       status: "accepted",
     })
       .populate("sender", "_id username avatar lastSeen")
@@ -150,7 +176,7 @@ export const listConnections = async (req, res) => {
 
     // Normalise: always return the OTHER person, not me
     const contacts = connections.map((c) => {
-      const isMe = c.sender._id.toString() === userId.toString();
+      const isMe = c.sender._id.toString() === userId;
       const other = isMe ? c.receiver : c.sender;
       return {
         connectionId: c._id.toString(),
@@ -164,7 +190,11 @@ export const listConnections = async (req, res) => {
       };
     });
 
-    res.json({ status: true, count: contacts.length, contacts });
+    const responsePayload = { status: true, count: contacts.length, contacts };
+
+    await redis.setex(cacheKey, 300, JSON.stringify(responsePayload));
+
+    res.json(responsePayload);
 
   } catch (err) {
     console.error("[ListConnections]", err);
@@ -307,7 +337,12 @@ export const removeConnection = async (req, res) => {
       return res.status(404).json({ status: false, message: "Connection not found" });
     }
 
+    const sender = connection.sender;
+    const receiver = connection.receiver;
+
     await connection.deleteOne();
+
+    await invalidateConnectionCache(sender, receiver);
 
     res.json({ status: true, message: "Connection removed" });
 

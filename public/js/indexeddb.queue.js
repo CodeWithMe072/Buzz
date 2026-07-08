@@ -35,6 +35,19 @@ const IndexedDBQueueService = {
   },
 
   async saveMessage(msg) {
+    // If msg has a mediaBlob that is a Blob or File, serialize it to ArrayBuffer for persistence
+    if (msg.mediaBlob && (msg.mediaBlob instanceof Blob || msg.mediaBlob instanceof File)) {
+      try {
+        const arrayBuffer = await msg.mediaBlob.arrayBuffer();
+        msg.mediaArrayBuffer = arrayBuffer;
+        msg.mediaMimeType = msg.mediaBlob.type;
+        msg.mediaFileName = msg.mediaBlob.name || `capture-${Date.now()}`;
+        delete msg.mediaBlob;
+      } catch (err) {
+        console.error("[IndexedDB] Failed to serialize Blob to ArrayBuffer:", err);
+      }
+    }
+
     return new Promise((resolve, reject) => {
       try {
         const store = this.getStore("readwrite");
@@ -65,7 +78,13 @@ const IndexedDBQueueService = {
       try {
         const store = this.getStore("readonly");
         const request = store.get(localId);
-        request.onsuccess = () => resolve(request.result || null);
+        request.onsuccess = () => {
+          const msg = request.result || null;
+          if (msg && msg.mediaArrayBuffer) {
+            msg.mediaBlob = new File([msg.mediaArrayBuffer], msg.mediaFileName || "file", { type: msg.mediaMimeType });
+          }
+          resolve(msg);
+        };
         request.onerror = (e) => reject(e.target.error);
       } catch (err) {
         reject(err);
@@ -81,8 +100,14 @@ const IndexedDBQueueService = {
         request.onsuccess = () => {
           const all = request.result || [];
           const unsent = all
-            .filter(msg => msg.status !== "sent")
+            .filter(msg => msg.status !== "sent" && msg.status !== "manual_draft" && msg.status !== "pending_preview")
             .sort((a, b) => a.createdAt - b.createdAt);
+          
+          unsent.forEach(msg => {
+            if (msg.mediaArrayBuffer) {
+              msg.mediaBlob = new File([msg.mediaArrayBuffer], msg.mediaFileName || "file", { type: msg.mediaMimeType });
+            }
+          });
           resolve(unsent);
         };
         request.onerror = (e) => reject(e.target.error);
@@ -90,6 +115,35 @@ const IndexedDBQueueService = {
         reject(err);
       }
     });
+  },
+
+  async getAllDrafts() {
+    return new Promise((resolve, reject) => {
+      try {
+        const store = this.getStore("readonly");
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const all = request.result || [];
+          const drafts = all
+            .filter(msg => ["pending_preview", "manual_draft"].includes(msg.status))
+            .sort((a, b) => b.createdAt - a.createdAt); // newest first
+
+          drafts.forEach(msg => {
+            if (msg.mediaArrayBuffer) {
+              msg.mediaBlob = new File([msg.mediaArrayBuffer], msg.mediaFileName || "file", { type: msg.mediaMimeType });
+            }
+          });
+          resolve(drafts);
+        };
+        request.onerror = (e) => reject(e.target.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  },
+
+  async deleteDraft(draftId) {
+    return this.deleteMessage(draftId);
   }
 };
 

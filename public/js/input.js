@@ -297,6 +297,7 @@ async function uploadMedia(msgId, receiver, file) {
 
         updateMediaDOM(msgId, { content: realUrl, cover, thumb, type: realType, uploadStatus: "uploaded", fileName: file.name, fileSize: file.size, duration });
 
+        const queueItem = typeof UploadQueue !== "undefined" ? UploadQueue.get(msgId) : null;
         if (socket && socket.connected) {
             socket.emit("private_message", {
                 message: {
@@ -311,7 +312,10 @@ async function uploadMedia(msgId, receiver, file) {
                     clientTime: msg?.clientTime || Date.now(),
                     cover,
                     thumb,
-                    duration
+                    duration,
+                    isDisappearing: queueItem?.isDisappearing || msg?.isDisappearing || false,
+                    cameraFacing: queueItem?.cameraFacing || msg?.cameraFacing || null,
+                    cameraFilter: queueItem?.cameraFilter || msg?.cameraFilter || null
                 }
             });
         }

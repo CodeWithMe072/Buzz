@@ -124,7 +124,7 @@ const UploadQueue = {
     if (window.IndexedDBQueueService) {
       try {
         const unsent = await IndexedDBQueueService.getAllUnsent();
-        const mediaUnsent = unsent.filter(m => m.status === "uploading" || (m.status === "pending" && m.mediaBlob));
+        const mediaUnsent = unsent.filter(m => m.status === "uploading" || m.status === "queued" || m.status === "failed_upload" || (m.status === "pending" && m.mediaBlob));
         for (const m of mediaUnsent) {
           this._queue[m.localId] = {
             msgId: m.localId,
@@ -134,7 +134,10 @@ const UploadQueue = {
             blob: m.mediaBlob,
             type: m.type,
             fileId: m.fileId || null,
-            retries: m.retryCount || 0
+            retries: m.retryCount || 0,
+            isDisappearing: m.mediaMeta?.isDisappearing || false,
+            cameraFacing: m.mediaMeta?.cameraFacing || null,
+            cameraFilter: m.mediaMeta?.cameraFilter || null
           };
         }
       } catch (err) {
@@ -164,7 +167,10 @@ const UploadQueue = {
           cover: data.cover || null,
           thumb: data.thumb || null,
           duration: data.duration || null,
-          fileId: fileId
+          fileId: fileId,
+          isDisappearing: data.isDisappearing || false,
+          cameraFacing: data.cameraFacing || null,
+          cameraFilter: data.cameraFilter || null
         },
         status: "uploading",
         chunkTotal: data.file ? Math.ceil(data.file.size / (2 * 1024 * 1024)) : null,

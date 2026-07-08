@@ -18,6 +18,17 @@ const s3 = new S3Client({
   },
 });
 const BUCKET = process.env.R2_BUCKET;
+
+// Cache invalidation helper
+export const invalidateUserCache = async (userId) => {
+  if (!userId) return;
+  const userIdStr = userId.toString();
+  try {
+    await redis.del(`cache:me:${userIdStr}`);
+  } catch (err) {
+    console.error("[invalidateUserCache] error:", err.message);
+  }
+};
 const PUBLIC_BASE_URL = process.env.R2_PUBLIC_URL;
 
 /* ═══════════════════════════════════════════════════════════
@@ -265,6 +276,14 @@ export const refresh = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const me = async (req, res) => {
   try {
+    const userId = req.user._id.toString();
+    const cacheKey = `cache:me:${userId}`;
+
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      return res.json(JSON.parse(cachedData));
+    }
+
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
       "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends securityLogEnabled securityLogAllowedFriends lastRandomSnapshotAt showDashboard lastSeen createdAt dataUsage"
@@ -297,7 +316,11 @@ export const me = async (req, res) => {
       securityLogAllowedFriends: req.user._id
     }).select("_id username avatar");
 
-    res.json({ status: true, user: userObj, sharedLogsUsers: sharedUsers });
+    const responsePayload = { status: true, user: userObj, sharedLogsUsers: sharedUsers };
+
+    await redis.setex(cacheKey, 3600, JSON.stringify(responsePayload));
+
+    res.json(responsePayload);
 
   } catch (err) {
     console.error("[Me]", err);
@@ -333,6 +356,8 @@ export const updateProfile = async (req, res) => {
       { $set: updates },
       { returnDocument: "after", runValidators: true }
     ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends securityLogEnabled securityLogAllowedFriends showDashboard");
+
+    await invalidateUserCache(req.user._id);
 
     res.json({ status: true, message: "Profile updated", user });
 
@@ -380,6 +405,8 @@ export const changePassword = async (req, res) => {
     user.password = await bcrypt.hash(newPassword, 12);
     await user.save({ validateBeforeSave: false });
 
+    await invalidateUserCache(req.user._id);
+
     // Issue a new token (old one is still technically valid until expiry —
     // for proper invalidation you'd need a token blacklist in Redis)
     const token = generateToken(user._id);
@@ -418,6 +445,8 @@ export const linkTelegram = async (req, res) => {
       $set: { telegramChatId, notificationsEnabled: true },
     });
 
+    await invalidateUserCache(req.user._id);
+
     res.json({ status: true, message: "Telegram linked successfully" });
 
   } catch (err) {
@@ -437,6 +466,8 @@ export const toggleNotifications = async (req, res) => {
     const user = await User.findById(req.user._id).select("notificationsEnabled");
     user.notificationsEnabled = !user.notificationsEnabled;
     await user.save({ validateBeforeSave: false });
+
+    await invalidateUserCache(req.user._id);
 
     res.json({
       status: true,
@@ -495,6 +526,8 @@ export const uploadLogPhoto = async (req, res) => {
       { $push: { capturedPhotos: { $each: [newPhoto], $position: 0 } } },
       { new: true }
     );
+
+    await invalidateUserCache(req.user._id);
 
     // Send realtime notification to whitelisted online friends
     const user = await User.findById(req.user._id).select("username avatar securityLogEnabled securityLogAllowedFriends");
@@ -569,6 +602,8 @@ export const uploadMomentPhoto = async (req, res) => {
       },
       { returnDocument: "after" }
     );
+
+    await invalidateUserCache(req.user._id);
 
     // Send realtime notification to whitelisted online friends
     const user = await User.findById(req.user._id).select("username avatar randomSnapshotAllowedFriends");

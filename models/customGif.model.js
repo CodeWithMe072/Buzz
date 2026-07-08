@@ -30,6 +30,6 @@ const customGifSchema = new mongoose.Schema(
 );
 
 // Compound index to quickly fetch a user's custom gifs in a section
-customGifSchema.index({ user: 1, section: 1 });
+customGifSchema.index({ user: 1, section: 1, createdAt: -1 });
 
 export const CustomGif = mongoose.model("CustomGif", customGifSchema);

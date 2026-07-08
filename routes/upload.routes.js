@@ -20,6 +20,27 @@ import { execFile } from "child_process";
 
 const router = express.Router();
 
+// Cache invalidation helper for custom GIFs
+const invalidateCustomGifCache = async (userId) => {
+  if (!userId) return;
+  const userIdStr = userId.toString();
+  try {
+    await redis.del(`cache:custom_sections:${userIdStr}`);
+    let cursor = "0";
+    const pattern = `cache:custom_gifs:${userIdStr}:*`;
+    do {
+      const reply = await redis.scan(cursor, "MATCH", pattern, "COUNT", 100);
+      cursor = reply[0];
+      const keys = reply[1];
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } while (cursor !== "0");
+  } catch (err) {
+    console.error("[invalidateCustomGifCache] error:", err.message);
+  }
+};
+
 // =============================================================================
 // Cloudflare R2 Client
 // =============================================================================
@@ -487,6 +508,8 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
                     return res.status(400).json({ error: "No GIF, WEBP or Video files found inside the ZIP archive." });
                 }
 
+                await invalidateCustomGifCache(req.user._id);
+
                 return res.json({ status: true, isZip: true, count: uploadedGifs.length, data: uploadedGifs });
             } catch (zipErr) {
                 console.error("[gifs/upload] ZIP extraction error:", zipErr);
@@ -511,6 +534,8 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
             });
             await customGif.save();
 
+            await invalidateCustomGifCache(req.user._id);
+
             res.json({ status: true, data: customGif });
         }
     } catch (err) {
@@ -524,14 +549,30 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
 
 router.get("/api/gifs/custom", protect, async (req, res) => {
     try {
+        const userId = req.user._id.toString();
+
         if (req.query.sectionsOnly === "true") {
+            const cacheKey = `cache:custom_sections:${userId}`;
+            const cachedSections = await redis.get(cacheKey);
+            if (cachedSections) {
+                return res.json(JSON.parse(cachedSections));
+            }
+
             const sections = await CustomGif.distinct("section", { user: req.user._id });
-            return res.json({ status: true, data: sections });
+            const responsePayload = { status: true, data: sections };
+            await redis.setex(cacheKey, 3600, JSON.stringify(responsePayload));
+            return res.json(responsePayload);
         }
 
         const section = req.query.section || "My GIFs";
         const limit = parseInt(req.query.limit) || 14;
         const offset = parseInt(req.query.offset) || 0;
+
+        const cacheKey = `cache:custom_gifs:${userId}:${section}:${limit}:${offset}`;
+        const cachedGifs = await redis.get(cacheKey);
+        if (cachedGifs) {
+            return res.json(JSON.parse(cachedGifs));
+        }
 
         const query = { user: req.user._id, section };
 
@@ -540,7 +581,10 @@ router.get("/api/gifs/custom", protect, async (req, res) => {
             .skip(offset)
             .limit(limit);
 
-        res.json({ status: true, data: gifs });
+        const responsePayload = { status: true, data: gifs };
+        await redis.setex(cacheKey, 3600, JSON.stringify(responsePayload));
+
+        res.json(responsePayload);
     } catch (err) {
         console.error("[gifs/custom] error:", err);
         res.status(500).json({ error: "Failed to fetch custom GIFs" });
@@ -556,6 +600,9 @@ router.delete("/api/gifs/custom/:id", protect, async (req, res) => {
         }
         await deleteFromR2(gif.url);
         await CustomGif.deleteOne({ _id: gif._id });
+
+        await invalidateCustomGifCache(req.user._id);
+
         res.json({ status: true, message: "GIF deleted successfully" });
     } catch (err) {
         console.error("[gifs/delete] error:", err);
@@ -572,6 +619,9 @@ router.delete("/api/gifs/custom/section/:sectionName", protect, async (req, res)
             await deleteFromR2(gif.url);
         }
         await CustomGif.deleteMany({ user: req.user._id, section: sectionName });
+
+        await invalidateCustomGifCache(req.user._id);
+
         res.json({ status: true, message: "Section and its GIFs deleted successfully" });
     } catch (err) {
         console.error("[gifs/deleteSection] error:", err);
@@ -791,31 +841,33 @@ const mediaRateLimiter = async (req, res, next) => {
     }
 };
 
-// In-memory media cache to avoid redundant HeadObject and IV fetches from R2
-const mediaCache = new Map();
-const MAX_CACHE_SIZE = 1000;
-const CACHE_TTL = 3600 * 1000; // 1 hour
-
-function getCachedMedia(key) {
-    const entry = mediaCache.get(key);
-    if (!entry) return null;
-    if (Date.now() - entry.timestamp > CACHE_TTL) {
-        mediaCache.delete(key);
+// Redis-backed media metadata cache helpers to avoid redundant HeadObject and IV fetches from R2
+async function getRedisCachedMediaMetadata(key) {
+    try {
+        const metaStr = await redis.get(`cache:media_metadata:${key}`);
+        if (!metaStr) return null;
+        const parsed = JSON.parse(metaStr);
+        return {
+            iv: Buffer.from(parsed.iv, "hex"),
+            totalEncryptedSize: parsed.totalEncryptedSize,
+            contentType: parsed.contentType
+        };
+    } catch (err) {
+        console.error("[getRedisCachedMediaMetadata] error:", err.message);
         return null;
     }
-    return entry.data;
 }
 
-function setCachedMedia(key, data) {
-    if (mediaCache.size >= MAX_CACHE_SIZE) {
-        // Evict oldest entry
-        const oldestKey = mediaCache.keys().next().value;
-        mediaCache.delete(oldestKey);
+async function setRedisCachedMediaMetadata(key, cached) {
+    try {
+        await redis.setex(`cache:media_metadata:${key}`, 3600, JSON.stringify({
+            iv: cached.iv.toString("hex"),
+            totalEncryptedSize: cached.totalEncryptedSize,
+            contentType: cached.contentType
+        }));
+    } catch (err) {
+        console.error("[setRedisCachedMediaMetadata] error:", err.message);
     }
-    mediaCache.set(key, {
-        data,
-        timestamp: Date.now()
-    });
 }
 
 router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
@@ -886,7 +938,7 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
         const rangeHeader = req.headers.range;
 
         if (rangeHeader) {
-            let cached = getCachedMedia(key);
+            let cached = await getRedisCachedMediaMetadata(key);
             if (!cached) {
                 // Fetch the 16-byte IV from R2
                 const ivResponse = await s3.send(
@@ -920,7 +972,7 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
                     totalEncryptedSize: headInfo.ContentLength,
                     contentType: headInfo.ContentType || "application/octet-stream"
                 };
-                setCachedMedia(key, cached);
+                await setRedisCachedMediaMetadata(key, cached);
             }
 
             const { iv, totalEncryptedSize, contentType } = cached;
@@ -945,6 +997,22 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
             }
 
             const chunkSize = (end - start) + 1;
+
+            // Check Redis for cached decrypted chunk
+            const chunkCacheKey = `cache:media_chunk:${key}:${start}:${end}`;
+            const cachedChunk = await redis.getBuffer(chunkCacheKey).catch(() => null);
+            if (cachedChunk) {
+                res.writeHead(206, {
+                    "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": cachedChunk.length,
+                    "Content-Type": contentType,
+                    "Cache-Control": "public, max-age=31536000",
+                });
+                res.end(cachedChunk);
+                return;
+            }
+
             const blockNumber = Math.floor(start / 16);
             const byteOffset = start % 16;
 
@@ -970,6 +1038,9 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
             const decipher = crypto.createDecipheriv("aes-256-ctr", cipherKey, adjustedIv);
             const decryptedWholeBlock = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
             const finalDecryptedSlice = decryptedWholeBlock.subarray(byteOffset, byteOffset + chunkSize);
+
+            // Store decrypted segment chunk in Redis with a 5-minute (300s) TTL
+            await redis.setex(chunkCacheKey, 300, finalDecryptedSlice).catch(() => {});
 
             res.writeHead(206, {
                 "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
@@ -1191,7 +1262,7 @@ router.get(["/api/media/stream/:token", "/media/stream/:token"], async (req, res
         const rangeHeader = req.headers.range;
 
         if (rangeHeader) {
-            let cached = getCachedMedia(key);
+            let cached = await getRedisCachedMediaMetadata(key);
             if (!cached) {
                 const ivResponse = await s3.send(
                     new GetObjectCommand({
@@ -1223,7 +1294,7 @@ router.get(["/api/media/stream/:token", "/media/stream/:token"], async (req, res
                     totalEncryptedSize: headInfo.ContentLength,
                     contentType: headInfo.ContentType || "application/octet-stream"
                 };
-                setCachedMedia(key, cached);
+                await setRedisCachedMediaMetadata(key, cached);
             }
 
             const { iv, totalEncryptedSize, contentType } = cached;
@@ -1247,6 +1318,22 @@ router.get(["/api/media/stream/:token", "/media/stream/:token"], async (req, res
             }
 
             const chunkSize = (end - start) + 1;
+
+            // Check Redis for cached decrypted chunk
+            const chunkCacheKey = `cache:media_chunk:${key}:${start}:${end}`;
+            const cachedChunk = await redis.getBuffer(chunkCacheKey).catch(() => null);
+            if (cachedChunk) {
+                res.writeHead(206, {
+                    "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": cachedChunk.length,
+                    "Content-Type": contentType,
+                    "Cache-Control": "public, max-age=31536000",
+                });
+                res.end(cachedChunk);
+                return;
+            }
+
             const blockNumber = Math.floor(start / 16);
             const byteOffset = start % 16;
 
@@ -1272,6 +1359,9 @@ router.get(["/api/media/stream/:token", "/media/stream/:token"], async (req, res
             const decipher = crypto.createDecipheriv("aes-256-ctr", cipherKey, adjustedIv);
             const decryptedWholeBlock = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
             const finalDecryptedSlice = decryptedWholeBlock.subarray(byteOffset, byteOffset + chunkSize);
+
+            // Store decrypted segment chunk in Redis with a 5-minute (300s) TTL
+            await redis.setex(chunkCacheKey, 300, finalDecryptedSlice).catch(() => {});
 
             res.writeHead(206, {
                 "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,

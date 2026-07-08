@@ -90,21 +90,123 @@ export function createRateLimiter({
   };
 }
 
-export const authRateLimiter = createRateLimiter({
+export const authRateLimiter = advancedSecurityLimiter({
   keyPrefix: "auth",
   windowSeconds: 15 * 60,
   max: 30,
 });
 
-export const refreshRateLimiter = createRateLimiter({
+export const refreshRateLimiter = advancedSecurityLimiter({
   keyPrefix: "refresh",
   windowSeconds: 5 * 60,
   max: 60,
 });
 
-export const uploadRateLimiter = createRateLimiter({
+export const uploadRateLimiter = advancedSecurityLimiter({
   keyPrefix: "upload",
   windowSeconds: 60,
   max: 120,
-  keyGenerator: (req) => req.user?._id?.toString() || getIp(req),
 });
+
+// Advanced security rate limiter to block IP, Device ID, and User Account on violations
+export function advancedSecurityLimiter({
+  keyPrefix,
+  windowSeconds = 60,
+  max = 100,
+  ipBlockDuration = 3600, // 1 hour block
+  accountBlockDuration = 14400, // 4 hours block
+  deviceBlockDuration = 14400, // 4 hours block
+}) {
+  return async (req, res, next) => {
+    if (process.env.NODE_ENV === "test" || process.env.SKIP_RATE_LIMIT === "true") {
+      return next();
+    }
+
+    const ip = getIp(req);
+    const userId = req.user?._id?.toString();
+    const deviceId = req.headers["x-device-id"] || req.cookies?.deviceId;
+
+    try {
+      // 1. Check if IP is blocked
+      const isIpBlocked = await redis.get(`block:ip:${ip}`);
+      if (isIpBlocked) {
+        const ttl = await redis.ttl(`block:ip:${ip}`);
+        return res.status(429).json({
+          status: false,
+          code: "IP_BLOCKED",
+          message: `Suspected abuse. Your IP is blocked. Try again in ${Math.ceil(ttl / 60)} minutes.`,
+        });
+      }
+
+      // 2. Check if Device ID is blocked
+      if (deviceId) {
+        const isDeviceBlocked = await redis.get(`block:device:${deviceId}`);
+        if (isDeviceBlocked) {
+          const ttl = await redis.ttl(`block:device:${deviceId}`);
+          return res.status(429).json({
+            status: false,
+            code: "DEVICE_BLOCKED",
+            message: `Suspected abuse. This device is blocked. Try again in ${Math.ceil(ttl / 60)} minutes.`,
+          });
+        }
+      }
+
+      // 3. Check if User Account is blocked
+      if (userId) {
+        const isUserBlocked = await redis.get(`block:user:${userId}`);
+        if (isUserBlocked) {
+          const ttl = await redis.ttl(`block:user:${userId}`);
+          return res.status(429).json({
+            status: false,
+            code: "ACCOUNT_BLOCKED",
+            message: `Suspected abuse. Your account is temporarily locked. Try again in ${Math.ceil(ttl / 3600)} hours.`,
+          });
+        }
+      }
+
+      // 4. Rate counter check (IP-based and Account-based)
+      const ipRateKey = `rate:ip:${keyPrefix}:${ip}`;
+      const ipCount = await redis.incr(ipRateKey);
+      if (ipCount === 1) {
+        await redis.expire(ipRateKey, windowSeconds);
+      }
+
+      let userCount = 0;
+      let userRateKey = null;
+      if (userId) {
+        userRateKey = `rate:user:${keyPrefix}:${userId}`;
+        userCount = await redis.incr(userRateKey);
+        if (userCount === 1) {
+          await redis.expire(userRateKey, windowSeconds);
+        }
+      }
+
+      // 5. Trigger blocks if limit exceeded
+      if (ipCount > max || userCount > max) {
+        // Trigger IP block
+        await redis.setex(`block:ip:${ip}`, ipBlockDuration, "true");
+        
+        // Trigger Device block if ID exists
+        if (deviceId) {
+          await redis.setex(`block:device:${deviceId}`, deviceBlockDuration, "true");
+        }
+
+        // Trigger Account block if logged in
+        if (userId) {
+          await redis.setex(`block:user:${userId}`, accountBlockDuration, "true");
+        }
+
+        return res.status(429).json({
+          status: false,
+          code: "LIMIT_EXCEEDED",
+          message: "Rate limit exceeded. Suspicious activity detected, security locks applied.",
+        });
+      }
+
+      next();
+    } catch (err) {
+      console.error("[AdvancedLimiter] Error:", err.message);
+      next();
+    }
+  };
+}
