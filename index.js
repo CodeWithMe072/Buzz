@@ -65,7 +65,7 @@ const limiter = advancedSecurityLimiter({
   windowSeconds: 60,
   max: 200, // Limit each client IP/user/device to 200 requests per minute globally
 });
-app.use(limiter);
+// app.use(limiter);
 
 /* ---------- CORS ---------- */
 app.use(cors({

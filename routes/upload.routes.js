@@ -636,6 +636,13 @@ router.delete("/api/gifs/custom/section/:sectionName", protect, async (req, res)
 router.get("/api/upload-status/:fileId", protect, async (req, res) => {
     try {
         const { fileId } = req.params;
+        
+        // Check if completed in Redis
+        const cachedCompleted = await redis.get(`cache:upload_completed:${fileId}`);
+        if (cachedCompleted) {
+            return res.json({ success: true, completed: true, data: JSON.parse(cachedCompleted) });
+        }
+
         const chunkDir = path.join(os.tmpdir(), "chunks", fileId);
         if (!(await fse.pathExists(chunkDir))) {
             return res.json({ success: true, chunksReceived: [] });
@@ -684,6 +691,12 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
         const { fileId, fileName, mimeType, } = req.body;
         const chunkDir = path.join(os.tmpdir(), "chunks", fileId);
         try {
+            // Check if already completed in Redis
+            const cachedCompleted = await redis.get(`cache:upload_completed:${fileId}`);
+            if (cachedCompleted) {
+                return res.json(JSON.parse(cachedCompleted));
+            }
+
             // =========================================================================
             // Get Chunks & Calculate Total Size
             // =========================================================================
@@ -741,21 +754,14 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
             let thumb_50 = null;
             let duration = null;
 
-            if (isVideo || isAudio || mimeType.startsWith("image/")) {
-                const tempMergedPath = path.join(os.tmpdir(), `merge_${fileId}_${Date.now()}`);
+            if (isVideo || isAudio) {
+                const tempMergedPath = path.join(os.tmpdir(), `${fileId}_merged_temp`);
                 try {
-                    const writeStream = fs.createWriteStream(tempMergedPath);
-                    for (const chunkPath of chunkPaths) {
-                        const chunkData = await fs.promises.readFile(chunkPath);
-                        writeStream.write(chunkData);
-                    }
-                    writeStream.end();
-                    await new Promise((resolve) => writeStream.on("finish", resolve));
-
-                    if (isVideo || mimeType.startsWith("image/")) {
-                        const thumbs = await generateAndUploadThumbnail(tempMergedPath, key, isVideo);
-                        cover_270 = thumbs.cover_270;
-                        thumb_50 = thumbs.thumb_50;
+                    await mergeChunksToFile(chunkPaths, tempMergedPath);
+                    if (isVideo) {
+                        const thumbnails = await generateVideoThumbnails(tempMergedPath, fileId);
+                        cover_270 = thumbnails.cover_270;
+                        thumb_50 = thumbnails.thumb_50;
                     }
 
                     if (isVideo || isAudio) {
@@ -776,35 +782,36 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
             // =========================================================================
             // Response
             // =========================================================================
+            let responseData;
             if (isVideo) {
-                return res.json({
+                responseData = {
                     type: "video",
                     original: url,
                     cover_270: cover_270,
                     thumb_50: thumb_50,
                     duration: duration
-                });
-            }
-            if (isDocument) {
-                return res.json(makeDocumentUrls(url, fileName, totalSize));
-            }
-
-            if (isAudio) {
-                return res.json({
+                };
+            } else if (isDocument) {
+                responseData = makeDocumentUrls(url, fileName, totalSize);
+            } else if (isAudio) {
+                responseData = {
                     type: "audio",
                     original: url,
                     cover_270: null,
                     thumb_50: null,
                     duration: duration
-                });
+                };
+            } else {
+                responseData = {
+                    type: "image",
+                    original: url,
+                    cover_270: cover_270 || url,
+                    thumb_50: thumb_50 || url
+                };
             }
 
-            return res.json({
-                type: "image",
-                original: url,
-                cover_270: cover_270 || url,
-                thumb_50: thumb_50 || url
-            });
+            await redis.setex(`cache:upload_completed:${fileId}`, 86400, JSON.stringify(responseData));
+            return res.json(responseData);
 
         } catch (err) {
             console.error("[complete-upload] error:", err?.name, err?.message);

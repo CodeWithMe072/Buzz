@@ -2213,6 +2213,12 @@ async function syncPendingMessagesFromDB() {
     const unsent = await IndexedDBQueueService.getAllUnsent();
     console.log(`[IndexedDB] Loaded ${unsent.length} unsent messages from DB`);
     for (const dbMsg of unsent) {
+      // Safety net: if it has already been sent or acknowledged, delete it!
+      if (dbMsg.status === "sent" || dbMsg.deliveredAt || dbMsg.mediaMeta?.deliveredAt) {
+        await IndexedDBQueueService.deleteMessage(dbMsg.localId).catch(console.error);
+        continue;
+      }
+
       const chatId = dbMsg.conversationId;
       if (!State.messages[chatId]) State.messages[chatId] = [];
 

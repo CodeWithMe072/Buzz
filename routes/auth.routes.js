@@ -24,8 +24,10 @@ const upload = multer({
 const router = express.Router();
 
 /* --- Public --- */
-router.post("/auth/register", authRateLimiter, register);
-router.post("/auth/login", authRateLimiter, login);
+// router.post("/auth/register", authRateLimiter, register);
+// router.post("/auth/login", authRateLimiter, login);
+router.post("/auth/register" , register);
+router.post("/auth/login", login);
 router.post("/auth/logout", logout);
 router.post("/auth/refresh", refreshRateLimiter, refresh);
 

@@ -124,7 +124,18 @@ const UploadQueue = {
     if (window.IndexedDBQueueService) {
       try {
         const unsent = await IndexedDBQueueService.getAllUnsent();
-        const mediaUnsent = unsent.filter(m => m.status === "uploading" || m.status === "queued" || m.status === "failed_upload" || (m.status === "pending" && m.mediaBlob));
+        
+        // Safety net: filter out and delete any already sent/delivered records
+        const activeUnsent = [];
+        for (const m of unsent) {
+          if (m.status === "sent" || m.deliveredAt || m.mediaMeta?.deliveredAt) {
+            await IndexedDBQueueService.deleteMessage(m.localId).catch(console.error);
+            continue;
+          }
+          activeUnsent.push(m);
+        }
+
+        const mediaUnsent = activeUnsent.filter(m => m.status === "uploading" || m.status === "queued" || m.status === "failed_upload" || (m.status === "pending" && m.mediaBlob));
         for (const m of mediaUnsent) {
           this._queue[m.localId] = {
             msgId: m.localId,

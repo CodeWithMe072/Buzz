@@ -370,6 +370,10 @@ async function uploadFileInChunks(file, msgId) {
         });
         if (res.ok) {
             const statusData = await res.json();
+            if (statusData.completed && statusData.data) {
+                console.log(`[Upload] File ${fileId} was already completed on server. Bypassing upload.`);
+                return statusData.data;
+            }
             serverChunks = statusData.chunksReceived || [];
         }
     } catch (e) {

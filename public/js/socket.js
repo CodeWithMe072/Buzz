@@ -382,6 +382,9 @@ function initSocket() {
   // ── Message ack / delivery / seen ────────────────────────
   socket.on("message_ack", ({ tempId, status }) => {
     OutboxQueue.remove(tempId);
+    if (typeof UploadQueue !== "undefined") {
+      UploadQueue.remove(tempId);
+    }
     updateMessageByTempId(tempId, { status: { sent: true } });
     updateStatusIcon(tempId, { sent: true });
   });
