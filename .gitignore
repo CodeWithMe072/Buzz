@@ -34,7 +34,9 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
+.ocker-compose.loadtest.yml
+Dockerfile
+nginx.loadtest.conf
 # OS files
 .DS_Store
 Thumbs.db
