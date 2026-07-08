@@ -4,6 +4,8 @@ This folder contains the routing layers mapping incoming HTTP request endpoints 
 
 Below is the complete API documentation for all routes, specifying request expectations (headers, query parameters, body formats) and response structures.
 
+
+
 ---
 
 ## 🔒 Security & Request Headers
