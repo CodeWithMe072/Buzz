@@ -757,9 +757,17 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
             if (isVideo || isAudio) {
                 const tempMergedPath = path.join(os.tmpdir(), `${fileId}_merged_temp`);
                 try {
-                    await mergeChunksToFile(chunkPaths, tempMergedPath);
+                    await new Promise((resolve, reject) => {
+                        const writeStream = fse.createWriteStream(tempMergedPath);
+                        const readStream = new MultiFileReadStream(chunkPaths);
+                        readStream.pipe(writeStream);
+                        writeStream.on("finish", resolve);
+                        writeStream.on("error", reject);
+                        readStream.on("error", reject);
+                    });
+
                     if (isVideo) {
-                        const thumbnails = await generateVideoThumbnails(tempMergedPath, fileId);
+                        const thumbnails = await generateAndUploadThumbnail(tempMergedPath, key, true);
                         cover_270 = thumbnails.cover_270;
                         thumb_50 = thumbnails.thumb_50;
                     }

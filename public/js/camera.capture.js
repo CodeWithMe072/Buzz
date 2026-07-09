@@ -814,9 +814,11 @@
     async function sendCapturedMedia() {
         if (!capturedBlob || !State.activeChat) return;
 
+        const draftId = currentDraftId; // Capture the draft ID BEFORE closing the overlay resets it
+
         // Transition draft to queued state immediately so it leaves drafts gallery & count
-        if (currentDraftId) {
-            await saveCameraDraft(currentDraftId, { status: "queued" });
+        if (draftId) {
+            await saveCameraDraft(draftId, { status: "queued" });
         }
 
         const sendBtn = document.getElementById("camera-preview-send-btn");
@@ -832,7 +834,7 @@
         closeCameraCaptureOverlay();
         
         try {
-            await uploadCapturedDisappearingMedia(file);
+            await uploadCapturedDisappearingMedia(file, draftId);
         } catch (err) {
             console.error("Failed to send disappearing media:", err);
             showToast("Failed to upload recorded file", "error");
@@ -845,10 +847,10 @@
         }
     }
 
-    async function uploadCapturedDisappearingMedia(file) {
+    async function uploadCapturedDisappearingMedia(file, draftId) {
         const to = State.activeChat;
         const mediaType = file.type.startsWith("image/") ? "image" : "video";
-        const tempId = currentDraftId || generateId();
+        const tempId = draftId || generateId();
 
         const message = {
             tempId,
