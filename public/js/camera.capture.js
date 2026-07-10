@@ -54,6 +54,8 @@
         }
     }
     window.initCameraCapture = initCameraCapture;
+    window.openCameraCaptureOverlay = openCameraCaptureOverlay;
+    window.closeCameraCaptureOverlay = closeCameraCaptureOverlay;
 
     function bindStaticCameraEvents() {
         // Overlay Close Button
@@ -151,11 +153,38 @@
        CAMERA CONTROL LIFECYCLE
        ============================================================================= */
     async function openCameraCaptureOverlay() {
+        if (typeof bindStaticCameraEvents === "function") {
+            bindStaticCameraEvents();
+        }
         const overlay = document.getElementById("camera-capture-overlay");
         if (!overlay) return;
 
         overlay.style.display = "flex";
         setCaptureMode("photo"); // reset default mode
+        
+        const tabPhoto = document.getElementById("camera-capture-tab-photo");
+        if (tabPhoto && tabPhoto.parentElement) {
+            if (State.cameraMode === "status") {
+                tabPhoto.parentElement.style.display = "none";
+            } else {
+                tabPhoto.parentElement.style.display = "flex";
+            }
+        }
+
+        // Show/hide caption input container
+        const captionContainer = document.getElementById("camera-preview-caption-container");
+        if (captionContainer) {
+            captionContainer.style.display = (State.cameraMode === "status") ? "block" : "none";
+            const captionInput = document.getElementById("camera-preview-caption-input");
+            if (captionInput) captionInput.value = "";
+        }
+        
+        if (State.cameraMode === "status" && window.statusGalleryFile) {
+            // Gallery file preview mode - bypass camera stream initialization
+            updateDraftsBadgeCount();
+            return;
+        }
+
         updateDraftsBadgeCount();
         await startLiveCameraStream();
     }
@@ -281,7 +310,13 @@
         if (overlay) {
             overlay.style.display = "none";
         }
+        State.cameraMode = null; // Reset cameraMode state
+        window.statusGalleryFile = null; // Reset status gallery file
         resetCameraCaptureToLive();
+        
+        // Hide caption container
+        const captionContainer = document.getElementById("camera-preview-caption-container");
+        if (captionContainer) captionContainer.style.display = "none";
     }
 
     async function toggleCameraFacing() {
@@ -767,6 +802,11 @@
     }
 
     function resetCameraCaptureToLive(shouldDeleteDraft = false) {
+        if (State.cameraMode === "status" && window.statusGalleryFile) {
+            closeCameraCaptureOverlay();
+            return;
+        }
+
         const actionControls = document.getElementById("camera-capture-controls-section");
         const previewControls = document.getElementById("camera-preview-controls-section");
         const imgPreview = document.getElementById("camera-capture-img-preview");
@@ -812,7 +852,25 @@
     }
 
     async function sendCapturedMedia() {
-        if (!capturedBlob || !State.activeChat) return;
+        const blobToUpload = capturedBlob || window.capturedBlob;
+        const typeToUpload = capturedFileType || window.capturedFileType;
+        if (!blobToUpload) return;
+
+        const sendBtn = document.getElementById("camera-preview-send-btn");
+
+        if (State.cameraMode === "status") {
+            if (typeof window.handleStatusMediaUpload === "function") {
+                (async () => {
+                    await window.handleStatusMediaUpload(blobToUpload, typeToUpload);
+                })();
+            } else {
+                console.error("[Camera Module] handleStatusMediaUpload helper is not registered!");
+                showToast("Status upload failed", "error");
+            }
+            return;
+        }
+
+        if (!State.activeChat) return;
 
         const draftId = currentDraftId; // Capture the draft ID BEFORE closing the overlay resets it
 
@@ -821,15 +879,14 @@
             await saveCameraDraft(draftId, { status: "queued" });
         }
 
-        const sendBtn = document.getElementById("camera-preview-send-btn");
         if (sendBtn) {
             sendBtn.disabled = true;
             sendBtn.style.opacity = "0.5";
             sendBtn.textContent = "Uploading...";
         }
 
-        const extension = capturedFileType.includes("video") ? "webm" : "jpg";
-        const file = new File([capturedBlob], `captured-story-${Date.now()}.${extension}`, { type: capturedFileType });
+        const extension = (typeToUpload || "").includes("video") ? "webm" : "jpg";
+        const file = new File([blobToUpload], `captured-story-${Date.now()}.${extension}`, { type: typeToUpload });
         
         closeCameraCaptureOverlay();
         

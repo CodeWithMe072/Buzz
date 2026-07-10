@@ -195,6 +195,9 @@ function initChatWindow() {
         document.getElementById('chat-list-sidebar').classList.remove('hidden');
         document.getElementById('chat-window').classList.remove('active');
         State.activeChat = null;
+        // Show navbar on mobile when back to chat list
+        const navbar = document.querySelector(".app-navbar");
+        if (navbar) navbar.style.display = "flex";
     });
 
     cancelReplyBtn.addEventListener('click', () => {

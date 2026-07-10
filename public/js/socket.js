@@ -722,6 +722,42 @@ function initSocket() {
     }
   });
 
+  // ── Status deleted (real-time rollback across all clients) ───
+  socket.on("status:deleted", ({ statusId, userId }) => {
+    console.log("[Socket] status:deleted received — statusId:", statusId, "userId:", userId);
+
+    // 1. Refresh the status sidebar to remove the deleted status
+    if (typeof window.renderStatusSidebar === "function") {
+      window.renderStatusSidebar();
+    }
+
+    // 2. If the viewer is currently open and showing a status from this user,
+    //    remove the deleted moment from the active playback
+    if (typeof window.handleRemoteStatusDeletion === "function") {
+      window.handleRemoteStatusDeletion(statusId, userId);
+    }
+  });
+
+  // ── New status posted (real-time push to all contacts) ──────
+  socket.on("status:new", ({ statusId, userId, username, avatar, moment }) => {
+    console.log("[Socket] status:new received — statusId:", statusId, "from:", username);
+
+    // 1. Refresh the status sidebar to show the new status
+    if (typeof window.renderStatusSidebar === "function") {
+      window.renderStatusSidebar();
+    }
+
+    // 2. Update the unseen status indicator badge
+    if (typeof window.updateStatusUnseenIndicator === "function") {
+      window.updateStatusUnseenIndicator();
+    }
+
+    // 3. Show a toast notification
+    if (username) {
+      showToast(`${username} added a new status`, "info");
+    }
+  });
+
   if (typeof window.initVoiceSockets === "function") {
     window.initVoiceSockets();
   }

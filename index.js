@@ -17,8 +17,10 @@ import authRoutes from "./routes/auth.routes.js";
 import connectionRoutes from "./routes/connection.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
+import statusRoutes from "./routes/status.routes.js";
 import initSocket from "./sockets/chat.sockets.js";
 import { startMessageStatusSyncJob } from "./jobs/messageStatusSync.js";
+import { startAutoPruneExpiredStatusesJob } from "./jobs/autoPruneExpiredStatuses.js";
 import webrtcRoutes from "./routes/webrtc.routes.js";
 import componentRoutes from "./routes/component.routes.js";
 import { protect, readUserFromCookie } from "./middleware/auth.middleware.js";
@@ -137,6 +139,7 @@ app.use(authRoutes);
 app.use(connectionRoutes);
 app.use(chatRoutes);
 app.use(uploadRoutes);
+app.use(statusRoutes);
 
 /* ---------- Version endpoint (for auto-reload) ---------- */
 const APP_VERSION = process.env.APP_VERSION;
@@ -159,6 +162,7 @@ initSocket(io);
 
 /* ---------- Background jobs ---------- */
 startMessageStatusSyncJob(io);
+startAutoPruneExpiredStatusesJob();
 
 /* ---------- Start ---------- */
 if (isProd) {

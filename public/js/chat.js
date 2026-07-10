@@ -22,6 +22,7 @@ function showChatScreen() {
   }
   initChatWindow();
   initMobileNavigation();
+  initAppNavigation();
 }
 
 // =============================================================================
@@ -214,6 +215,9 @@ function openChat(chatId) {
   if (window.innerWidth < 768) {
     document.getElementById("chat-list-sidebar").classList.add("hidden");
     document.getElementById("chat-window").classList.add("active");
+    // Hide navbar on mobile when chat is active
+    const navbar = document.querySelector(".app-navbar");
+    if (navbar) navbar.style.display = "none";
   }
 
   // Chat options panel
@@ -1492,6 +1496,9 @@ function initMobileNavigation() {
       document.getElementById("chat-list-sidebar").classList.remove("hidden");
       chatWindow.classList.remove("active");
       State.activeChat = null;
+      // Show navbar on mobile when swiped back
+      const navbar = document.querySelector(".app-navbar");
+      if (navbar) navbar.style.display = "flex";
     }
   }, { passive: true });
 }
@@ -2149,3 +2156,380 @@ document.addEventListener("click", (e) => {
     }
   }
 });
+
+function initAppNavigation() {
+  const chatBtn = document.getElementById("nav-chat-btn");
+  const statusBtn = document.getElementById("nav-status-btn");
+  const avatarBtn = document.getElementById("nav-avatar-btn");
+  const avatarText = document.getElementById("nav-avatar-text");
+  
+  const chatSidebar = document.getElementById("chat-list-sidebar");
+  const statusSidebar = document.getElementById("status-sidebar");
+
+  if (!chatBtn || !statusBtn) return;
+
+  // Initialize avatar at bottom
+  if (State.currentUser) {
+    if (avatarText) {
+      avatarText.textContent = State.currentUser.username.charAt(0).toUpperCase();
+    }
+    if (avatarBtn) {
+      if (State.currentUser.avatar && State.currentUser.avatar.length > 2) {
+        avatarBtn.innerHTML = `<img src="${State.currentUser.avatar}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" />`;
+      } else {
+        avatarBtn.innerHTML = `<span style="font-weight: 700; color: white;">${State.currentUser.username.charAt(0).toUpperCase()}</span>`;
+      }
+    }
+  }
+
+  chatBtn.onclick = async () => {
+    chatBtn.classList.add("active");
+    statusBtn.classList.remove("active");
+    
+    if (chatSidebar) {
+      chatSidebar.style.display = "flex";
+      chatSidebar.classList.remove("hidden");
+    }
+    if (statusSidebar) {
+      statusSidebar.style.display = "none";
+      statusSidebar.classList.add("hidden");
+    }
+
+    // Restore Chat window if it was replaced by status empty state
+    const chatWindowEl = document.getElementById("chat-window");
+    if (chatWindowEl && !document.getElementById("active-chat")) {
+      try {
+        const messageWindowHtml = await ComponentLoader.load("chat/message-window");
+        chatWindowEl.innerHTML = messageWindowHtml;
+        if (typeof initChatWindow === "function") initChatWindow();
+        if (typeof initShowMedia === "function") initShowMedia();
+        if (State.activeChat) {
+          const activeId = State.activeChat;
+          State.activeChat = null; // force reload
+          openChat(activeId);
+        }
+      } catch (err) {
+        console.error("Failed to restore chat window:", err);
+      }
+    }
+  };
+
+  statusBtn.onclick = () => {
+    statusBtn.classList.add("active");
+    chatBtn.classList.remove("active");
+    
+    if (chatSidebar) {
+      chatSidebar.style.display = "none";
+      chatSidebar.classList.add("hidden");
+    }
+    if (statusSidebar) {
+      statusSidebar.style.display = "flex";
+      statusSidebar.classList.remove("hidden");
+    }
+
+    // Show status empty state panel on right side
+    const chatWindowEl = document.getElementById("chat-window");
+    if (chatWindowEl) {
+      chatWindowEl.innerHTML = `
+        <div class="status-empty-panel">
+          <div class="status-empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <circle cx="12" cy="12" r="6"></circle>
+              <circle cx="12" cy="12" r="2"></circle>
+            </svg>
+          </div>
+          <h3>Share status updates</h3>
+          <p>Share photos, videos and text that disappear after 24 hours.</p>
+        </div>
+      `;
+    }
+    
+    renderStatusSidebar();
+  };
+
+  if (avatarBtn) {
+    avatarBtn.onclick = () => {
+      if (typeof openProfileModal === "function") {
+        openProfileModal("account");
+      }
+    };
+  }
+
+  // Bind status header plus / composer button
+  const statusComposerBtn = document.getElementById("status-composer-trigger-btn");
+  if (statusComposerBtn) {
+    statusComposerBtn.onclick = () => {
+      if (typeof window.openStatusComposer === "function") {
+        window.openStatusComposer();
+      }
+    };
+  }
+
+  const statusOptionsBtn = document.getElementById("status-options-btn");
+  if (statusOptionsBtn) {
+    statusOptionsBtn.onclick = () => {
+      if (typeof showToast === "function") {
+        showToast("Status privacy is set to: Mutual Connections", "info");
+      }
+    };
+  }
+
+  // Render status list initially (to set notifications/dots if any)
+  updateStatusUnseenIndicator();
+}
+
+async function renderStatusSidebar() {
+  const listEl = document.getElementById("status-sidebar-list");
+  if (!listEl) return;
+
+  listEl.innerHTML = `
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 0; color: var(--text-secondary); gap: 8px;">
+      <div class="spinner-ring" style="width: 24px; height: 24px; border-width: 2px; border-top-color: #dd2a7b;"></div>
+      <span style="font-size: 13px;">Loading status updates...</span>
+    </div>
+  `;
+
+  // 1. Fetch own status
+  const myStatusCard = document.getElementById("my-status-item");
+  if (myStatusCard && State.currentUser) {
+    const avatarContainer = myStatusCard.querySelector(".avatar-container");
+    const myStatusSubtext = myStatusCard.querySelector(".my-status-subtext");
+
+    try {
+      const myRes = await apiRequest("GET", "/api/status/me");
+      const myActiveStatuses = myRes?.data?.data || [];
+      
+      if (myActiveStatuses.length > 0) {
+        const latestStatus = myActiveStatuses[myActiveStatuses.length - 1];
+        const timeStr = typeof formatRelativeTime === "function" 
+          ? formatRelativeTime(new Date(latestStatus.createdAt)) 
+          : new Date(latestStatus.createdAt).toLocaleTimeString();
+        if (myStatusSubtext) {
+          myStatusSubtext.textContent = `Today at ${timeStr} (${myActiveStatuses.length} update${myActiveStatuses.length > 1 ? "s" : ""})`;
+        }
+
+        // Set status ring and thumbnail preview
+        if (avatarContainer) {
+          avatarContainer.className = "avatar-container status-avatar-ring unseen";
+          avatarContainer.removeAttribute("style");
+          avatarContainer.style.width = "48px";
+          avatarContainer.style.height = "48px";
+
+          let innerHtml = "";
+          if (latestStatus.mediaType === "image" || latestStatus.mediaType === "photo") {
+            innerHtml = `<img src="${latestStatus.mediaUrl}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" />`;
+          } else if (latestStatus.mediaType === "video") {
+            innerHtml = `<video src="${latestStatus.mediaUrl}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; pointer-events: none;" muted playsinline></video>`;
+          } else if (latestStatus.mediaType === "text") {
+            innerHtml = `<div style="width: 100%; height: 100%; border-radius: 50%; background: ${latestStatus.backgroundColor || '#3f51b5'}; display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; padding: 4px; box-sizing: border-box; text-align: center; overflow: hidden; font-weight: 700; line-height: 1.1;">${latestStatus.textContent}</div>`;
+          }
+          
+          avatarContainer.innerHTML = `
+            <div class="avatar-inner" style="width: 100%; height: 100%;">
+              ${innerHtml}
+            </div>
+            <span class="status-add-badge">+</span>
+          `;
+        }
+        
+        myStatusCard.onclick = () => {
+          if (typeof window.openStatusViewer === "function") {
+            window.openStatusViewer({
+              user: {
+                id: State.currentUser._id || State.currentUser.id,
+                username: "My Status",
+                avatar: State.currentUser.avatar
+              },
+              moments: myActiveStatuses.map(s => ({
+                _id: s._id,
+                url: s.mediaUrl,
+                type: s.mediaType,
+                textContent: s.textContent,
+                backgroundColor: s.backgroundColor,
+                caption: s.caption,
+                createdAt: s.createdAt,
+                expiresAt: s.expiresAt,
+                viewers: s.viewers
+              }))
+            });
+          }
+        };
+      } else {
+        if (myStatusSubtext) myStatusSubtext.textContent = "Click to add status update";
+        if (avatarContainer) {
+          avatarContainer.className = "avatar-container";
+          avatarContainer.setAttribute("style", "position: relative; width: 48px; height: 48px; border-radius: 50%; background: var(--elevated-bg); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; flex-shrink: 0;");
+          if (State.currentUser.avatar && State.currentUser.avatar.length > 2) {
+            avatarContainer.innerHTML = `<img src="${State.currentUser.avatar}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span class="status-add-badge">+</span>`;
+          } else {
+            avatarContainer.innerHTML = `<span style="font-weight: 700; color: white;">${State.currentUser.username.charAt(0).toUpperCase()}</span><span class="status-add-badge">+</span>`;
+          }
+        }
+        myStatusCard.onclick = () => {
+          if (typeof window.openStatusComposer === "function") {
+            window.openStatusComposer();
+          }
+        };
+      }
+    } catch (e) {
+      console.error("Error loading own active status:", e);
+      if (myStatusSubtext) myStatusSubtext.textContent = "Click to add status update";
+    }
+  }
+
+  // 2. Fetch friends' feed
+  try {
+    const res = await apiRequest("GET", "/api/status/feed");
+    const momentsObj = res?.data?.moments || {};
+    let friendsSharing = Object.values(momentsObj);
+
+    const recentTitle = document.getElementById("status-recent-title");
+
+    if (friendsSharing.length === 0) {
+      if (recentTitle) recentTitle.style.display = "none";
+      listEl.innerHTML = `
+        <div style="text-align: center; color: var(--text-light); font-size: 13px; padding: 40px 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity: 0.4; color: var(--text-light);">
+            <circle cx="12" cy="12" r="10"></circle>
+            <circle cx="12" cy="12" r="6"></circle>
+          </svg>
+          <span>No recent status updates from friends</span>
+        </div>
+      `;
+      return;
+    }
+
+    if (recentTitle) recentTitle.style.display = "none";
+    listEl.innerHTML = "";
+
+    // Sort by newest status createdAt desc
+    friendsSharing = friendsSharing.sort((a, b) => {
+      const timeA = new Date(a.moments[a.moments.length - 1].createdAt);
+      const timeB = new Date(b.moments[b.moments.length - 1].createdAt);
+      return timeB - timeA;
+    });
+
+    const recentGroups = [];
+    const viewedGroups = [];
+
+    friendsSharing.forEach((group) => {
+      const momentsList = group.moments || [];
+      if (momentsList.length === 0) return;
+
+      const unseenMoments = momentsList.filter(m => {
+        return !m.viewers.some(v => v.userId.toString() === State.currentUser._id.toString());
+      });
+      const isUnseen = unseenMoments.length > 0;
+
+      if (isUnseen) {
+        recentGroups.push(group);
+      } else {
+        viewedGroups.push(group);
+      }
+    });
+
+    function createStatusItemElement(group, isUnseen) {
+      const friend = group.user;
+      const momentsList = group.moments || [];
+      
+      const itemEl = document.createElement("div");
+      itemEl.className = "status-item";
+      
+      const letter = friend.username.charAt(0).toUpperCase();
+      const latestMoment = momentsList[momentsList.length - 1];
+      const relativeTime = typeof formatRelativeTime === "function" 
+        ? formatRelativeTime(new Date(latestMoment.createdAt)) 
+        : new Date(latestMoment.createdAt).toLocaleTimeString();
+      
+      // Determine status thumbnail preview
+      let thumbnailInner = "";
+      if (latestMoment.type === "image" || latestMoment.type === "photo") {
+        thumbnailInner = `<img src="${latestMoment.url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" />`;
+      } else if (latestMoment.type === "video") {
+        thumbnailInner = `<video src="${latestMoment.url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; pointer-events: none;" muted playsinline></video>`;
+      } else if (latestMoment.type === "text") {
+        thumbnailInner = `<div style="width: 100%; height: 100%; border-radius: 50%; background: ${latestMoment.backgroundColor || '#3f51b5'}; display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; padding: 4px; box-sizing: border-box; text-align: center; overflow: hidden; font-weight: 700; line-height: 1.1;">${latestMoment.textContent}</div>`;
+      }
+        
+      itemEl.innerHTML = `
+        <div class="status-avatar-ring ${isUnseen ? "unseen" : "seen"}" style="width: 48px; height: 48px;">
+          <div class="avatar-inner">
+            ${thumbnailInner}
+          </div>
+          ${friend.online ? `<span style="position: absolute; bottom: 2px; right: 2px; width: 10px; height: 10px; background: var(--status-online, #44d362); border-radius: 50%; border: 1.5px solid var(--primary-bg);"></span>` : ""}
+        </div>
+        <div style="flex: 1; min-width: 0; margin-left: 8px;">
+          <div style="font-weight: ${isUnseen ? "700" : "600"}; font-size: 14px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeInput(friend.username)}</div>
+          <div style="font-size: 12px; color: var(--text-light); margin-top: 2px;">Today at ${relativeTime}</div>
+        </div>
+      `;
+
+      itemEl.onclick = () => {
+        if (typeof window.openStatusViewer === "function") {
+          window.openStatusViewer(group);
+        }
+      };
+
+      return itemEl;
+    }
+
+    // 1. Render Recent Updates
+    if (recentGroups.length > 0) {
+      const titleDiv = document.createElement("div");
+      titleDiv.className = "recent-updates-title";
+      titleDiv.textContent = "Recent updates";
+      listEl.appendChild(titleDiv);
+
+      recentGroups.forEach((group) => {
+        listEl.appendChild(createStatusItemElement(group, true));
+      });
+    }
+
+    // 2. Render Viewed Updates
+    if (viewedGroups.length > 0) {
+      const titleDiv = document.createElement("div");
+      titleDiv.className = "recent-updates-title";
+      titleDiv.setAttribute("style", "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 12px; padding-top: 16px;");
+      titleDiv.textContent = "Viewed updates";
+      listEl.appendChild(titleDiv);
+
+      viewedGroups.forEach((group) => {
+        listEl.appendChild(createStatusItemElement(group, false));
+      });
+    }
+  } catch (err) {
+    console.error("Failed to render status sidebar:", err);
+    listEl.innerHTML = `<div style="text-align: center; color: var(--text-secondary); font-size: 13px; padding: 20px;">Error loading status updates</div>`;
+  }
+}
+
+async function updateStatusUnseenIndicator() {
+  const dot = document.getElementById("nav-status-dot");
+  if (!dot) return;
+  
+  try {
+    const res = await apiRequest("GET", "/api/status/feed");
+    const momentsObj = res?.data?.moments || {};
+    const friendsSharing = Object.values(momentsObj);
+    let hasUnseen = false;
+    
+    for (const group of friendsSharing) {
+      const unseen = (group.moments || []).filter(m => {
+        return !m.viewers.some(v => v.userId.toString() === State.currentUser._id.toString());
+      });
+      if (unseen.length > 0) {
+        hasUnseen = true;
+        break;
+      }
+    }
+    
+    dot.style.display = hasUnseen ? "block" : "none";
+  } catch (e) {
+    console.error("Error updating status unseen indicator:", e);
+  }
+}
+
+window.renderStatusSidebar = renderStatusSidebar;
+window.updateStatusUnseenIndicator = updateStatusUnseenIndicator;
+

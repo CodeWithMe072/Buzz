@@ -12,6 +12,8 @@ import { CustomGif } from "../models/customGif.model.js";
 import { Message } from "../models/message.model.js";
 import { User } from "../models/user.model.js";
 import mongoose from "mongoose";
+import Status from "../models/status.model.js";
+import { Connection } from "../models/connection.model.js";
 import AdmZip from "adm-zip";
 import { createEncryptStream, createDecryptStream, incrementIV, getKey, encryptBuffer } from "../utils/mediaEncryption.js";
 import { redis } from "../lib/redis.js";
@@ -1227,6 +1229,35 @@ router.post(["/api/media/decrypt", "/media/decrypt"], protect, async (req, res) 
                 if (photo) {
                     fileKey = extractKeyFromUrl(photo.url);
                     message = { keyVersion: photo.keyVersion || "v1" };
+                } else {
+                    // Check if it's a Status document
+                    const status = await Status.findById(mongoose.Types.ObjectId.isValid(mediaId) ? mediaId : null);
+                    if (status) {
+                        const isOwn = status.userId.toString() === req.user._id.toString();
+                        let allowed = isOwn;
+                        if (!allowed) {
+                            const isConnected = await Connection.findOne({
+                                $or: [
+                                    { sender: status.userId, receiver: req.user._id },
+                                    { sender: req.user._id, receiver: status.userId }
+                                ],
+                                status: "accepted"
+                            });
+                            if (isConnected) {
+                                if (status.audience === "public" || status.audience === "contacts") {
+                                    allowed = true;
+                                } else if (status.audience === "exceptContacts") {
+                                    allowed = !status.audienceList.some(id => id.toString() === req.user._id.toString());
+                                } else if (status.audience === "onlyContacts") {
+                                    allowed = status.audienceList.some(id => id.toString() === req.user._id.toString());
+                                }
+                            }
+                        }
+                        if (allowed) {
+                            fileKey = extractKeyFromUrl(status.mediaUrl);
+                            message = { keyVersion: "v1" };
+                        }
+                    }
                 }
             }
         } else if (key) {
@@ -1236,6 +1267,35 @@ router.post(["/api/media/decrypt", "/media/decrypt"], protect, async (req, res) 
             });
             if (message) {
                 fileKey = key;
+            } else {
+                // Check if it's a status key
+                const status = await Status.findOne({ mediaUrl: { $regex: key } });
+                if (status) {
+                    const isOwn = status.userId.toString() === req.user._id.toString();
+                    let allowed = isOwn;
+                    if (!allowed) {
+                        const isConnected = await Connection.findOne({
+                            $or: [
+                                { sender: status.userId, receiver: req.user._id },
+                                { sender: req.user._id, receiver: status.userId }
+                            ],
+                            status: "accepted"
+                        });
+                        if (isConnected) {
+                            if (status.audience === "public" || status.audience === "contacts") {
+                                    allowed = true;
+                            } else if (status.audience === "exceptContacts") {
+                                allowed = !status.audienceList.some(id => id.toString() === req.user._id.toString());
+                            } else if (status.audience === "onlyContacts") {
+                                allowed = status.audienceList.some(id => id.toString() === req.user._id.toString());
+                            }
+                        }
+                    }
+                    if (allowed) {
+                        fileKey = key;
+                        message = { keyVersion: "v1" };
+                    }
+                }
             }
         }
 

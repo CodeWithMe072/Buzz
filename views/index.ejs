@@ -181,6 +181,11 @@
                 </div>
             </div>
 
+            <!-- Caption Input Container (For status photo/video uploads) -->
+            <div id="camera-preview-caption-container" style="display: none; width: 100%; max-width: 400px; padding: 0 10px; box-sizing: border-box; margin-bottom: 12px; z-index: 2900;">
+                <input type="text" id="camera-preview-caption-input" placeholder="Add a caption..." style="width: 100%; padding: 12px 18px; border-radius: 25px; border: 1px solid rgba(255,255,255,0.25); background: rgba(0,0,0,0.6); color: white; outline: none; font-size: 14px; box-sizing: border-box;" />
+            </div>
+
             <!-- Preview State Mode Controls -->
             <div id="camera-preview-controls-section"
                 style="display: none; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: 400px; padding: 0 10px; box-sizing: border-box;">
@@ -225,6 +230,221 @@
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
             </svg>
             <span style="font-size: 14px;">No drafts saved yet</span>
+        </div>
+    </div>
+
+    <!-- Status Viewer Overlay -->
+    <div id="status-viewer-overlay" style="display: none; position: fixed; inset: 0; z-index: 3100; background: #000; flex-direction: column; justify-content: center; align-items: center; font-family: 'Outfit', 'Inter', sans-serif; overflow: hidden; user-select: none;">
+        <!-- Blurred Backdrop Background -->
+        <div id="status-viewer-blurred-bg" style="position: absolute; inset: 0; z-index: 3101; background-size: cover; background-position: center; filter: blur(50px) brightness(0.35); transform: scale(1.15); transition: background-image 0.3s ease;"></div>
+
+        <!-- Far Left Screen Back Button -->
+        <button type="button" id="status-viewer-screen-back" style="position: absolute; top: 24px; left: 24px; z-index: 3125; background: transparent; border: none; color: white; cursor: pointer; font-size: 22px; display: flex; align-items: center; justify-content: center; opacity: 0.85; transition: opacity 0.2s;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+        </button>
+
+        <!-- Far Right Screen Close Button -->
+        <button type="button" id="status-viewer-screen-close" style="position: absolute; top: 24px; right: 24px; z-index: 3125; background: transparent; border: none; color: white; cursor: pointer; font-size: 26px; display: flex; align-items: center; justify-content: center; opacity: 0.85; transition: opacity 0.2s; line-height: 1;">&times;</button>
+
+        <!-- Far Side Screen Arrows (Hidden on mobile via CSS) -->
+        <button type="button" id="status-viewer-arrow-left" style="position: absolute; left: calc(50% - 295px); top: 50%; transform: translateY(-50%); z-index: 3115; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.08); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.2s;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+        </button>
+        <button type="button" id="status-viewer-arrow-right" style="position: absolute; right: calc(50% - 295px); top: 50%; transform: translateY(-50%); z-index: 3115; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.08); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.2s;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+        </button>
+
+        <!-- Centered Vertical Viewport Frame -->
+        <div id="status-viewer-viewport-wrapper" style="position: relative; width: 100%; max-width: 450px; height: calc(100% - 150px); max-height: 800px; display: flex; flex-direction: column; z-index: 3105; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.05); margin-bottom: 70px;">
+            
+            <!-- Segments progress bars at top -->
+            <div id="status-viewer-progress-container" style="position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 4px; z-index: 3120;">
+                <!-- Rendered dynamically -->
+            </div>
+
+            <!-- Viewport Header controls -->
+            <div style="position: absolute; top: 24px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; z-index: 3120; color: white;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <img id="status-viewer-avatar" src="/images/default-avatar.png" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(255,255,255,0.4);" />
+                    <div style="display: flex; flex-direction: column; gap: 1px;">
+                        <span id="status-viewer-username" style="font-weight: 600; font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,0.6);"></span>
+                        <span id="status-viewer-time" style="font-size: 11px; color: rgba(255,255,255,0.7); text-shadow: 0 1px 4px rgba(0,0,0,0.6);"></span>
+                    </div>
+                </div>
+                <!-- Action Controls (Play/Pause, Mute, options/delete) -->
+                <div style="display: flex; align-items: center; gap: 12px; text-shadow: 0 1px 4px rgba(0,0,0,0.6);">
+                    <button type="button" id="status-viewer-play-pause-btn" style="background: transparent; border: none; color: white; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;">
+                        <!-- SVG Pause -->
+                        <svg id="status-pause-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0">
+                            <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                            <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+                        </svg>
+                        <!-- SVG Play (Hidden by default) -->
+                        <svg id="status-play-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0" style="display: none;">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                    </button>
+                    <button type="button" id="status-viewer-mute-btn" style="background: transparent; border: none; color: white; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;">
+                        <!-- SVG Speaker High (Unmuted) -->
+                        <svg id="status-unmute-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                        <!-- SVG Speaker Muted (Hidden by default) -->
+                        <svg id="status-mute-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <line x1="23" y1="9" x2="17" y2="15"></line>
+                            <line x1="17" y1="9" x2="23" y2="15"></line>
+                        </svg>
+                    </button>
+                    <!-- More options button (deletes status if own) -->
+                    <div style="position: relative; display: inline-block;">
+                        <button type="button" id="status-viewer-delete-btn" style="background: transparent; border: none; color: white; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;" title="Status Options">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="1.5"></circle>
+                                <circle cx="12" cy="5" r="1.5"></circle>
+                                <circle cx="12" cy="19" r="1.5"></circle>
+                            </svg>
+                        </button>
+                        <!-- Options dropdown list -->
+                        <div id="status-viewer-options-menu" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 6px; background: #202024; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 3120; width: 130px; overflow: hidden;">
+                            <button type="button" id="status-viewer-opt-delete" style="width: 100%; padding: 10px 12px; background: transparent; border: none; color: #ff3b30; text-align: left; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                                </svg>
+                                <span>Delete</span>
+                            </button>
+                            <button type="button" id="status-viewer-opt-download" style="width: 100%; padding: 10px 12px; background: transparent; border: none; color: #30d158; text-align: left; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                <span>Download</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Delete Confirm Modal -->
+            <div id="status-delete-confirm-modal" style="display: none; position: absolute; inset: 0; z-index: 3130; background: rgba(0,0,0,0.75); align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div style="width: 280px; background: #1a1a1e; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; box-shadow: 0 12px 36px rgba(0,0,0,0.7); text-align: center; box-sizing: border-box; font-family: 'Outfit', 'Inter', sans-serif;">
+                    <h4 style="margin: 0 0 8px 0; color: white; font-size: 16px; font-weight: 700;">Delete Status?</h4>
+                    <p style="margin: 0 0 20px 0; color: #a0a0a5; font-size: 13px; line-height: 1.45;">This status update will be permanently deleted.</p>
+                    <div style="display: flex; gap: 10px; justify-content: center; width: 100%;">
+                        <button type="button" id="status-delete-cancel-btn" style="flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: transparent; color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">Cancel</button>
+                        <button type="button" id="status-delete-confirm-btn" style="flex: 1; padding: 9px 12px; border-radius: 8px; border: none; background: #ff3b30; color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">Delete</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Left/Right Click Targets for Navigation (inside frame) -->
+            <div style="position: absolute; top: 80px; bottom: 80px; left: 0; right: 0; display: flex; z-index: 3110;">
+                <div id="status-viewer-nav-left" style="flex: 1; height: 100%; cursor: pointer;"></div>
+                <div id="status-viewer-nav-right" style="flex: 1; height: 100%; cursor: pointer;"></div>
+            </div>
+
+            <!-- Center Media/Text Viewport (fully fitted inside frame) -->
+            <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 3104; padding-top: 70px; box-sizing: border-box;">
+                <!-- Image Viewport -->
+                <img id="status-viewer-img" style="display: none; width: 100%; height: 100%; object-fit: contain;" />
+                <!-- Video Viewport -->
+                <video id="status-viewer-video" style="display: none; width: 100%; height: 100%; object-fit: contain;" playsinline></video>
+                <!-- Text Viewport -->
+                <div id="status-viewer-text-canvas" style="display: none; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 40px; box-sizing: border-box; text-align: center; color: white; font-size: 22px; font-weight: 700; word-break: break-word; overflow-y: auto;"></div>
+            </div>
+
+            <!-- Bottom Caption / Info Overlay (inside frame) -->
+            <div id="status-viewer-caption-bar" style="position: absolute; bottom: 16px; left: 12px; right: 12px; text-align: center; color: white; font-size: 14px; z-index: 3120; text-shadow: 0 1px 4px rgba(0,0,0,0.85); background: rgba(0,0,0,0.55); padding: 8px 12px; border-radius: 6px; display: none;"></div>
+        </div>
+
+        <!-- Bottom Reply Bar Container (fixed below viewport wrapper) -->
+        <div id="status-viewer-reply-container" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 100%; max-width: 450px; display: flex; align-items: center; gap: 8px; z-index: 3125; padding: 0 12px; box-sizing: border-box;">
+            <!-- Emoji Smiley Face -->
+            <button type="button" id="status-viewer-reply-emoji" style="background: transparent; border: none; color: rgba(255,255,255,0.85); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                    <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                    <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                </svg>
+            </button>
+            <!-- Text Input -->
+            <input type="text" id="status-viewer-reply-input" placeholder="Type a reply..." style="flex: 1; padding: 12px 18px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.15); background: rgba(30, 30, 30, 0.7); backdrop-filter: blur(10px); color: white; outline: none; font-size: 14px; box-sizing: border-box; font-family: 'Outfit', sans-serif;" />
+            <!-- Send Button -->
+            <button type="button" id="status-viewer-reply-send-btn" style="width: 42px; height: 42px; border-radius: 50%; border: none; background: #dd2a7b; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.35);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Status Composer Modal -->
+    <div id="status-composer-modal" style="display: none; position: fixed; inset: 0; z-index: 2980; background: rgba(0, 0, 0, 0.85); align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; font-family: 'Outfit', 'Inter', sans-serif;">
+        <div id="status-composer-content-box" style="width: 100%; max-width: 420px; background: #0c0c0e; border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-lg);">
+            <!-- Modal Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-color);">
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: white;">Create Status</h3>
+                <button type="button" id="status-composer-close-btn" style="background: transparent; border: none; color: #888; font-size: 24px; cursor: pointer; padding: 0 5px; line-height: 1;">&times;</button>
+            </div>
+            
+            <!-- Standard Options Selector -->
+            <div id="status-composer-selector-view" style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
+                <button type="button" id="status-composer-opt-gallery" class="status-composer-option-btn" style="display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.03); color: white; font-weight: 600; cursor: pointer; text-align: left; transition: all 0.2s;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dd2a7b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    <span>Upload Photo or Video</span>
+                </button>
+                <button type="button" id="status-composer-opt-text" class="status-composer-option-btn" style="display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.03); color: white; font-weight: 600; cursor: pointer; text-align: left; transition: all 0.2s;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dd2a7b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                        <line x1="9" y1="20" x2="15" y2="20"></line>
+                        <line x1="12" y1="4" x2="12" y2="20"></line>
+                    </svg>
+                    <span>Write Text Status</span>
+                </button>
+            </div>
+
+            <!-- Text Status Editor Canvas View -->
+            <div id="status-composer-text-view" style="display: none; flex-direction: column; height: 380px;">
+                <!-- Canvas Area -->
+                <div id="status-composer-canvas" style="flex: 1; background: #3f51b5; display: flex; align-items: center; justify-content: center; padding: 25px; box-sizing: border-box; position: relative;">
+                    <textarea id="status-composer-textarea" placeholder="Type a status..." maxlength="250" style="width: 100%; border: none; background: transparent; color: white; font-size: 22px; font-weight: 700; text-align: center; outline: none; resize: none; overflow: hidden; font-family: 'Outfit', sans-serif;"></textarea>
+                    
+                    <!-- Preset Color Selector Circles -->
+                    <div style="position: absolute; bottom: 12px; left: 12px; display: flex; gap: 6px; z-index: 10;">
+                        <button type="button" class="status-canvas-color-dot" data-color="#3f51b5" style="width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid white; background: #3f51b5; cursor: pointer;"></button>
+                        <button type="button" class="status-canvas-color-dot" data-color="#8e44ad" style="width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid transparent; background: #8e44ad; cursor: pointer;"></button>
+                        <button type="button" class="status-canvas-color-dot" data-color="#16a085" style="width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid transparent; background: #16a085; cursor: pointer;"></button>
+                        <button type="button" class="status-canvas-color-dot" data-color="#2c3e50" style="width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid transparent; background: #2c3e50; cursor: pointer;"></button>
+                        <button type="button" class="status-canvas-color-dot" data-color="#2980b9" style="width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid transparent; background: #2980b9; cursor: pointer;"></button>
+                        <button type="button" class="status-canvas-color-dot" data-color="#d81b60" style="width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid transparent; background: #d81b60; cursor: pointer;"></button>
+                        <button type="button" class="status-canvas-color-dot" data-color="#d35400" style="width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid transparent; background: #d35400; cursor: pointer;"></button>
+                    </div>
+                </div>
+                
+                <!-- Bottom controls -->
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-top: 1px solid var(--border-color); background: #0c0c0e;">
+                    <button type="button" id="status-composer-text-back-btn" style="background: transparent; border: none; color: #888; font-weight: 600; cursor: pointer; font-size: 13px;">Back</button>
+                    <button type="button" id="status-composer-text-send-btn" style="padding: 10px 22px; border-radius: 20px; border: none; background: linear-gradient(135deg, #f58529, #dd2a7b); color: white; font-weight: 700; cursor: pointer; transition: opacity 0.2s;">Post Status</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -372,6 +592,7 @@
     <script src="/js/state.js?v=<%= Date.now() %>"></script>
     <script src="/js/utils.js?v=<%= Date.now() %>"></script>
     <script src="/js/core/component.loader.js?v=<%= Date.now() %>"></script>
+    <script src="/js/status.js?v=<%= Date.now() %>"></script>
     <script src="/js/main.js?v=<%= Date.now() %>"></script>
 </body>
 

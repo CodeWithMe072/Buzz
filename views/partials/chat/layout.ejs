@@ -1,5 +1,30 @@
 <div id="chat-screen" class="chat-screen active">
     <div class="chat-layout">
+        <!-- App Navbar (Vertical / Bottom Bar) -->
+        <div class="app-navbar">
+            <div class="nav-top">
+                <button type="button" class="nav-item active" id="nav-chat-btn" title="Chats">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span class="nav-badge" id="nav-chat-badge" style="display: none;">0</span>
+                </button>
+                <button type="button" class="nav-item" id="nav-status-btn" title="Status">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="6"></circle>
+                        <circle cx="12" cy="12" r="2"></circle>
+                    </svg>
+                    <span class="nav-dot" id="nav-status-dot" style="display: none;"></span>
+                </button>
+            </div>
+            <div class="nav-bottom">
+                <button type="button" id="nav-avatar-btn" title="Profile & Settings">
+                    <span id="nav-avatar-text">U</span>
+                </button>
+            </div>
+        </div>
+
         <!-- Chat List Sidebar -->
         <aside class="chat-list-sidebar" id="chat-list-sidebar">
             <div class="chat-list-header">
@@ -30,6 +55,50 @@
             </div>
 
             <div class="chat-list" id="chat-list"></div>
+        </aside>
+
+        <!-- Status Sidebar (NEW!) -->
+        <aside class="status-sidebar hidden" id="status-sidebar">
+            <div class="status-sidebar-header">
+                <h2>Status</h2>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <!-- Gallery upload trigger -->
+                    <input type="file" id="status-gallery-input" accept="image/*,video/*" style="display: none;" />
+                    <!-- Plus Button (open status composer) -->
+                    <button class="icon-btn" id="status-composer-trigger-btn" title="Create status update">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </button>
+                    <!-- Options Menu -->
+                    <button class="icon-btn" id="status-options-btn" title="Status Options">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="1.5"></circle>
+                            <circle cx="12" cy="5" r="1.5"></circle>
+                            <circle cx="12" cy="19" r="1.5"></circle>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="my-status-section">
+                <div class="my-status-card" id="my-status-item">
+                    <div class="avatar-container" style="position: relative; width: 48px; height: 48px; border-radius: 50%; background: var(--elevated-bg); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; flex-shrink: 0;">
+                        <span id="my-status-avatar-text">ME</span>
+                        <span class="status-add-badge">+</span>
+                    </div>
+                    <div class="my-status-info">
+                        <div class="my-status-name">My Status</div>
+                        <div class="my-status-subtext">Click to add status update</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="recent-updates-title" id="status-recent-title" style="display: none;">Recent Updates</div>
+            <div id="status-sidebar-list">
+                <!-- Status items populated dynamically -->
+            </div>
         </aside>
 
         <!-- Chat Window Placeholder -->

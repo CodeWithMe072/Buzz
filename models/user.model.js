@@ -118,6 +118,25 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    statusPrivacy: {
+      mode: {
+        type: String,
+        enum: ["contacts", "exceptContacts", "onlyContacts"],
+        default: "contacts"
+      },
+      exceptList: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User"
+        }
+      ],
+      onlyList: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User"
+        }
+      ]
+    }
   },
   { timestamps: true }
 );
