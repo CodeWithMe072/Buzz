@@ -249,6 +249,7 @@ export default function initSocket(io) {
               ? (content || "").substring(0, 50)
               : (caption || `Sent a ${type}`);
 
+            const notification = telegramService.formatMessageNotification(senderName, type, preview);
             telegramService.sendNotification(receiver.telegramChatId, notification).catch(console.error);
           }
         }

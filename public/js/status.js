@@ -98,6 +98,11 @@
 
                 closeStatusComposer();
                 
+                if (typeof window.saveStatusPendingUpload === "function") {
+                    const tempId = await window.saveStatusPendingUpload(file);
+                    window.currentStatusUploadId = tempId;
+                }
+
                 // Wrap in preview in camera overlay
                 const url = URL.createObjectURL(file);
                 window.statusGalleryFile = file; // Save reference for upload
@@ -874,64 +879,198 @@
         }
     }
 
-    async function handleStatusMediaUpload(blobToUpload, typeToUpload) {
-        const sendBtn = document.getElementById("camera-preview-send-btn");
-        if (sendBtn) {
-            sendBtn.disabled = true;
-            sendBtn.style.opacity = "0.5";
-            sendBtn.textContent = "Uploading status...";
-        }
-        
-        const captionInput = document.getElementById("camera-preview-caption-input");
-        const caption = captionInput ? captionInput.value.trim() : "";
-        
-        const tempId = "status_" + Date.now();
-        const extension = (typeToUpload || "").includes("video") ? "mp4" : "jpg";
-        const mimeType = (typeToUpload || "").includes("video") ? "video/mp4" : "image/jpeg";
-        const file = new File([blobToUpload], `status_${Date.now()}.${extension}`, { type: mimeType });
+    // ── Background Status Upload & Retry Queue ──
+    const StatusUploadQueue = {
+        isFlushing: false,
 
-        try {
-            // Upload using existing chunked upload pipeline
-            const uploadRes = await uploadFileInChunks(file, tempId);
-            const finalUrl = uploadRes?.original || uploadRes?.data?.url;
-            if (uploadRes && finalUrl) {
+        async init() {
+            if (!window.IndexedDBQueueService || !window.IndexedDBQueueService.db) {
+                setTimeout(() => this.init(), 100);
+                return;
+            }
+            console.log("[StatusUploadQueue] Initializing and flushing queue...");
+            this.flush().catch(err => console.error("[StatusUploadQueue] Init flush error:", err));
+        },
+
+        async add(tempId, file, caption) {
+            console.log("[StatusUploadQueue] Adding status:", tempId);
+            const uploadRecord = {
+                localId: tempId,
+                status: "status_queued",
+                mediaBlob: file,
+                caption: caption,
+                createdAt: Date.now(),
+                retries: 0
+            };
+            if (window.IndexedDBQueueService) {
+                await window.IndexedDBQueueService.saveMessage(uploadRecord);
+            }
+            this.flush();
+        },
+
+        async remove(tempId) {
+            console.log("[StatusUploadQueue] Removing status:", tempId);
+            if (window.IndexedDBQueueService) {
+                await window.IndexedDBQueueService.deleteMessage(tempId);
+            }
+        },
+
+        async flush() {
+            if (this.isFlushing) return;
+            this.isFlushing = true;
+            try {
+                if (!window.IndexedDBQueueService) return;
+                const items = await window.IndexedDBQueueService.getAllStatusUploads();
+                const online = typeof NetworkMonitor !== "undefined" ? NetworkMonitor.isOnline : navigator.onLine;
+                if (!online) {
+                    console.log("[StatusUploadQueue] Offline, skipping flush.");
+                    this.isFlushing = false;
+                    return;
+                }
+
+                for (const item of items) {
+                    if (item.status === "status_pending_preview") {
+                        continue;
+                    }
+                    if (item.status === "status_failed_upload" && item.retries >= 5) {
+                        continue;
+                    }
+                    if (navigator.locks) {
+                        await navigator.locks.request(`status_upload_${item.localId}`, { ifAvailable: true }, async (lock) => {
+                            if (!lock) {
+                                console.log(`[StatusUploadQueue] Lock for ${item.localId} already claimed.`);
+                                return;
+                            }
+                            await this.uploadItem(item);
+                        });
+                    } else {
+                        await this.uploadItem(item);
+                    }
+                }
+            } catch (err) {
+                console.error("[StatusUploadQueue] Flush error:", err);
+            } finally {
+                this.isFlushing = false;
+            }
+        },
+
+        async uploadItem(item) {
+            console.log("[StatusUploadQueue] Uploading item:", item.localId);
+            const tempId = item.localId;
+            const file = item.mediaBlob;
+            const caption = item.caption;
+
+            item.status = "status_uploading_media";
+            await window.IndexedDBQueueService.saveMessage(item);
+
+            try {
+                const uploadRes = await uploadFileInChunks(file, tempId);
+                const finalUrl = uploadRes?.original || uploadRes?.data?.url;
+                if (!finalUrl) {
+                    throw new Error("No final url returned from chunked upload");
+                }
+
+                item.status = "status_creating";
+                await window.IndexedDBQueueService.saveMessage(item);
+
                 const statusRes = await apiRequest("POST", "/api/status", {
                     mediaUrl: finalUrl,
-                    mediaType: (typeToUpload || "").includes("video") ? "video" : "image",
+                    mediaType: file.type.startsWith("video") ? "video" : "image",
                     caption: caption
                 });
 
                 if (statusRes && statusRes.status) {
-                    showToast("Status posted successfully!", "success");
-                    if (typeof window.closeCameraCaptureOverlay === "function") {
-                        window.closeCameraCaptureOverlay();
-                    }
+                    console.log("[StatusUploadQueue] Status created, removing record:", tempId);
+                    await this.remove(tempId);
+                    showToast("Status updated successfully!", "success");
                     if (typeof window.renderStatusSidebar === "function") {
                         window.renderStatusSidebar();
                     }
                 } else {
-                    showToast(statusRes?.message || "Failed to upload status", "error");
+                    throw new Error(statusRes?.message || "Failed to create status");
                 }
-            } else {
-                showToast("Failed to upload status media", "error");
-            }
-        } catch (err) {
-            console.error("Status upload error:", err);
-            showToast("Failed to upload status", "error");
-        } finally {
-            if (sendBtn) {
-                sendBtn.disabled = false;
-                sendBtn.style.opacity = "1";
-                sendBtn.textContent = "Send to Chat";
+            } catch (err) {
+                console.error("[StatusUploadQueue] Failed uploading status item:", tempId, err);
+                item.status = "status_failed_upload";
+                item.retries = (item.retries || 0) + 1;
+                await window.IndexedDBQueueService.saveMessage(item);
+                
+                if (item.retries < 5) {
+                    const delay = Math.pow(2, item.retries) * 1000;
+                    console.log(`[StatusUploadQueue] Retrying ${tempId} in ${delay}ms`);
+                    setTimeout(() => {
+                        this.flush();
+                    }, delay);
+                } else {
+                    showToast("Status upload failed after maximum retries.", "error");
+                }
             }
         }
+    };
+
+    window.saveStatusPendingUpload = async function(file) {
+        const tempId = "status_" + Date.now();
+        const uploadRecord = {
+            localId: tempId,
+            status: "status_pending_preview",
+            mediaBlob: file,
+            caption: "",
+            createdAt: Date.now(),
+            retries: 0
+        };
+        if (window.IndexedDBQueueService) {
+            await window.IndexedDBQueueService.saveMessage(uploadRecord);
+        }
+        return tempId;
+    };
+
+    window.updateStatusPendingCaptionAndUpload = async function(tempId, caption) {
+        if (!tempId) return;
+        if (window.IndexedDBQueueService) {
+            const record = await window.IndexedDBQueueService.getMessage(tempId);
+            if (record) {
+                record.caption = caption;
+                record.status = "status_queued";
+                await window.IndexedDBQueueService.saveMessage(record);
+            }
+        }
+        StatusUploadQueue.flush();
+    };
+
+    async function handleStatusMediaUpload(blobToUpload, typeToUpload) {
+        const captionInput = document.getElementById("camera-preview-caption-input");
+        const caption = captionInput ? captionInput.value.trim() : "";
+        
+        let tempId = window.currentStatusUploadId;
+        if (!tempId) {
+            const extension = (typeToUpload || "").includes("video") ? "mp4" : "jpg";
+            const mimeType = (typeToUpload || "").includes("video") ? "video/mp4" : "image/jpeg";
+            const file = new File([blobToUpload], `status_${Date.now()}.${extension}`, { type: mimeType });
+            tempId = await window.saveStatusPendingUpload(file);
+        }
+
+        window.currentStatusUploadId = null;
+
+        if (typeof window.closeCameraCaptureOverlay === "function") {
+            window.closeCameraCaptureOverlay();
+        }
+
+        if (window.updateStatusPendingCaptionAndUpload) {
+            window.updateStatusPendingCaptionAndUpload(tempId, caption);
+        }
+
+        showToast("Status uploading in background...", "info");
     }
 
     // Auto run initialization
     if (document.readyState !== "loading") {
         initStatusModule();
+        StatusUploadQueue.init();
     } else {
-        document.addEventListener("DOMContentLoaded", initStatusModule);
+        document.addEventListener("DOMContentLoaded", () => {
+            initStatusModule();
+            StatusUploadQueue.init();
+        });
     }
 
     document.addEventListener("click", (e) => {
@@ -992,5 +1131,6 @@
     window.initStatusModule = initStatusModule;
     window.handleStatusMediaUpload = handleStatusMediaUpload;
     window.handleRemoteStatusDeletion = handleRemoteStatusDeletion;
+    window.StatusUploadQueue = StatusUploadQueue;
 })();
 

@@ -100,7 +100,7 @@ const IndexedDBQueueService = {
         request.onsuccess = () => {
           const all = request.result || [];
           const unsent = all
-            .filter(msg => msg.status !== "sent" && msg.status !== "manual_draft" && msg.status !== "pending_preview")
+            .filter(msg => msg.status !== "sent" && msg.status !== "manual_draft" && msg.status !== "pending_preview" && !(typeof msg.status === "string" && msg.status.startsWith("status_")))
             .sort((a, b) => a.createdAt - b.createdAt);
           
           unsent.forEach(msg => {
@@ -109,6 +109,31 @@ const IndexedDBQueueService = {
             }
           });
           resolve(unsent);
+        };
+        request.onerror = (e) => reject(e.target.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  },
+
+  async getAllStatusUploads() {
+    return new Promise((resolve, reject) => {
+      try {
+        const store = this.getStore("readonly");
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const all = request.result || [];
+          const uploads = all
+            .filter(msg => typeof msg.status === "string" && msg.status.startsWith("status_"))
+            .sort((a, b) => a.createdAt - b.createdAt);
+          
+          uploads.forEach(msg => {
+            if (msg.mediaArrayBuffer) {
+              msg.mediaBlob = new File([msg.mediaArrayBuffer], msg.mediaFileName || "file", { type: msg.mediaMimeType });
+            }
+          });
+          resolve(uploads);
         };
         request.onerror = (e) => reject(e.target.error);
       } catch (err) {

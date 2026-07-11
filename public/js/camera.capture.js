@@ -292,7 +292,20 @@
         stopRecordingTimer();
     }
 
+    async function clearStatusPendingUpload() {
+        if (window.currentStatusUploadId && window.IndexedDBQueueService) {
+            console.log("[Camera] Cleaning up pending status upload:", window.currentStatusUploadId);
+            try {
+                await window.IndexedDBQueueService.deleteMessage(window.currentStatusUploadId);
+            } catch (err) {
+                console.error("[Camera] Failed to delete pending status upload:", err);
+            }
+            window.currentStatusUploadId = null;
+        }
+    }
+
     function closeCameraCaptureOverlay() {
+        clearStatusPendingUpload();
         stopLiveCameraStream();
         
         // Reset flash mode to off only when closing the camera modal
@@ -791,17 +804,31 @@
         if (actionControls) actionControls.style.display = "none";
         if (previewControls) previewControls.style.display = "flex";
 
-        if (!currentDraftId) {
-            currentDraftId = generateId();
+        if (State.cameraMode === "status") {
+            const ext = capturedFileType.includes("video") ? "mp4" : "jpg";
+            const mimeType = capturedFileType.includes("video") ? "video/mp4" : "image/jpeg";
+            const file = new File([capturedBlob], `status_${Date.now()}.${ext}`, { type: mimeType });
+            if (typeof window.saveStatusPendingUpload === "function") {
+                window.saveStatusPendingUpload(file).then(tempId => {
+                    window.currentStatusUploadId = tempId;
+                });
+            }
+        } else {
+            if (!currentDraftId) {
+                currentDraftId = generateId();
+            }
+            saveCameraDraft(currentDraftId, {
+                blob: capturedBlob,
+                type: capturedFileType.includes("video") ? "video" : "image",
+                status: "pending_preview"
+            });
         }
-        saveCameraDraft(currentDraftId, {
-            blob: capturedBlob,
-            type: capturedFileType.includes("video") ? "video" : "image",
-            status: "pending_preview"
-        });
     }
 
     function resetCameraCaptureToLive(shouldDeleteDraft = false) {
+        if (State.cameraMode === "status") {
+            clearStatusPendingUpload();
+        }
         if (State.cameraMode === "status" && window.statusGalleryFile) {
             closeCameraCaptureOverlay();
             return;

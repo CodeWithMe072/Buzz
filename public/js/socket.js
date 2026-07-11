@@ -192,6 +192,9 @@ function initSocket() {
       socket.emit("sync:delivered");
       flushOutbox();
       flushUploadQueue();
+      if (window.StatusUploadQueue && typeof window.StatusUploadQueue.flush === "function") {
+        window.StatusUploadQueue.flush();
+      }
     }
   });
 
@@ -207,6 +210,9 @@ function initSocket() {
       socket.emit("sync:delivered");
       flushOutbox();
       flushUploadQueue();
+      if (window.StatusUploadQueue && typeof window.StatusUploadQueue.flush === "function") {
+        window.StatusUploadQueue.flush();
+      }
     }
   });
 

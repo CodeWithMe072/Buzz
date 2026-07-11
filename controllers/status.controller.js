@@ -120,6 +120,7 @@ export const createStatus = async (req, res) => {
         for (const friendId of friendIds) {
           req.io.to(friendId).emit("status:new", payload);
         }
+        req.io.to(userId.toString()).emit("status:new", payload);
       } catch (broadcastErr) {
         console.error("[CreateStatus] broadcast error:", broadcastErr);
       }
