@@ -339,10 +339,10 @@ function openChat(chatId) {
   const chatOptionEl = document.getElementById("chatOption");
   chatOptionEl.classList.remove("active");
   document.getElementById("chat-info-btn").onclick = (e) => {
-    console.log("[DEBUG] chat-info-btn clicked. Previous active:", chatOptionEl.classList.contains("active"));
+    
     e.stopPropagation();
     chatOptionEl.classList.toggle("active");
-    console.log("[DEBUG] chat-info-btn click handled. New active:", chatOptionEl.classList.contains("active"));
+    
   };
 
   // Delete chat
@@ -685,9 +685,9 @@ function createMessageElement(message) {
     const replyMsg = State.messages[State.activeChat].find(
       m => m.id === message.replyTo || m.tempId === message.replyTo
     );
-    console.log(State.messages[State.activeChat])
-    console.log(message.replyTo)
-    console.log(replyMsg)
+    
+    
+    
     const replyText = replyMsg
       ? (replyMsg.type === "text"
         ? (replyMsg.content.length > 50
@@ -1916,10 +1916,10 @@ function openMomentsCarousel(friendId, clickedSnapUrl = null) {
 document.addEventListener("click", (e) => {
   const chatOption = document.getElementById("chatOption");
   const chatInfoBtn = document.getElementById("chat-info-btn");
-  console.log("[DEBUG] document click target:", e.target.tagName + "#" + e.target.id + "." + e.target.className, "chatOption active:", chatOption?.classList.contains("active"));
+  
   if (chatOption && chatOption.classList.contains("active")) {
     if (!chatOption.contains(e.target) && chatInfoBtn && !chatInfoBtn.contains(e.target)) {
-      console.log("[DEBUG] removing active class from chatOption due to click outside");
+      
       chatOption.classList.remove("active");
     }
   }
@@ -1934,10 +1934,10 @@ document.addEventListener("click", (e) => {
       return;
     }
 
-    console.log("[DEBUG Click] Clicked on media:", media, "target:", e.target);
+    
     // If inside a disappearing story preview, handle separately (it has its own listener on disappearing-preview-content)
     if (media.closest(".disappearing-preview-content")) {
-      console.log("[DEBUG Click] Disappearing story preview click, ignoring.");
+      
       return;
     }
 
@@ -1964,14 +1964,14 @@ document.addEventListener("click", (e) => {
     }
 
     const msgEl = media.closest(".message");
-    console.log("[DEBUG Click] closest message element:", msgEl, "messageId:", msgEl?.dataset?.messageId);
+    
     if (!msgEl) return;
     if ((!viewer || viewer.chatId !== State.activeChat) && State.activeChat) {
-      console.log("[DEBUG Click] Instantiating MediaViewer for activeChat:", State.activeChat);
+      
       viewer = new MediaViewer(State.activeChat);
     }
     if (viewer) {
-      console.log("[DEBUG Click] Calling viewer.open with:", msgEl.dataset.messageId);
+      
       viewer.open(msgEl.dataset.messageId, null, true);
     }
   }
@@ -2766,7 +2766,11 @@ async function renderStatusSidebar() {
       if (momentsList.length === 0) return;
 
       const unseenMoments = momentsList.filter(m => {
-        return !m.viewers.some(v => v.userId.toString() === State.currentUser._id.toString());
+        return !m.viewers.some(v => {
+          const vId = v?.userId?._id ? v.userId._id.toString() : (v?.userId ? v.userId.toString() : "");
+          const currentId = State.currentUser?._id ? State.currentUser._id.toString() : (State.currentUser?.id ? State.currentUser.id.toString() : "");
+          return vId && currentId && vId === currentId;
+        });
       });
       const isUnseen = unseenMoments.length > 0;
 
@@ -2865,7 +2869,11 @@ async function updateStatusUnseenIndicator() {
     
     for (const group of friendsSharing) {
       const unseen = (group.moments || []).filter(m => {
-        return !m.viewers.some(v => v.userId.toString() === State.currentUser._id.toString());
+        return !m.viewers.some(v => {
+          const vId = v?.userId?._id ? v.userId._id.toString() : (v?.userId ? v.userId.toString() : "");
+          const currentId = State.currentUser?._id ? State.currentUser._id.toString() : (State.currentUser?.id ? State.currentUser.id.toString() : "");
+          return vId && currentId && vId === currentId;
+        });
       });
       if (unseen.length > 0) {
         hasUnseen = true;

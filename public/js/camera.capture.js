@@ -239,7 +239,7 @@
         for (const constraints of constraintsLadder) {
             try {
                 loadedStream = await navigator.mediaDevices.getUserMedia(constraints);
-                console.log("[Camera] Successfully obtained stream with constraints:", constraints);
+                
                 break;
             } catch (err) {
                 console.warn("[Camera] Constraint selection failed, trying next fallback...", err);
@@ -294,7 +294,6 @@
 
     async function clearStatusPendingUpload() {
         if (window.currentStatusUploadId && window.IndexedDBQueueService) {
-            console.log("[Camera] Cleaning up pending status upload:", window.currentStatusUploadId);
             try {
                 await window.IndexedDBQueueService.deleteMessage(window.currentStatusUploadId);
             } catch (err) {
@@ -367,7 +366,7 @@
             badge.style.background = "#4b5563";
             badge.style.color = "#fff";
         }
-        console.log("[Camera] Flash mode changed to:", currentFlashMode);
+        
     }
 
     function checkIsDark() {
@@ -389,7 +388,7 @@
                 totalLuminance += luminance;
             }
             const avgLuminance = totalLuminance / (imgData.length / 4);
-            console.log("[Camera] Average stream luminance:", avgLuminance);
+            
             return avgLuminance < 65;
         } catch (e) {
             console.warn("[Camera] Ambient light calculation failed, defaulting to dark:", e);
@@ -407,10 +406,10 @@
                 await videoTrack.applyConstraints({
                     advanced: [{ torch: !!enable }]
                 });
-                console.log(`[Camera] Hardware torch set to: ${enable}`);
+                
                 return true;
             } else {
-                console.log("[Camera] Hardware torch is not supported on this track/device.");
+                
             }
         } catch (err) {
             console.warn("[Camera] Failed to apply torch constraint:", err);
@@ -482,7 +481,7 @@
         const shouldFlash = currentFlashMode === "on" || (currentFlashMode === "auto" && isDark);
 
         if (shouldFlash) {
-            console.log("[Camera] Flash active. Triggering hardware and screen overlay flash.");
+            
             if (screenFlash) {
                 screenFlash.style.display = "block";
                 screenFlash.style.opacity = "0.95";
@@ -500,7 +499,7 @@
                 const pixel = tempCtx.getImageData(0, 0, 1, 1).data;
                 const brightness = 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2];
                 if (brightness > 2) {
-                    console.log(`[Camera] Stream recovered after ${Date.now() - startTime}ms (brightness: ${brightness})`);
+                    
                     break;
                 }
                 await new Promise(r => setTimeout(r, 30));
@@ -676,7 +675,7 @@
         const isDark = checkIsDark();
         const shouldFlash = currentFlashMode === "on" || (currentFlashMode === "auto" && isDark);
         if (shouldFlash) {
-            console.log("[Camera] Video recording starting with flash (torch).");
+            
             await enableHardwareTorch(true);
         }
         

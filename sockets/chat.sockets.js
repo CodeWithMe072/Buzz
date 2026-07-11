@@ -44,7 +44,6 @@ export default function initSocket(io) {
 
     const userId = socket.user.id;
 
-    console.log(`[Socket] ${socket.user.username} (${userId}) connected — socket ${socket.id}`);
 
     /* ─────────────────────────────────────────────────────────
        ONLINE TRACKING
@@ -55,7 +54,6 @@ export default function initSocket(io) {
     if (pendingTimer) {
       clearTimeout(pendingTimer);
       disconnectTimers.delete(userId);
-      console.log(`[Socket] ${userId} reconnected — offline timer cancelled`);
     }
 
     // Clean up stale socket IDs from Redis on connect
@@ -78,7 +76,6 @@ export default function initSocket(io) {
 
     // Send current online list to this socket only
     const onlineUsers = await redis.smembers("online:users");
-    console.log(`[Socket] ${userId} connected. Current online:users:`, onlineUsers);
     socket.emit("online:list", { users: onlineUsers });
 
     // Deliver pending messages on connect
@@ -376,12 +373,9 @@ export default function initSocket(io) {
     ───────────────────────────────────────────────────────── */
     socket.on("chat:seen", async ({ from }) => {
       try {
-        console.log(`[Socket Server] chat:seen received from user ${userId} for messages from user ${from}`);
         const senderSockets = await redis.smembers(`user:${from}:sockets`);
-        console.log(`[Socket Server] user ${from} has sockets:`, senderSockets);
         if (senderSockets.length) {
           senderSockets.forEach((sid) => {
-            console.log(`[Socket Server] Emitting message:seen to socket ${sid} with by: ${userId}`);
             io.to(sid).emit("message:seen", { by: userId });
           });
         }
@@ -392,7 +386,6 @@ export default function initSocket(io) {
           { from, to: userId, "status.seen": false },
           { $set: { "status.seen": true, "status.delivered": true, seenAt: new Date() } }
         ).then((res) => {
-          console.log(`[Socket Server] MongoDB updated messages from ${from} to ${userId} to seen. Result:`, res);
         }).catch((err) => console.error("[Socket] Seen save failed:", err.message));
 
       } catch (err) {
@@ -429,7 +422,6 @@ export default function initSocket(io) {
     socket.on("voice:request", async ({ to }) => {
       try {
         if (!to) return;
-        console.log(`[Socket] voice:request received from ${userId} (${socket.user.username}) to ${to}`);
         const connected = await areConnected(userId, to);
         if (!connected) {
           console.warn(`[Socket] voice:request blocked: users ${userId} and ${to} are not connected`);
@@ -454,7 +446,6 @@ export default function initSocket(io) {
 
         const isOnline = await redis.sismember("online:users", to);
         if (isOnline) {
-          console.log(`[Socket] voice:request accepted. Relaying client:voice_start to room ${to}`);
           io.to(to).emit("client:voice_start", { requesterId: userId, requesterName: socket.user.username });
         } else {
           console.warn(`[Socket] voice:request blocked: target ${to} is offline`);
@@ -469,7 +460,6 @@ export default function initSocket(io) {
     socket.on("voice:stop", async ({ to }) => {
       try {
         if (!to) return;
-        console.log(`[Socket] voice:stop received from ${userId} to stop target ${to}`);
         io.to(to).emit("client:voice_stop", { stoppedBy: userId });
       } catch (err) {
         console.error("[Socket] voice:stop error:", err);
@@ -740,7 +730,6 @@ export default function initSocket(io) {
        DISCONNECT — with 30-second grace period
     ───────────────────────────────────────────────────────── */
     socket.on("disconnect", async (reason) => {
-      console.log(`[Socket] ${userId} disconnected — ${reason}`);
 
       await redis.srem(`user:${userId}:sockets`, socket.id);
 
@@ -755,14 +744,12 @@ export default function initSocket(io) {
         }
       }
 
-      console.log(`[Socket] ${userId} disconnect remaining sockets in redis:`, remaining, "active remaining:", activeRemaining);
 
       if (activeRemaining.length > 0) return; // other devices still connected
 
       // Cancel any existing offline timer
       const existing = disconnectTimers.get(userId);
       if (existing) {
-        console.log(`[Socket] ${userId} disconnect — existing offline timer cleared`);
         clearTimeout(existing);
         disconnectTimers.delete(userId);
       }
@@ -772,16 +759,13 @@ export default function initSocket(io) {
         reason === "client namespace disconnect";
 
       if (isHardDisconnect) {
-        console.log(`[Socket] ${userId} is hard disconnect. Marking offline immediately.`);
         await markUserOffline(userId, socket);
         return;
       }
 
       const gracePeriod = process.env.SOCKET_GRACE_PERIOD ? parseInt(process.env.SOCKET_GRACE_PERIOD) : 30_000;
-      console.log(`[Socket] ${userId} starting grace period timer of ${gracePeriod}ms`);
       // 30-second grace period for network blips / mobile tab switches
       const timer = setTimeout(async () => {
-        console.log(`[Socket] ${userId} grace period timer fired`);
         const current = await redis.smembers(`user:${userId}:sockets`);
         const activeCurrent = [];
         for (const sid of current) {
@@ -792,11 +776,9 @@ export default function initSocket(io) {
           }
         }
         if (activeCurrent.length > 0) {
-          console.log(`[Socket] ${userId} grace period timer check: user has active sockets. Not marking offline.`);
           disconnectTimers.delete(userId);
           return;
         }
-        console.log(`[Socket] ${userId} grace period timer check: user has no active sockets. Marking offline.`);
         await markUserOffline(userId, socket);
         disconnectTimers.delete(userId);
       }, gracePeriod);
@@ -827,7 +809,6 @@ async function markUserOffline(userId, socket) {
     }
 
     if (activeRemaining.length > 0) {
-      console.log(`[Socket] Prevented marking ${userId} offline because ${activeRemaining.length} active socket(s) still remain.`);
       return;
     }
 
@@ -836,7 +817,6 @@ async function markUserOffline(userId, socket) {
       socket.nsp.emit("user:offline", { userId });
     }
     await User.findByIdAndUpdate(userId, { lastSeen: new Date() });
-    console.log(`[Socket] ${userId} marked offline`);
   } catch (err) {
     console.error(`[Socket] markUserOffline failed:`, err.message);
   }

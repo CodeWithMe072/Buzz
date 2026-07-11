@@ -55,7 +55,7 @@
         if (window.statusModuleInitialized) return;
         window.statusModuleInitialized = true;
 
-        console.log("[Status Module] Initializing events and bindings...");
+
 
         const modal = document.getElementById("status-composer-modal");
         const closeBtn = document.getElementById("status-composer-close-btn");
@@ -311,7 +311,7 @@
 
     // ── Status Playback Viewer Overlay ──
     async function openStatusViewer(group) {
-        console.log("[DEBUG] openStatusViewer called with group:", JSON.stringify(group));
+
         activeGroup = group;
         activeIndex = 0;
         isPaused = false;
@@ -351,6 +351,11 @@
         if (optionsMenu) optionsMenu.style.display = "none";
         if (confirmModal) confirmModal.style.display = "none";
 
+        const viewedCard = document.getElementById("status-viewer-viewed-by-card");
+        const eyeContainer = document.getElementById("status-viewer-eye-container");
+        if (viewedCard) viewedCard.style.display = "none";
+        if (eyeContainer) eyeContainer.style.display = "none";
+
         activeGroup = null;
         activeIndex = -1;
         isPaused = false;
@@ -383,7 +388,7 @@
     }
 
     async function playCurrentStatusSegment() {
-        console.log("[DEBUG] playCurrentStatusSegment activeIndex:", activeIndex, "moments:", JSON.stringify(activeGroup?.moments));
+
         clearStatusTimers();
         isPaused = false;
         pausedAtMs = 0;
@@ -395,13 +400,13 @@
         if (pauseIcon) pauseIcon.style.display = "block";
 
         if (!activeGroup || activeIndex < 0 || activeIndex >= activeGroup.moments.length) {
-            console.log("[DEBUG] playCurrentStatusSegment empty or bounds condition met. Closing viewer.");
+
             closeStatusViewer();
             return;
         }
 
         const moment = activeGroup.moments[activeIndex];
-        console.log("[DEBUG] playCurrentStatusSegment playing moment:", JSON.stringify(moment));
+
         const resolvedType = moment.type || moment.mediaType || (moment.url ? (moment.url.match(/\.(mp4|webm|ogg|mov)/i) ? "video" : "image") : "text");
         const avatar = document.getElementById("status-viewer-avatar");
         const username = document.getElementById("status-viewer-username");
@@ -573,11 +578,90 @@
             }
         }
 
+        // Hide Viewed-by card when segment changes
+        const viewedByCard = document.getElementById("status-viewer-viewed-by-card");
+        if (viewedByCard) viewedByCard.style.display = "none";
+
         // Show/hide reply container based on ownership
         if (replyContainer) {
             replyContainer.style.display = isOwn ? "none" : "flex";
             const replyInput = document.getElementById("status-viewer-reply-input");
             if (replyInput) replyInput.value = "";
+        }
+
+        // Show/hide eye container and viewed list trigger for own status
+        const eyeBtn = document.getElementById("status-viewer-eye-container");
+        const eyeCount = document.getElementById("status-viewer-eye-count");
+        if (eyeBtn) {
+            if (isOwn) {
+                const viewCount = moment.viewers ? moment.viewers.length : 0;
+                if (eyeCount) eyeCount.textContent = viewCount;
+                eyeBtn.style.display = "flex";
+                if (captionBar) captionBar.style.bottom = "52px";
+
+                eyeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (!viewedByCard) return;
+
+                    const isOpen = viewedByCard.style.display === "flex";
+                    if (isOpen) {
+                        viewedByCard.style.display = "none";
+                        if (isPaused) togglePlayPause();
+                    } else {
+                        viewedByCard.style.display = "flex";
+                        if (!isPaused) togglePlayPause();
+
+                        const viewedByTitle = document.getElementById("status-viewer-viewed-by-title");
+                        const viewedByList = document.getElementById("status-viewer-viewed-by-list");
+                        if (viewedByTitle) viewedByTitle.textContent = `Viewed by ${viewCount}`;
+                        if (viewedByList) {
+                            viewedByList.innerHTML = "";
+                            const viewers = moment.viewers || [];
+                            if (viewers.length === 0) {
+                                viewedByList.innerHTML = `
+                                    <div style="flex: 1; display: flex; align-items: center; justify-content: center; font-size: 13.5px; color: rgba(255,255,255,0.45); font-weight: 500; height: 180px;">
+                                        No views yet
+                                    </div>`;
+                            } else {
+                                viewers.forEach(v => {
+                                    const avatarHtml = (v.avatar && v.avatar.length > 2)
+                                        ? `<img src="${v.avatar}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover;" />`
+                                        : `<div style="width: 38px; height: 38px; border-radius: 50%; background: #dd2a7b; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">${v.avatar || "S"}</div>`;
+                                    
+                                    const rawDate = new Date(v.viewedAt);
+                                    const hours = rawDate.getHours();
+                                    const minutes = rawDate.getMinutes().toString().padStart(2, '0');
+                                    const ampm = hours >= 12 ? 'pm' : 'am';
+                                    const displayHours = hours % 12 || 12;
+                                    const timeStr = `${displayHours}:${minutes} ${ampm}`;
+
+                                    viewedByList.innerHTML += `
+                                        <div style="display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                            ${avatarHtml}
+                                            <div style="display: flex; flex-direction: column; gap: 1px;">
+                                                <span style="font-size: 13.5px; font-weight: 600; color: white;">${v.username}</span>
+                                                <span style="font-size: 11px; color: rgba(255,255,255,0.55);">Today at ${timeStr}</span>
+                                            </div>
+                                        </div>`;
+                                });
+                            }
+                        }
+                    }
+                };
+            } else {
+                eyeBtn.style.display = "none";
+                if (captionBar) captionBar.style.bottom = "16px";
+            }
+        }
+
+        // Viewed-by card close handler
+        const closeViewedBtn = document.getElementById("status-viewer-viewed-by-close");
+        if (closeViewedBtn && viewedByCard) {
+            closeViewedBtn.onclick = (e) => {
+                e.stopPropagation();
+                viewedByCard.style.display = "none";
+                if (isPaused) togglePlayPause();
+            };
         }
 
         // Set previous segments filled state
@@ -888,12 +972,12 @@
                 setTimeout(() => this.init(), 100);
                 return;
             }
-            console.log("[StatusUploadQueue] Initializing and flushing queue...");
+
             this.flush().catch(err => console.error("[StatusUploadQueue] Init flush error:", err));
         },
 
         async add(tempId, file, caption) {
-            console.log("[StatusUploadQueue] Adding status:", tempId);
+
             const uploadRecord = {
                 localId: tempId,
                 status: "status_queued",
@@ -909,7 +993,7 @@
         },
 
         async remove(tempId) {
-            console.log("[StatusUploadQueue] Removing status:", tempId);
+
             if (window.IndexedDBQueueService) {
                 await window.IndexedDBQueueService.deleteMessage(tempId);
             }
@@ -923,7 +1007,7 @@
                 const items = await window.IndexedDBQueueService.getAllStatusUploads();
                 const online = typeof NetworkMonitor !== "undefined" ? NetworkMonitor.isOnline : navigator.onLine;
                 if (!online) {
-                    console.log("[StatusUploadQueue] Offline, skipping flush.");
+
                     this.isFlushing = false;
                     return;
                 }
@@ -938,7 +1022,7 @@
                     if (navigator.locks) {
                         await navigator.locks.request(`status_upload_${item.localId}`, { ifAvailable: true }, async (lock) => {
                             if (!lock) {
-                                console.log(`[StatusUploadQueue] Lock for ${item.localId} already claimed.`);
+
                                 return;
                             }
                             await this.uploadItem(item);
@@ -955,7 +1039,7 @@
         },
 
         async uploadItem(item) {
-            console.log("[StatusUploadQueue] Uploading item:", item.localId);
+
             const tempId = item.localId;
             const file = item.mediaBlob;
             const caption = item.caption;
@@ -980,7 +1064,7 @@
                 });
 
                 if (statusRes && statusRes.status) {
-                    console.log("[StatusUploadQueue] Status created, removing record:", tempId);
+
                     await this.remove(tempId);
                     showToast("Status updated successfully!", "success");
                     if (typeof window.renderStatusSidebar === "function") {
@@ -997,7 +1081,7 @@
                 
                 if (item.retries < 5) {
                     const delay = Math.pow(2, item.retries) * 1000;
-                    console.log(`[StatusUploadQueue] Retrying ${tempId} in ${delay}ms`);
+
                     setTimeout(() => {
                         this.flush();
                     }, delay);
@@ -1079,6 +1163,17 @@
             const deleteBtn = document.getElementById("status-viewer-delete-btn");
             if (!menu.contains(e.target) && e.target !== deleteBtn && (!deleteBtn || !deleteBtn.contains(e.target))) {
                 menu.style.display = "none";
+                if (isPaused && activeGroup) {
+                    togglePlayPause();
+                }
+            }
+        }
+
+        const viewedCard = document.getElementById("status-viewer-viewed-by-card");
+        const eyeBtn = document.getElementById("status-viewer-eye-container");
+        if (viewedCard && viewedCard.style.display === "flex") {
+            if (!viewedCard.contains(e.target) && (!eyeBtn || !eyeBtn.contains(e.target))) {
+                viewedCard.style.display = "none";
                 if (isPaused && activeGroup) {
                     togglePlayPause();
                 }

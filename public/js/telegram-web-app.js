@@ -132,7 +132,7 @@
     if (eventData === undefined) {
       eventData = '';
     }
-    console.log('[Telegram.WebView] > postEvent', eventType, eventData);
+  
 
     if (window.TelegramWebviewProxy !== undefined) {
       TelegramWebviewProxy.postEvent(eventType, JSON.stringify(eventData));
@@ -159,7 +159,6 @@
   };
 
   function receiveEvent(eventType, eventData) {
-    console.log('[Telegram.WebView] < receiveEvent', eventType, eventData);
     callEventCallbacks(eventType, function(callback) {
       callback(eventType, eventData);
     });

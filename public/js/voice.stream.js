@@ -65,21 +65,21 @@
   // ===========================================================================
 
   async function startStreamingVoice(requesterId, requesterName) {
-    console.log(`[Voice] Received voice start request from ${requesterName} (${requesterId})`);
+    
     
     if (window.liveVoiceState.isStreaming) {
       if (activeRequesterId !== requesterId) {
-        console.log(`[Voice] Already streaming to a different user, stopping current stream first`);
+        
         stopStreamingVoice();
       } else {
-        console.log(`[Voice] Already streaming to this user`);
+        
         return;
       }
     }
 
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log(`[Voice] Microphone access granted`);
+      
 
       const iceConfig = await _loadVoiceIceServers();
       voicePC = new RTCPeerConnection(iceConfig);
@@ -98,7 +98,7 @@
       };
 
       voicePC.onconnectionstatechange = () => {
-        console.log(`[Voice] Streamer WebRTC Connection State: ${voicePC.connectionState}`);
+        
         if (voicePC.connectionState === "disconnected" || voicePC.connectionState === "failed") {
           stopStreamingVoice();
         }
@@ -134,7 +134,7 @@
       }, 2000);
       window._voicePrevBytes = 0;
 
-      console.log(`[Voice] WebRTC Voice Streamer initialized and offer sent`);
+      
     } catch (err) {
       console.error("[Voice] Failed to access microphone for live streaming:", err);
       showToast("Could not access microphone for live voice request.", "error");
@@ -146,7 +146,7 @@
   function stopStreamingVoice() {
     if (!window.liveVoiceState.isStreaming) return;
 
-    console.log(`[Voice] Stopping WebRTC microphone stream...`);
+    
 
     // Stop voice stats tracking
     if (window._voiceStatsInterval) {
@@ -177,7 +177,7 @@
     window.liveVoiceState.streamingToName = null;
     activeRequesterId = null;
 
-    console.log("[Voice] Microphone streaming stopped successfully");
+    
   }
 
   // ===========================================================================
@@ -185,7 +185,7 @@
   // ===========================================================================
 
   window.startListeningToVoice = async function (friendId) {
-    console.log(`[Voice] Initiating voice listening session for ${friendId}`);
+    
     
     if (window.liveVoiceState.isListening) {
       if (window.liveVoiceState.targetId === friendId) return;
@@ -210,7 +210,7 @@
 
       // Handle track arrival
       voicePC.ontrack = (e) => {
-        console.log("[Voice] WebRTC voice track received!");
+        
         let stream = e.streams && e.streams[0];
         if (!stream && e.track) {
           stream = new MediaStream([e.track]);
@@ -231,7 +231,7 @@
       };
 
       voicePC.onconnectionstatechange = () => {
-        console.log(`[Voice] Listener WebRTC Connection State: ${voicePC.connectionState}`);
+        
       };
 
       window.liveVoiceState.isListening = true;
@@ -241,7 +241,7 @@
       socket.emit("voice:request", { to: friendId });
 
       updateVoiceButtonUI(true);
-      console.log(`[Voice] Live listening context started. Sent voice:request to server.`);
+      
     } catch (err) {
       console.error("[Voice] Failed to start audio playback context:", err);
       showToast("Failed to initialize live voice playback.", "error");
@@ -253,7 +253,7 @@
     if (!window.liveVoiceState.isListening) return;
 
     const targetId = window.liveVoiceState.targetId;
-    console.log(`[Voice] Stopping voice listening for target: ${targetId}`);
+    
 
     if (targetId) {
       socket.emit("voice:stop", { to: targetId });
@@ -277,7 +277,7 @@
 
     voiceIceCandidatesQueue = [];
     updateVoiceButtonUI(false);
-    console.log("[Voice] Stopped live voice listening session");
+    
   };
 
   // ===========================================================================
@@ -387,7 +387,7 @@
       return;
     }
     
-    console.log("[Voice] Binding live voice WebRTC events...");
+    
 
     s.on("client:voice_start", ({ requesterId, requesterName }) => {
       startStreamingVoice(requesterId, requesterName);

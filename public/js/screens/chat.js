@@ -3,7 +3,7 @@
  */
 
 export async function init() {
-    console.log("[Screen:Chat] Loading critical chat dependency scripts...");
+    
 
     // 1. Load critical scripts first
     await Promise.all([
@@ -39,7 +39,7 @@ export async function init() {
         initMuteState();
     }
 
-    console.log("[Screen:Chat] Critical dependencies loaded.");
+    
 }
 
 // 4. Define background loading of other components and scripts (to be called after connections load)
@@ -47,7 +47,7 @@ window.startBackgroundLoading = function() {
     if (window.chatBackgroundLoadStarted) return;
     window.chatBackgroundLoadStarted = true;
 
-    console.log("[Screen:Chat] Starting background loading: emoji, call, and secondary scripts...");
+    
     
     window.chatBackgroundLoadPromise = (async () => {
         try {
@@ -104,7 +104,7 @@ window.startBackgroundLoading = function() {
                 ComponentLoader.loadScript("/js/voice.stream.js")
             ]);
 
-            console.log("[Screen:Chat] Background dependencies fully loaded.");
+            
         } catch (err) {
             console.error("[Screen:Chat] Error during background load:", err);
         }

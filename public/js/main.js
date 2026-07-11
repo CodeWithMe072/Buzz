@@ -6,7 +6,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Register Service Worker for media caching
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('[ServiceWorker] Registered:', reg.scope))
+            .then(reg => { /* registered successfully */ })
             .catch(err => console.error('[ServiceWorker] Registration failed:', err));
     }
 
@@ -44,12 +44,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (e) {}
     }
 
-    console.log("[Main Debug] IS_SERVER_LOGIN:", isServerLogin, "hasLocalSession:", hasLocalSession, "savedUser:", savedUser, "isShowDashboard:", isShowDashboard);
+    
 
     if (isServerLogin && hasLocalSession) {
         // Logged in on server and local data is present
         if (isShowDashboard) {
-            console.log("[Main] Logged in. Showing decoy dashboard...");
+            
             try {
                 const html = await ComponentLoader.load("dashboard");
                 if (rootEl) {
@@ -63,7 +63,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (window.hideLoader) window.hideLoader();
             }
         } else {
-            console.log("[Main] Logged in and dashboard bypassed. Showing password overlay immediately...");
+            
             try {
                 const html = await ComponentLoader.load("dashboard");
                 if (rootEl) {
@@ -91,7 +91,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         let refreshSuccess = false;
 
         if (savedToken || savedUser) {
-            console.log("[Main] Server login missing but local data exists. Attempting to refresh token...");
+            
             try {
                 const newToken = await refreshAccessToken();
                 if (newToken) {
@@ -110,7 +110,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         refreshSuccess = true;
                         isShowDashboard = user.showDashboard ?? true;
 
-                        console.log("[Main] Token refresh succeeded. Loading dashboard...");
+                        
                         
                         const html = await ComponentLoader.load("dashboard");
                         if (rootEl) {
@@ -139,7 +139,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!refreshSuccess) {
             // Not logged in and cannot refresh, or no local session -> show login / decoy dashboard
             if (!savedToken && !savedUser) {
-                console.log("[Main] First-time visitor. Showing decoy dashboard camouflage...");
+                
                 try {
                     const html = await ComponentLoader.load("dashboard");
                     if (rootEl) {
@@ -154,7 +154,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }
             } else {
                 // Returning user but refresh failed -> show login screen directly
-                console.log("[Main] Session expired/invalid. Showing login screen directly...");
+                
                 if (typeof TokenStore !== "undefined") {
                     TokenStore.clear();
                 }

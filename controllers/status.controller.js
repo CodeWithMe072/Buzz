@@ -235,9 +235,9 @@ export const getMyStatuses = async (req, res) => {
     const myActiveStatuses = await Status.find({
       userId: userId,
       expiresAt: { $gt: now }
-    }).sort({ createdAt: 1 }); // oldest first to play in sequence
+    }).sort({ createdAt: 1 })
+      .populate("viewers.userId", "username avatar"); // Populate viewers user details
     
-    console.log("[DEBUG] getMyStatuses raw from DB:", JSON.stringify(myActiveStatuses));
 
     // Format to match moments format
     const formatted = myActiveStatuses.map(status => ({
@@ -250,13 +250,17 @@ export const getMyStatuses = async (req, res) => {
       font: status.font,
       caption: status.caption,
       duration: status.duration,
-      viewers: status.viewers,
+      viewers: status.viewers.map(v => ({
+        userId: v.userId?._id?.toString() || v.userId?.toString(),
+        username: v.userId?.username || "Someone",
+        avatar: (v.userId?.avatar && v.userId?.avatar.length > 2) ? v.userId.avatar : (v.userId?.username ? v.userId.username.charAt(0).toUpperCase() : "S"),
+        viewedAt: v.viewedAt
+      })),
       viewCount: status.viewCount,
       createdAt: status.createdAt,
       expiresAt: status.expiresAt
     }));
 
-    console.log("[DEBUG] getMyStatuses formatted:", JSON.stringify(formatted));
 
     res.json({ status: true, data: formatted });
   } catch (err) {

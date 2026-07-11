@@ -3,7 +3,7 @@
  */
 
 export async function init() {
-    console.log("[Screen:Call] Loading call manager UI and scripts...");
+    
 
     // Load Call UI HTML if not present
     if (!document.getElementById("call-modal")) {
@@ -35,5 +35,5 @@ export async function init() {
         }
     }
 
-    console.log("[Screen:Call] WebRTC call manager loaded.");
+    
 }

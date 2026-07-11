@@ -3,7 +3,7 @@
  */
 
 export async function init() {
-    console.log("[Screen:Account] Loading account profile modal...");
+    
     
     // Ensure auth.js is loaded (if not already loaded during auth/login phase)
     await Promise.all([
@@ -15,5 +15,5 @@ export async function init() {
         window.initPeoplePanel();
     }
     
-    console.log("[Screen:Account] Account profile modal initialized.");
+    
 }

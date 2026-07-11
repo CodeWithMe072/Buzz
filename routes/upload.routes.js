@@ -448,12 +448,11 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
                 const collectFiles = async (dir) => {
                     const entries = await fse.readdir(dir, { withFileTypes: true });
                     for (const entry of entries) {
-                        console.log("entry", entry)
+
                         const fullPath = path.join(dir, entry.name);
                         if (entry.isDirectory()) {
                             await collectFiles(fullPath);
                         } else if (entry.isFile() && [".gif", ".webp", ".m4v", ".m4bb", ".mp4"].includes(path.extname(entry.name).toLowerCase())) {
-                            console.log("fullpath", fullPath)
                             filesToUpload.push({
                                 fullPath,
                                 name: entry.name
@@ -486,7 +485,6 @@ router.post("/api/gifs/upload", protect, diskUpload.single("file"), async (req, 
                         else if (ext === ".m4bb" || ext === ".mp4") mimeType = "video/mp4";
 
                         const url = await uploadToR2(file.fullPath, key, mimeType);
-                        console.log("url", url)
                         const customGif = new CustomGif({
                             user: req.user._id,
                             section: section,

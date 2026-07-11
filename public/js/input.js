@@ -20,7 +20,7 @@ function initChatWindow() {
     const actionsBtn = document.getElementById('chat-actions-btn');
     const actionsPopup = document.getElementById('chat-actions-popup');
     
-    console.log("[initChatWindow Debug] actionsBtn:", !!actionsBtn, "actionsPopup:", !!actionsPopup, "DOM contains button:", !!document.getElementById('chat-actions-btn'));
+    
     
     const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
     if (snapshotBtn) {
@@ -374,7 +374,7 @@ async function uploadFileInChunks(file, msgId) {
         if (res.ok) {
             const statusData = await res.json();
             if (statusData.completed && statusData.data) {
-                console.log(`[Upload] File ${fileId} was already completed on server. Bypassing upload.`);
+                
                 return statusData.data;
             }
             serverChunks = statusData.chunksReceived || [];
@@ -393,7 +393,7 @@ async function uploadFileInChunks(file, msgId) {
     const tasks = Array.from({ length: totalChunks }, (_, i) => i).filter(idx => !chunksAcked.includes(idx));
     let done = chunksAcked.length;
 
-    console.log(`Resuming upload for ${msgId}: ${done}/${totalChunks} chunks already uploaded.`);
+    
 
     for (let i = 0; i < tasks.length; i += PARALLEL) {
         const batch = tasks.slice(i, i + PARALLEL);
@@ -433,7 +433,7 @@ async function uploadFileInChunks(file, msgId) {
                 }
             }
 
-            console.log(`${msgId}: ${Math.round((done / totalChunks) * 100)}%`);
+            
         }));
     }
 

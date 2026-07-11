@@ -17,7 +17,7 @@ const IndexedDBQueueService = {
 
       request.onsuccess = (e) => {
         this.db = e.target.result;
-        console.log("[IndexedDB] Database initialized successfully");
+        
         resolve();
       };
 

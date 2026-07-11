@@ -3,7 +3,7 @@
  */
 
 export async function init() {
-    console.log("[Screen:Auth] Loading authentication scripts...");
+    
     
     // Load state.js and utils.js just in case they aren't loaded (they are in the core)
     await Promise.all([
@@ -14,5 +14,5 @@ export async function init() {
         await window.initAuth();
     }
     
-    console.log("[Screen:Auth] Authentication initialized successfully.");
+    
 }

@@ -77,13 +77,13 @@ function updateStatusIcon(tempId, status) {
 // =============================================================================
 function markSeen(message) {
   if (!message) {
-    console.log("[DEBUG seen] markSeen called with null message");
+    
     return;
   }
-  console.log("[DEBUG seen] markSeen called for message:", message.id || message._id || message.tempId, "current status:", message.status);
+  
   // Mark even if not yet "delivered" — seen implies delivered
   if (message.status?.seen) {
-    console.log("[DEBUG seen] message is already seen, returning");
+    
     return;
   }
   if (message.status) {
@@ -94,26 +94,26 @@ function markSeen(message) {
   const id = message.id || message._id || message.tempId;
   const selector = `.message[data-message-id="${id}"] .message-bubble`;
   const msgEl = document.querySelector(selector);
-  console.log("[DEBUG seen] Query selector:", selector, "Found element?", !!msgEl);
+  
   if (!msgEl) return;
   const wrap = msgEl.querySelector(".msg-status-wrap");
   if (!wrap) {
-    console.log("[DEBUG seen] .msg-status-wrap not found in element");
+    
     return;
   }
   wrap.innerHTML = `<svg class="status-icon double seen" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0px);"/></svg>`;
-  console.log("[DEBUG seen] DOM updated successfully to seen tick");
+  
 }
 
 // chatId = the conversation partner's userId
 // tempId = optional specific message id
 function updateMessageSeenByTempId(chatId, tempId = null) {
-  console.log("[DEBUG seen] updateMessageSeenByTempId called for chatId:", chatId, "tempId:", tempId);
+  
   const msgs = State.messages[chatId] || [];
-  console.log("[DEBUG seen] Total messages in State.messages for this chat:", msgs.length);
+  
   // only update messages WE sent (sender = "me")
   const mine = msgs.filter(m => m.sender === "me" || m.user?.toString() === State.currentUser?.id?.toString());
-  console.log("[DEBUG seen] Filtered mine messages count:", mine.length, "State.currentUser.id:", State.currentUser?.id);
+  
   if (tempId) {
     const msg = mine.find(m => m.id === tempId || m.tempId === tempId);
     if (msg && msg.uploadStatus !== "uploading") markSeen(msg);
@@ -218,7 +218,7 @@ function initSocket() {
 
   // ── Online list ───────────────────────────────────────────
   socket.on("online:list", ({ users }) => {
-    console.log("[DEBUG] socket online:list received:", users, "conversations in state:", State.conversations.map(c => ({ id: c.id, username: c.username })));
+    
     State.onlineUsers = users || [];
     State.conversations.forEach(conv => {
       conv.online = State.onlineUsers.includes(conv.id);
@@ -243,7 +243,7 @@ function initSocket() {
   });
 
   socket.on("user:online", ({ userId }) => {
-    console.log("[DEBUG] socket user:online received:", userId);
+    
     if (!State.onlineUsers) State.onlineUsers = [];
     if (!State.onlineUsers.includes(userId)) {
       State.onlineUsers.push(userId);
@@ -419,14 +419,14 @@ function initSocket() {
 
   socket.on("message:seen", ({ by }) => {
     // "by" = the userId of the person who saw our messages
-    console.log(`[Socket Client] message:seen received. by: ${by}`);
+    
     updateMessageSeenByTempId(by);
     safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   socket.on("chat:seen_sync", ({ from }) => {
     // Our own other device tells us messages FROM "from" were seen
-    console.log(`[Socket Client] chat:seen_sync received. from: ${from}`);
+    
     const conv = State.conversations.find(c => c.id === from);
     if (conv) {
       conv.unread = 0;
@@ -480,7 +480,7 @@ function initSocket() {
   });
 
   socket.on("message_deleted", ({ messageId, type }) => {
-    console.log("[Socket] message_deleted event received:", messageId, type);
+    
     if (typeof window.animateAndDeleteMessageFromDom === "function") {
       window.animateAndDeleteMessageFromDom(messageId);
     }
@@ -742,7 +742,7 @@ function initSocket() {
 
   // ── Status deleted (real-time rollback across all clients) ───
   socket.on("status:deleted", ({ statusId, userId }) => {
-    console.log("[Socket] status:deleted received — statusId:", statusId, "userId:", userId);
+    
 
     // 1. Refresh the status sidebar to remove the deleted status
     if (typeof window.renderStatusSidebar === "function") {
@@ -758,7 +758,7 @@ function initSocket() {
 
   // ── New status posted (real-time push to all contacts) ──────
   socket.on("status:new", ({ statusId, userId, username, avatar, moment }) => {
-    console.log("[Socket] status:new received — statusId:", statusId, "from:", username);
+    
 
     // 1. Refresh the status sidebar to show the new status
     if (typeof window.renderStatusSidebar === "function") {
@@ -829,7 +829,7 @@ function insertMessageInOrder(message) {
 }
 
 window.addEventListener("pagehide", () => {
-  console.log("[Socket] Page unloading, disconnecting socket...");
+  
   if (typeof socket !== "undefined" && socket && socket.connected) {
     socket.disconnect();
   }

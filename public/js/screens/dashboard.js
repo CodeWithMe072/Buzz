@@ -3,7 +3,7 @@
  */
 
 export async function init() {
-    console.log("[Screen:Dashboard] Loading dashboard scripts...");
+    
     
     const savedUser = localStorage.getItem("SSC_USER");
     const savedToken = typeof TokenStore !== "undefined" ? TokenStore.getToken() : null;
@@ -43,5 +43,5 @@ export async function init() {
         window.initMuteState();
     }
     
-    console.log("[Screen:Dashboard] Decoy dashboard initialized.");
+    
 }

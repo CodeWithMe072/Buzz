@@ -29,7 +29,7 @@ const CallManager = (() => {
     try {
       if ("wakeLock" in navigator) {
         _wakeLock = await navigator.wakeLock.request("screen");
-        console.log("[WebRTC] Screen Wake Lock acquired");
+        
       }
     } catch (err) {
       console.warn("[WebRTC] Screen Wake Lock failed:", err.message);
@@ -40,7 +40,7 @@ const CallManager = (() => {
     if (_wakeLock) {
       try {
         await _wakeLock.release();
-        console.log("[WebRTC] Screen Wake Lock released");
+        
       } catch (err) {
         console.warn("[WebRTC] Release Wake Lock failed:", err.message);
       }
@@ -99,7 +99,7 @@ const CallManager = (() => {
         const stunCount  = servers.filter(s => (typeof s.urls === "string" ? s.urls : "").startsWith("stun")).length;
         const turnCount  = servers.filter(s => (typeof s.urls === "string" ? s.urls : "").startsWith("turn")).length;
         const turnsCount = servers.filter(s => (typeof s.urls === "string" ? s.urls : "").startsWith("turns")).length;
-        console.log(`[WebRTC] ICE servers: ${servers.length} total — ${stunCount} STUN, ${turnCount} TURN, ${turnsCount} TURNS(TLS)`);
+        
         const hasTls = turnsCount > 0;
         if (!hasTls) console.warn("[WebRTC] ⚠ No TURNS/TLS server — calls may fail on mobile data");
         return { iceServers: servers };
@@ -225,7 +225,7 @@ const CallManager = (() => {
         for (const constraints of constraintsLadder) {
           try {
             loadedStream = await navigator.mediaDevices.getUserMedia(constraints);
-            console.log("[WebRTC Call] Obtained stream with constraints:", constraints);
+            
             break;
           } catch (err) {
             console.warn("[WebRTC Call] Constraint ladder fallback:", err);
@@ -284,12 +284,12 @@ const CallManager = (() => {
       if (c.includes(".local")) return; // skip mDNS — mobile can't resolve
       // Log type so we can see what's being gathered
       const type = c.includes("typ relay") ? "RELAY" : c.includes("typ srflx") ? "SRFLX" : c.includes("typ host") ? "HOST" : "?";
-      console.log("[WebRTC] Sending ICE candidate:", type, candidate.sdpMid);
+      
       socket.emit("call:ice", { to: _activePeer.id, candidate });
     };
 
     _pc.onicegatheringstatechange = () =>
-      console.log("[WebRTC] Gather:", _pc.iceGatheringState);
+      
 
     // Log TURN errors — code 701 = TURN auth failed, 702 = network error
     _pc.onicecandidateerror = (e) => {
@@ -298,12 +298,12 @@ const CallManager = (() => {
     };
 
     _pc.onconnectionstatechange = () =>
-      console.log("[WebRTC] Connection:", _pc.connectionState);
+      
 
     // ── ICE state machine ──────────────────────────────────
     _pc.oniceconnectionstatechange = async () => {
       const s = _pc.iceConnectionState;
-      console.log("[WebRTC] ICE:", s);
+      
 
       if (s === "connected" || s === "completed") {
         clearTimeout(_iceRestartTimer);
@@ -333,7 +333,7 @@ const CallManager = (() => {
     // We collect them into one MediaStream and ensure we call play()
     // every time a track arrives so the media elements update rendering.
     _pc.ontrack = ({ track, streams }) => {
-      console.log("[WebRTC] ontrack:", track.kind, "readyState:", track.readyState);
+      
 
       const stream = streams?.[0] || _remoteStream || new MediaStream();
       _remoteStream = stream;
@@ -397,7 +397,7 @@ const CallManager = (() => {
       // Just use the existing PC with iceRestart:true — the PC already has the TURN servers.
       const offer = await _pc.createOffer({ iceRestart: true });
       await _pc.setLocalDescription(offer);
-      console.log("[WebRTC] ICE restart offer sent");
+      
       socket.emit("call:offer", {
         to: _activePeer.id, type: _mode, sdp: offer, roomId: _roomId,
         from: { id: State.currentUser.id || State.currentUser._id, username: State.currentUser.username, avatar: State.currentUser.avatar }
@@ -714,7 +714,7 @@ const CallManager = (() => {
   async function _handleRenegotiation(from, offerSdp, type) {
     if (!offerSdp || !_pc) return;
     try {
-      console.log("[WebRTC] Handling renegotiation/mode switch from peer. Target mode:", type);
+      
       
       const newMode = type || _mode;
       
@@ -861,7 +861,7 @@ const CallManager = (() => {
 
   async function _enableVideoTracks() {
     try {
-      console.log("[WebRTC] Enabling video track");
+      
       const constraintsLadder = [
         {
           video: {
@@ -940,7 +940,7 @@ const CallManager = (() => {
   }
 
   function _disableVideoTracks() {
-    console.log("[WebRTC] Disabling video track");
+    
     if (_localStream) {
       _localStream.getVideoTracks().forEach(t => {
         t.stop();
@@ -995,7 +995,7 @@ const CallManager = (() => {
       ra.dataset.pauseListenerWired = "true";
       ra.addEventListener("pause", () => {
         if (_callState === "connected" && !_speakerOn) {
-          console.log("[WebRTC] remote-audio paused by system — resuming");
+          
           ra.play().catch(e => console.warn("[WebRTC] Resuming remote-audio failed:", e.message));
         }
       });
@@ -1023,7 +1023,7 @@ const CallManager = (() => {
         rvSpeaker.dataset.pauseListenerWired = "true";
         rvSpeaker.addEventListener("pause", () => {
           if (_callState === "connected" && _speakerOn) {
-            console.log("[WebRTC] remote-speaker-video paused by system — resuming");
+            
             rvSpeaker.play().catch(e => console.warn("[WebRTC] Resuming remote-speaker-video failed:", e.message));
           }
         });
@@ -1035,7 +1035,7 @@ const CallManager = (() => {
         rvSpeaker.volume = 1.0;
         rvSpeaker.play().catch(() => {});
       }
-      console.log("[WebRTC] Loudspeaker mode active (via video element)");
+      
     } else {
       // Earpiece Mode (play through audio tag)
       const rvSpeaker = $("remote-speaker-video");
@@ -1050,7 +1050,7 @@ const CallManager = (() => {
       ra.muted = false;
       ra.volume = 1.0;
       ra.play().catch(() => {});
-      console.log("[WebRTC] Earpiece mode active (via audio element)");
+      
     }
   }
 
@@ -1081,7 +1081,7 @@ const CallManager = (() => {
 
     // Initiate renegotiation offer
     try {
-      console.log("[WebRTC] Creating offer for mode switch to:", newMode);
+      
       const offer = await _pc.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: newMode === "video"
@@ -1137,7 +1137,7 @@ const CallManager = (() => {
 
     // Caller gets back the answer SDP from receiver
     sock.on("call:accept", async ({ sdp, type }) => {
-      console.log("[WebRTC] call:accept received, _pc exists:", !!_pc, "sdp type:", sdp?.type, "type:", type);
+      
       _stopTones();
       clearInterval(_waitingTimer);
       if (!_pc) {
@@ -1150,7 +1150,7 @@ const CallManager = (() => {
       }
       // Validate we're in the right state for setRemoteDescription
       const sigState = _pc.signalingState;
-      console.log("[WebRTC] signalingState before setRemoteDescription:", sigState);
+      
       if (sigState !== "have-local-offer") {
         console.error("[WebRTC] Wrong signalingState for answer:", sigState, "— ignoring");
         return;
@@ -1158,7 +1158,7 @@ const CallManager = (() => {
       try {
         await _pc.setRemoteDescription(new RTCSessionDescription(sdp));
         _remoteDescSet = true;
-        console.log("[WebRTC] setRemoteDescription(answer) OK — flushing", _pendingIce.length, "ICE candidates");
+        
         await _flushPendingIce();
 
         // Sync mode and UI if renegotiation changed it
@@ -1183,7 +1183,7 @@ const CallManager = (() => {
       } else {
         // Buffer — will be flushed after setRemoteDescription completes
         _pendingIce.push(candidate);
-        console.log("[WebRTC] ICE buffered (remoteDesc not set yet), total buffered:", _pendingIce.length);
+        
       }
     });
 

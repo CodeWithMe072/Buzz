@@ -74,7 +74,6 @@ router.get("/ice-servers", protect, async (req, res) => {
             }
         }
 
-        console.log(`[ICE] Returning ${iceServers.length} servers (${turnServers.length} from Metered + ${stunServers.length} STUN + variants)`);
         res.json({ success: true, data: iceServers });
 
     } catch (error) {

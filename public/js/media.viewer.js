@@ -154,7 +154,7 @@ class MediaViewer {
         if (onlyChatMedia) {
             this.data = null;
         }
-        console.log("[DEBUG MediaViewer] open called with:", indexOrId, "initialItems:", initialItems, "onlyChatMedia:", onlyChatMedia);
+        
         if (initialItems && initialItems.length) {
             this.mediaItems = initialItems.map((m, index) => ({
                 index,
@@ -455,11 +455,11 @@ class MediaViewer {
             }
         } catch (err) {
             if (err.name === 'AbortError' || (controller && controller.signal.aborted)) {
-                console.log("[MediaViewer] Decrypt request aborted for index:", index);
+                
             } else {
                 console.error("[MediaViewer] Decrypt request failed:", err);
                 if (retryCount < 4) {
-                    console.log(`[MediaViewer] Retrying decryption for index ${index} in 300ms (attempt ${retryCount + 1})...`);
+                    
                     await new Promise(resolve => setTimeout(resolve, 300));
                     if (this.activeDecryptController === controller) {
                         return this.decryptAndLoadItem(index, retryCount + 1);

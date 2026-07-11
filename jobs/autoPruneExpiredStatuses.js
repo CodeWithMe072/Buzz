@@ -58,7 +58,6 @@ export function startAutoPruneExpiredStatusesJob() {
                                     Key: key,
                                 })
                             );
-                            console.log(`[Cron Job] Deleted R2 object for key: ${key}`);
                         } catch (s3Err) {
                             console.error(`[Cron Job] Failed to delete R2 object for key ${key}:`, s3Err.message);
                         }
@@ -76,7 +75,6 @@ export function startAutoPruneExpiredStatusesJob() {
                                     Key: thumbKey,
                                 })
                             );
-                            console.log(`[Cron Job] Deleted R2 thumbnail object for key: ${thumbKey}`);
                         } catch (s3Err) {
                             console.error(`[Cron Job] Failed to delete R2 thumbnail object for key ${thumbKey}:`, s3Err.message);
                         }
