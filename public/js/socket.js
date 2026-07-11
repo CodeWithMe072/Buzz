@@ -4,6 +4,15 @@
  */
 
 // =============================================================================
+// SAFE SIDEBAR CHAT LIST RENDERER
+// =============================================================================
+function safeRenderChatList(filter = "") {
+  if (typeof renderChatList === "function") {
+    renderChatList(filter);
+  }
+}
+
+// =============================================================================
 // CONNECTION BANNER
 // =============================================================================
 let lastConnectionState = "online";
@@ -208,7 +217,7 @@ function initSocket() {
     State.conversations.forEach(conv => {
       conv.online = State.onlineUsers.includes(conv.id);
     });
-    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
     if (State.activeChat) {
       const conv = State.conversations.find(c => c.id === State.activeChat);
       if (conv) {
@@ -236,7 +245,7 @@ function initSocket() {
     const conv = State.conversations.find(c => c.id === userId);
     if (conv) {
       conv.online = true;
-      renderChatList();
+      safeRenderChatList();
     }
     if (State.activeChat === userId) {
       const statusEl = document.getElementById("online-status");
@@ -272,7 +281,7 @@ function initSocket() {
     if (conv) {
       conv.online  = false;
       conv.lastSeen = new Date();
-      renderChatList();
+      safeRenderChatList();
     }
     if (State.activeChat === userId) {
       const statusEl = document.getElementById("online-status");
@@ -376,7 +385,7 @@ function initSocket() {
       conv.timestamp   = message.timestamp;
       conv.unread = message.user !== State.activeChat ? (conv.unread || 0) + 1 : 0;
     }
-    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   // ── Message ack / delivery / seen ────────────────────────
@@ -387,6 +396,7 @@ function initSocket() {
     }
     updateMessageByTempId(tempId, { status: { sent: true } });
     updateStatusIcon(tempId, { sent: true });
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   socket.on("message:delivered", ({ tempId }) => {
@@ -398,12 +408,14 @@ function initSocket() {
       if (msg && msg.status) msg.status.delivered = true;
     }
     updateStatusIcon(tempId, { delivered: true });
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   socket.on("message:seen", ({ by }) => {
     // "by" = the userId of the person who saw our messages
     console.log(`[Socket Client] message:seen received. by: ${by}`);
     updateMessageSeenByTempId(by);
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   socket.on("chat:seen_sync", ({ from }) => {
@@ -413,7 +425,7 @@ function initSocket() {
     if (conv) {
       conv.unread = 0;
     }
-    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   // ── Media uploaded ────────────────────────────────────────
@@ -498,7 +510,7 @@ function initSocket() {
         online: (State.onlineUsers && State.onlineUsers.includes(c.user.id)) || false,
         messagesLoaded: true,
       }));
-      renderChatList();
+      safeRenderChatList();
     }
   });
 
@@ -547,7 +559,7 @@ function initSocket() {
       conv.lastMessage = formatLastMessage(message);
       conv.timestamp   = message.timestamp;
     }
-    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   // ── Background job updates ───────────────────────────────
@@ -580,7 +592,7 @@ function initSocket() {
         }
       }
     });
-    renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   socket.on("client:capture_moment", async (payload) => {

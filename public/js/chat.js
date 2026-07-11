@@ -43,6 +43,121 @@ function initChatList() {
   });
 }
 
+// =============================================================================
+// LAST MESSAGE PREVIEW GENERATOR
+// =============================================================================
+function getLastMessageHTML(conv) {
+  if (conv.messagesLoaded === false) {
+    return `<span style="color: var(--text-secondary); opacity: 0.6;">Loading...</span>`;
+  }
+  
+  const convMessages = State.messages[conv.id] || [];
+  const lastMsg = convMessages[0];
+  
+  if (!lastMsg) {
+    return `<span></span>`;
+  }
+
+  // 1. Determine if it is status reply
+  let isStatusReply = false;
+  let replyText = "";
+  if (lastMsg.type === "text") {
+    if (lastMsg.content && lastMsg.content.startsWith('{"isStatusReply":true')) {
+      try {
+        const data = JSON.parse(lastMsg.content);
+        isStatusReply = true;
+        replyText = data.replyText || "";
+      } catch (e) {
+        // fallback
+      }
+    }
+  }
+
+  // 2. Generate tick status icon if sent by "me"
+  const isMe = lastMsg.sender === "me" || lastMsg.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
+  let tickHTML = "";
+  if (isMe) {
+    const status = lastMsg.status || { sent: true, delivered: false, seen: false };
+    let statusClass = "clock";
+    let strokeColor = "rgba(255, 255, 255, 0.4)";
+    let svgContent = "";
+
+    if (status.seen) {
+      statusClass = "seen";
+      strokeColor = "#1da1f2";
+      svgContent = `<polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/>`;
+    } else if (status.delivered) {
+      statusClass = "delivered";
+      strokeColor = "currentColor";
+      svgContent = `<polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/>`;
+    } else if (status.sent) {
+      statusClass = "sent";
+      strokeColor = "currentColor";
+      svgContent = `<polyline points="2 8 6 12 14 4"/>`;
+    } else {
+      statusClass = "clock";
+      strokeColor = "currentColor";
+      svgContent = `<circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/>`;
+    }
+
+    tickHTML = `
+      <svg class="status-icon ${statusClass}" viewBox="0 0 16 16" style="width: 16px; height: 12px; fill: none; stroke: ${strokeColor}; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; margin-right: 3px; vertical-align: middle; display: inline-block;">
+        ${svgContent}
+      </svg>
+    `;
+  }
+
+  // 3. Generate icon & text preview
+  let textPreview = "";
+  let iconHTML = "";
+
+  if (isStatusReply) {
+    iconHTML = `
+      <svg class="status-reply-icon" viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; margin-right: 4px; vertical-align: middle; display: inline-block;">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="4" />
+      </svg>
+    `;
+    textPreview = replyText;
+  } else {
+    if (lastMsg.type === "text") {
+      textPreview = lastMsg.content || "";
+    } else if (lastMsg.type === "image") {
+      iconHTML = `<span style="margin-right: 4px; vertical-align: middle;">📷</span>`;
+      textPreview = "Image";
+    } else if (lastMsg.type === "video") {
+      iconHTML = `<span style="margin-right: 4px; vertical-align: middle;">🎥</span>`;
+      textPreview = "Video";
+    } else if (lastMsg.type === "audio") {
+      iconHTML = `<span style="margin-right: 4px; vertical-align: middle;">🎤</span>`;
+      textPreview = "Voice message";
+    } else if (lastMsg.type === "document") {
+      iconHTML = `<span style="margin-right: 4px; vertical-align: middle;">📁</span>`;
+      textPreview = lastMsg.fileName || "Document";
+    } else if (lastMsg.type === "gif") {
+      iconHTML = `<span style="margin-right: 4px; vertical-align: middle;">🎬</span>`;
+      textPreview = "GIF";
+    } else if (lastMsg.type === "sticker") {
+      iconHTML = `<span style="margin-right: 4px; vertical-align: middle;">🖼️</span>`;
+      textPreview = "Sticker";
+    } else if (lastMsg.type === "call") {
+      iconHTML = `<span style="margin-right: 4px; vertical-align: middle;">${lastMsg.callType === "video" ? "📹" : "📞"}</span>`;
+      textPreview = lastMsg.callType === "video" ? "Video call" : "Voice call";
+    } else {
+      iconHTML = `<span style="margin-right: 4px; vertical-align: middle;">📷</span>`;
+      textPreview = lastMsg.type || "Media";
+    }
+  }
+
+  return `
+    <div style="display: flex; align-items: center; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
+      ${tickHTML}
+      ${iconHTML}
+      <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeInput(textPreview)}</span>
+    </div>
+  `;
+}
+
 function renderChatList(filter = "") {
   const chatList = document.getElementById("chat-list");
   chatList.innerHTML = "";
@@ -80,7 +195,7 @@ function renderChatList(filter = "") {
           <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) : ""}</span>
         </div>
         <div class="chat-item-preview ${conv.unread > 0 ? "unread" : ""} ${conv.messagesLoaded === false ? "loading-preview" : ""}">
-          <span>${conv.lastMessage ? sanitizeInput(conv.lastMessage) : ""}</span>
+          ${getLastMessageHTML(conv)}
         </div>
       </div>
       ${conv.unread > 0 ? `<span class="unread-badge">${conv.unread}</span>` : ""}`;
@@ -387,6 +502,162 @@ function getEmojiAnimationClass(emoji) {
 // =============================================================================
 // CREATE MESSAGE ELEMENT
 // =============================================================================
+function renderStatusReplyBubble(statusData, footerHTML, message) {
+  const isFailed = message.uploadStatus === "failed";
+  
+  const accentBorderHtml = `
+    <div style="width: 4px; background: linear-gradient(135deg, #f58529, #dd2a7b); border-radius: 4px 0 0 4px; flex-shrink: 0;"></div>
+  `;
+  
+  let typeIcon = "";
+  if (statusData.statusType === "video") {
+    typeIcon = `<svg viewBox="0 0 24 24" width="14" height="14" fill="rgba(255,255,255,0.7)" style="margin-right: 4px; flex-shrink: 0; display: inline-block; vertical-align: middle;"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>`;
+  } else if (statusData.statusType === "image" || statusData.statusType === "photo") {
+    typeIcon = `<svg viewBox="0 0 24 24" width="14" height="14" fill="rgba(255,255,255,0.7)" style="margin-right: 4px; flex-shrink: 0; display: inline-block; vertical-align: middle;"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>`;
+  }
+
+  let thumbnailHtml = "";
+  if (statusData.statusType === "text") {
+    const textPreview = statusData.statusText.length > 20 ? statusData.statusText.slice(0, 20) + "..." : statusData.statusText;
+    thumbnailHtml = `
+      <div style="width: 45px; height: 45px; border-radius: 4px; background: ${statusData.statusBg || '#3f51b5'}; display: flex; align-items: center; justify-content: center; font-size: 6px; color: white; padding: 4px; box-sizing: border-box; text-align: center; font-weight: bold; overflow: hidden; line-height: 1.1; flex-shrink: 0;">
+        ${sanitizeInput(textPreview)}
+      </div>
+    `;
+  } else if (statusData.statusUrl) {
+    if (statusData.statusType === "video") {
+      thumbnailHtml = `
+        <video src="${statusData.statusUrl}" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px; flex-shrink: 0; display: block;" muted playsinline></video>
+      `;
+    } else {
+      thumbnailHtml = `
+        <img src="${statusData.statusUrl}" style="width: 45px; height: 45px; object-fit: cover; border-radius: 4px; flex-shrink: 0; display: block;" />
+      `;
+    }
+  }
+
+  const previewBoxHtml = `
+    <div class="status-reply-preview-box" style="display: flex; background: rgba(0, 0, 0, 0.18); border-radius: 6px; overflow: hidden; margin-bottom: 8px; font-size: 13px; align-items: stretch; cursor: pointer;">
+      ${accentBorderHtml}
+      <div style="flex: 1; min-width: 0; padding: 8px 10px; display: flex; flex-direction: column; justify-content: center; gap: 2px;">
+        <div style="font-weight: 700; color: #ff8a65; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          ${sanitizeInput(statusData.senderName || "Status")} · Status
+        </div>
+        <div style="display: flex; align-items: center; color: rgba(255, 255, 255, 0.7); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          ${typeIcon}
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;">${sanitizeInput(statusData.statusText || "")}</span>
+        </div>
+      </div>
+      <div style="padding: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+        ${thumbnailHtml}
+      </div>
+    </div>
+  `;
+
+  return `
+    ${previewBoxHtml}
+    <p class="messag-text" style="margin: 0; padding: 4px 10px 6px 10px; color: var(--text-primary); font-size: 14px; line-height: 1.4;">${makeLinksClickable(sanitizeInput(statusData.replyText || ""))}</p>
+    ${footerHTML}
+    ${isFailed ? `<div class="upload-fail-badge">Failed to send</div>` : ""}
+  `;
+}
+
+window.openStatusViewerByStatusId = async (statusId) => {
+  // 1. Search in own statuses
+  if (State.myActiveStatuses) {
+    const idx = State.myActiveStatuses.findIndex(s => s._id === statusId);
+    if (idx !== -1) {
+      if (typeof window.openStatusViewer === "function") {
+        window.openStatusViewer({
+          user: {
+            id: State.currentUser._id || State.currentUser.id,
+            username: "My Status",
+            avatar: State.currentUser.avatar
+          },
+          moments: State.myActiveStatuses.map(s => ({
+            _id: s._id,
+            url: s.mediaUrl,
+            type: s.mediaType,
+            textContent: s.textContent,
+            backgroundColor: s.backgroundColor,
+            caption: s.caption,
+            createdAt: s.createdAt,
+            expiresAt: s.expiresAt,
+            viewers: s.viewers
+          }))
+        }, idx);
+      }
+      return;
+    }
+  }
+
+  // 2. Search in friends status feed
+  if (State.statusFeed) {
+    for (const group of State.statusFeed) {
+      const idx = group.moments.findIndex(m => m._id === statusId);
+      if (idx !== -1) {
+        if (typeof window.openStatusViewer === "function") {
+          window.openStatusViewer(group, idx);
+        }
+        return;
+      }
+    }
+  }
+
+  // 3. Fallback: Fetch feed and check
+  try {
+    const res = await apiRequest("GET", "/api/status/feed");
+    const momentsObj = res?.data?.moments || {};
+    const friendsSharing = Object.values(momentsObj);
+    State.statusFeed = friendsSharing;
+
+    for (const group of friendsSharing) {
+      const idx = group.moments.findIndex(m => m._id === statusId);
+      if (idx !== -1) {
+        if (typeof window.openStatusViewer === "function") {
+          window.openStatusViewer(group, idx);
+        }
+        return;
+      }
+    }
+
+    // Check own status from API
+    const myRes = await apiRequest("GET", "/api/status/me");
+    const myActiveStatuses = myRes?.data?.data || [];
+    State.myActiveStatuses = myActiveStatuses;
+    const ownIdx = myActiveStatuses.findIndex(s => s._id === statusId);
+    if (ownIdx !== -1) {
+      if (typeof window.openStatusViewer === "function") {
+        window.openStatusViewer({
+          user: {
+            id: State.currentUser._id || State.currentUser.id,
+            username: "My Status",
+            avatar: State.currentUser.avatar
+          },
+          moments: myActiveStatuses.map(s => ({
+            _id: s._id,
+            url: s.mediaUrl,
+            type: s.mediaType,
+            textContent: s.textContent,
+            backgroundColor: s.backgroundColor,
+            caption: s.caption,
+            createdAt: s.createdAt,
+            expiresAt: s.expiresAt,
+            viewers: s.viewers
+          }))
+        }, ownIdx);
+      }
+      return;
+    }
+  } catch (e) {
+    console.error("Failed to load status by ID:", e);
+  }
+
+  if (typeof showToast === "function") {
+    showToast("This status has expired or is no longer available.", "warning");
+  }
+};
+
 function createMessageElement(message) {
   const isMe = message.sender === "me" || message.user?.toString() === (State.currentUser.id || State.currentUser._id)?.toString();
   const msgEl = document.createElement("div");
@@ -549,7 +820,33 @@ function createMessageElement(message) {
     }
 
   } else if (message.type === "text") {
-    if (isEmojiOnly) {
+    let isStatusReply = false;
+    let statusReplyData = null;
+    if (message.content && message.content.startsWith('{"isStatusReply":true')) {
+      try {
+        statusReplyData = JSON.parse(message.content);
+        isStatusReply = true;
+      } catch (e) {
+        console.error("Failed to parse status reply:", e);
+      }
+    }
+
+    if (isStatusReply && statusReplyData) {
+      bubbleEl.innerHTML = renderStatusReplyBubble(statusReplyData, footerHTML, message);
+      
+      // Bind click handler for status reply preview box
+      setTimeout(() => {
+        const previewBox = bubbleEl.querySelector(".status-reply-preview-box");
+        if (previewBox) {
+          previewBox.onclick = (e) => {
+            e.stopPropagation();
+            if (typeof window.openStatusViewerByStatusId === "function") {
+              window.openStatusViewerByStatusId(statusReplyData.statusId);
+            }
+          };
+        }
+      }, 0);
+    } else if (isEmojiOnly) {
       bubbleEl.innerHTML = `
         ${replyHTML}
         <div class="messag-text animated-emoji ${animationClass}">${emojiChar}</div>
@@ -2279,6 +2576,53 @@ function initAppNavigation() {
   updateStatusUnseenIndicator();
 }
 
+function getStatusRingHtml(moments, size = 48, isOwn = false) {
+  if (!moments || moments.length === 0) return "";
+  
+  const N = moments.length;
+  const strokeWidth = 2.5;
+  const radius = (size / 2) - (strokeWidth / 2) - 1.5;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circumference = 2 * Math.PI * radius;
+  
+  const gap = N > 1 ? 3 : 0;
+  const totalGapSpace = N * gap;
+  const segmentLength = (circumference - totalGapSpace) / N;
+  
+  let svgContent = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="position: absolute; top: 0; left: 0; transform: rotate(-90deg); pointer-events: none; z-index: 1;">`;
+  svgContent += `
+    <defs>
+      <linearGradient id="unseen-status-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#f58529" />
+        <stop offset="100%" stop-color="#dd2a7b" />
+      </linearGradient>
+    </defs>
+  `;
+  
+  moments.forEach((m, i) => {
+    const hasViewed = !isOwn && m.viewers && m.viewers.some(v => v.userId === State.currentUser._id);
+    const strokeColor = hasViewed ? "#848487" : "url(#unseen-status-grad)";
+    const offset = i * (segmentLength + gap);
+    
+    svgContent += `
+      <circle
+        cx="${cx}"
+        cy="${cy}"
+        r="${radius}"
+        fill="none"
+        stroke="${strokeColor}"
+        stroke-width="${strokeWidth}"
+        stroke-dasharray="${segmentLength} ${circumference - segmentLength}"
+        stroke-dashoffset="${-offset}"
+      />
+    `;
+  });
+  
+  svgContent += `</svg>`;
+  return svgContent;
+}
+
 async function renderStatusSidebar() {
   const listEl = document.getElementById("status-sidebar-list");
   if (!listEl) return;
@@ -2299,6 +2643,7 @@ async function renderStatusSidebar() {
     try {
       const myRes = await apiRequest("GET", "/api/status/me");
       const myActiveStatuses = myRes?.data?.data || [];
+      State.myActiveStatuses = myActiveStatuses || [];
       
       if (myActiveStatuses.length > 0) {
         const latestStatus = myActiveStatuses[myActiveStatuses.length - 1];
@@ -2311,8 +2656,9 @@ async function renderStatusSidebar() {
 
         // Set status ring and thumbnail preview
         if (avatarContainer) {
-          avatarContainer.className = "avatar-container status-avatar-ring unseen";
+          avatarContainer.className = "avatar-container status-avatar-ring";
           avatarContainer.removeAttribute("style");
+          avatarContainer.style.position = "relative";
           avatarContainer.style.width = "48px";
           avatarContainer.style.height = "48px";
 
@@ -2326,7 +2672,8 @@ async function renderStatusSidebar() {
           }
           
           avatarContainer.innerHTML = `
-            <div class="avatar-inner" style="width: 100%; height: 100%;">
+            ${getStatusRingHtml(myActiveStatuses, 48, true)}
+            <div class="avatar-inner" style="position: absolute; top: 4px; left: 4px; width: 40px; height: 40px; border: 2px solid var(--primary-bg, #000); border-radius: 50%; box-sizing: border-box; z-index: 2; overflow: hidden;">
               ${innerHtml}
             </div>
             <span class="status-add-badge">+</span>
@@ -2383,6 +2730,7 @@ async function renderStatusSidebar() {
     const res = await apiRequest("GET", "/api/status/feed");
     const momentsObj = res?.data?.moments || {};
     let friendsSharing = Object.values(momentsObj);
+    State.statusFeed = friendsSharing || [];
 
     const recentTitle = document.getElementById("status-recent-title");
 
@@ -2453,11 +2801,12 @@ async function renderStatusSidebar() {
       }
         
       itemEl.innerHTML = `
-        <div class="status-avatar-ring ${isUnseen ? "unseen" : "seen"}" style="width: 48px; height: 48px;">
-          <div class="avatar-inner">
+        <div class="status-avatar-ring" style="width: 48px; height: 48px; position: relative;">
+          ${getStatusRingHtml(momentsList, 48, false)}
+          <div class="avatar-inner" style="position: absolute; top: 4px; left: 4px; width: 40px; height: 40px; border: 2px solid var(--primary-bg, #000); border-radius: 50%; box-sizing: border-box; z-index: 2; overflow: hidden;">
             ${thumbnailInner}
           </div>
-          ${friend.online ? `<span style="position: absolute; bottom: 2px; right: 2px; width: 10px; height: 10px; background: var(--status-online, #44d362); border-radius: 50%; border: 1.5px solid var(--primary-bg);"></span>` : ""}
+          ${friend.online ? `<span style="position: absolute; bottom: 2px; right: 2px; width: 10px; height: 10px; background: var(--status-online, #44d362); border-radius: 50%; border: 1.5px solid var(--primary-bg); z-index: 3;"></span>` : ""}
         </div>
         <div style="flex: 1; min-width: 0; margin-left: 8px;">
           <div style="font-weight: ${isUnseen ? "700" : "600"}; font-size: 14px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeInput(friend.username)}</div>

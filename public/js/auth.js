@@ -134,6 +134,11 @@ async function bootstrapAfterLogin() {
           if (msg.id) State.messageIndex[msg.id] = conv.id;
         }
 
+        const unreadCount = State.messages[conv.id].filter(
+          m => m.sender === "other" && (!m.status || !m.status.seen)
+        ).length;
+        conv.unread = unreadCount;
+
         const last = msgs[msgs.length - 1];
         conv.lastMessage = formatLastMessage(last);
         conv.timestamp = last.createdAt || last.clientTime || Date.now();
@@ -208,7 +213,15 @@ async function bootstrapAfterLogin() {
 // PENDING REQUESTS — refresh badge & list
 // =============================================================================
 async function refreshPendingRequests() {
-  getPendingRequests().then(some => updateRequestsBadge())
+  try {
+    const res = await getPendingRequests();
+    if (res && res.code === 200) {
+      State.pendingRequests = res.Data?.requests || [];
+    }
+  } catch (err) {
+    console.error("refreshPendingRequests failed:", err);
+  }
+  updateRequestsBadge();
 }
 
 function updateRequestsBadge() {

@@ -249,10 +249,7 @@ export default function initSocket(io) {
               ? (content || "").substring(0, 50)
               : (caption || `Sent a ${type}`);
 
-            const notification = telegramService.formatMessageNotification(
-              senderName, type, preview
-            );
-            await telegramService.sendNotification(receiver.telegramChatId, notification);
+            telegramService.sendNotification(receiver.telegramChatId, notification).catch(console.error);
           }
         }
 
@@ -262,6 +259,11 @@ export default function initSocket(io) {
 
       } catch (err) {
         console.error("[Socket] private_message error:", err);
+        socket.emit("message_error", {
+          tempId: payload?.message?.tempId,
+          code: "SERVER_ERROR",
+          message: err.message
+        });
       }
     });
 

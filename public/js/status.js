@@ -555,6 +555,14 @@
                 if (!hasViewed) {
                     moment.viewers.push({ userId: State.currentUser._id, viewedAt: new Date() });
                 }
+                
+                // Immediately refresh status sidebar and unseen indicator in real time!
+                if (typeof window.renderStatusSidebar === "function") {
+                    window.renderStatusSidebar();
+                }
+                if (typeof window.updateStatusUnseenIndicator === "function") {
+                    window.updateStatusUnseenIndicator();
+                }
             } catch (err) {
                 console.warn("Failed to mark status viewed:", err);
             }
@@ -750,14 +758,24 @@
         const moment = activeGroup.moments[activeIndex];
 
         // Format message context block
-        let statusPreviewText = "Photo/Video";
-        if (moment.type === "text") {
-            statusPreviewText = moment.textContent;
-        } else if (moment.caption) {
-            statusPreviewText = moment.caption;
+        let statusPreviewText = "Status";
+        if (moment.type === "image" || moment.type === "photo") {
+            statusPreviewText = moment.caption || "Photo";
+        } else if (moment.type === "video") {
+            statusPreviewText = moment.caption || "Video";
         }
         
-        const content = `💬 Replied to status:\n"${statusPreviewText}"\n\n${replyText}`;
+        const replyData = {
+            isStatusReply: true,
+            statusId: moment._id,
+            statusType: moment.type,
+            statusUrl: moment.url || null,
+            statusText: statusPreviewText,
+            statusBg: moment.backgroundColor || null,
+            replyText: replyText,
+            senderName: activeGroup.user.id === (State.currentUser._id || State.currentUser.id) ? "My Status" : activeGroup.user.username
+        };
+        const content = JSON.stringify(replyData);
         const tempId = generateId();
 
         // 1. Add to local state message cache if active or loaded

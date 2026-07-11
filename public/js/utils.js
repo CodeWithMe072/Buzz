@@ -481,7 +481,17 @@ function showLiveVideoPreview(friendName, onClose) {
 
 function formatLastMessage(message) {
     if (!message) return "";
-    if (message.type === "text") return message.content || "";
+    if (message.type === "text") {
+        if (message.content && message.content.startsWith('{"isStatusReply":true')) {
+            try {
+                const data = JSON.parse(message.content);
+                return `💬 Status reply: ${data.replyText || ""}`;
+            } catch (e) {
+                // fallback to raw text
+            }
+        }
+        return message.content || "";
+    }
     if (message.type === "image") return "📷 Image";
     if (message.type === "video") return "🎥 Video";
     if (message.type === "audio") return "🎤 Voice message";
