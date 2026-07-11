@@ -29,7 +29,6 @@ export function startAutoPruneExpiredStatusesJob() {
 
             if (expiredStatuses.length === 0) return;
 
-            console.log(`[Cron Job] Found ${expiredStatuses.length} expired status updates. Pruning...`);
 
             // Initialize S3/R2 client if credentials are set
             let s3 = null;
@@ -85,7 +84,6 @@ export function startAutoPruneExpiredStatusesJob() {
             // Remove documents from database
             const ids = expiredStatuses.map(s => s._id);
             const deleteResult = await Status.deleteMany({ _id: { $in: ids } });
-            console.log(`[Cron Job] Successfully deleted ${deleteResult.deletedCount} expired status updates from MongoDB.`);
 
         } catch (err) {
             console.error("[Cron Job] Expired status prune error:", err);
