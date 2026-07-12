@@ -8573,6 +8573,12 @@ input:checked+.slider:before {
     box-shadow: 0 1px 3px rgba(0,0,0,0.5);
 }
 
+@keyframes status-sending-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+
 .my-status-info {
     flex: 1;
 }

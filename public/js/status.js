@@ -17,6 +17,57 @@
     let segmentStartTime = 0;
     let isMuted = false;
 
+    // ── WhatsApp-style "Sending..." state on My Status card ─────────────────
+    function showStatusSendingState() {
+        const myStatusCard = document.getElementById("my-status-item");
+        if (!myStatusCard) return;
+
+        const avatarContainer = myStatusCard.querySelector(".avatar-container");
+        const myStatusSubtext = myStatusCard.querySelector(".my-status-subtext");
+
+        // Animated dashed ring — mimics WhatsApp's uploading indicator
+        if (avatarContainer) {
+            const size = 48;
+            const stroke = 2.5;
+            const r = (size / 2) - stroke;
+            const circ = 2 * Math.PI * r;
+            avatarContainer.className = "avatar-container";
+            avatarContainer.setAttribute("style", "position: relative; width: 48px; height: 48px; flex-shrink: 0;");
+            avatarContainer.innerHTML = `
+                <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="position:absolute;top:0;left:0;z-index:3;">
+                    <circle
+                        cx="${size/2}" cy="${size/2}" r="${r}"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.15)"
+                        stroke-width="${stroke}"
+                    />
+                    <circle
+                        cx="${size/2}" cy="${size/2}" r="${r}"
+                        fill="none"
+                        stroke="#25d366"
+                        stroke-width="${stroke}"
+                        stroke-dasharray="${circ}"
+                        stroke-dashoffset="${circ * 0.35}"
+                        stroke-linecap="round"
+                        transform="rotate(-90 ${size/2} ${size/2})"
+                        style="animation: status-sending-spin 1.2s linear infinite; transform-origin: ${size/2}px ${size/2}px;"
+                    />
+                </svg>
+                <div style="position:absolute;top:4px;left:4px;width:40px;height:40px;border-radius:50%;background:var(--elevated-bg);border:2px solid var(--border-color);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                        <polyline points="22 2 11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                </div>
+            `;
+        }
+
+        if (myStatusSubtext) {
+            myStatusSubtext.innerHTML = `<span style="color:#25d366;font-size:12px;">⏳ Sending...</span>`;
+        }
+
+        myStatusCard.onclick = null; // Disable click while sending
+    }
+
     // Initialize Status Composer
     function openStatusComposer() {
         const modal = document.getElementById("status-composer-modal");
@@ -126,9 +177,26 @@
                     if (captionContainer) captionContainer.style.display = "block";
                     if (captionInput) captionInput.value = "";
 
+                    // Set send button text to Update Status
+                    const sendBtn = document.getElementById("camera-preview-send-btn");
+                    if (sendBtn) {
+                        const span = sendBtn.querySelector("span");
+                        if (span) span.textContent = "Update Status";
+                    }
+
                     // Hide save draft for gallery uploads
                     const draftBtn = document.getElementById("camera-preview-draft-btn");
                     if (draftBtn) draftBtn.style.display = "none";
+
+                    // Show/hide mute button for gallery preview
+                    const isVideo = file.type.startsWith("video");
+                    const muteBtn = document.getElementById("camera-preview-mute-btn");
+                    if (muteBtn) {
+                        muteBtn.style.display = isVideo ? "flex" : "none";
+                    }
+                    if (isVideo && videoPreview) {
+                        videoPreview.muted = window.isPreviewMuted;
+                    }
 
                     // Save captured variables globally
                     window.capturedBlob = file;
@@ -214,6 +282,8 @@
 
                 sendTextBtn.disabled = true;
                 sendTextBtn.style.opacity = "0.6";
+                closeStatusComposer();
+                showStatusSendingState(); // Show WhatsApp-style sending indicator
 
                 try {
                     const res = await apiRequest("POST", "/api/status", {
@@ -560,13 +630,33 @@
         if (!isOwn) {
             try {
                 await apiRequest("POST", `/api/status/${moment._id}/view`);
-                // Update local seen state if active
-                const hasViewed = moment.viewers.some(v => v.userId === State.currentUser._id);
+
+                // ── Update in-memory State — no API refetch needed ────────────────
+                const currentId = State.currentUser?._id?.toString() || State.currentUser?.id?.toString() || "";
+                const hasViewed = moment.viewers.some(v => {
+                    const vId = v?.userId?._id ? v.userId._id.toString() : (v?.userId ? v.userId.toString() : "");
+                    return vId === currentId;
+                });
                 if (!hasViewed) {
-                    moment.viewers.push({ userId: State.currentUser._id, viewedAt: new Date() });
+                    moment.viewers.push({ userId: currentId, viewedAt: new Date() });
                 }
-                
-                // Immediately refresh status sidebar and unseen indicator in real time!
+
+                // Also update the matching moment in State.statusFeed
+                if (State.statusFeed) {
+                    for (const group of State.statusFeed) {
+                        const m = (group.moments || []).find(m => m._id === moment._id);
+                        if (m) {
+                            const alreadyIn = m.viewers.some(v => {
+                                const vId = v?.userId?._id ? v.userId._id.toString() : (v?.userId ? v.userId.toString() : "");
+                                return vId === currentId;
+                            });
+                            if (!alreadyIn) m.viewers.push({ userId: currentId, viewedAt: new Date() });
+                            break;
+                        }
+                    }
+                }
+
+                // Re-render sidebar + dot from State (both are now synchronous, zero API calls)
                 if (typeof window.renderStatusSidebar === "function") {
                     window.renderStatusSidebar();
                 }
@@ -577,6 +667,7 @@
                 console.warn("Failed to mark status viewed:", err);
             }
         }
+
 
         // Hide Viewed-by card when segment changes
         const viewedByCard = document.getElementById("status-viewer-viewed-by-card");
@@ -723,7 +814,10 @@
             if (video) {
                 video.src = moment.url;
                 video.style.display = "block";
-                video.muted = isMuted;
+                
+                // Mute if the source URL specifies it is muted, or global mute is on
+                const hasMutedUrl = moment.url && (moment.url.includes("muted=1") || moment.url.includes("muted=true"));
+                video.muted = hasMutedUrl || isMuted;
                 
                 video.onloadedmetadata = () => {
                     const duration = video.duration || 5;
@@ -983,6 +1077,7 @@
                 status: "status_queued",
                 mediaBlob: file,
                 caption: caption,
+                isMuted: window.isPreviewMuted || false,
                 createdAt: Date.now(),
                 retries: 0
             };
@@ -1039,6 +1134,7 @@
         },
 
         async uploadItem(item) {
+            showStatusSendingState(); // Show WhatsApp-style sending indicator
 
             const tempId = item.localId;
             const file = item.mediaBlob;
@@ -1049,13 +1145,17 @@
 
             try {
                 const uploadRes = await uploadFileInChunks(file, tempId);
-                const finalUrl = uploadRes?.original || uploadRes?.data?.url;
+                let finalUrl = uploadRes?.original || uploadRes?.data?.url;
                 if (!finalUrl) {
                     throw new Error("No final url returned from chunked upload");
                 }
 
                 item.status = "status_creating";
                 await window.IndexedDBQueueService.saveMessage(item);
+
+                if (item.isMuted) {
+                    finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'muted=1';
+                }
 
                 const statusRes = await apiRequest("POST", "/api/status", {
                     mediaUrl: finalUrl,
@@ -1108,13 +1208,14 @@
         return tempId;
     };
 
-    window.updateStatusPendingCaptionAndUpload = async function(tempId, caption) {
+    window.updateStatusPendingCaptionAndUpload = async function(tempId, caption, wasMuted) {
         if (!tempId) return;
         if (window.IndexedDBQueueService) {
             const record = await window.IndexedDBQueueService.getMessage(tempId);
             if (record) {
                 record.caption = caption;
                 record.status = "status_queued";
+                record.isMuted = wasMuted !== undefined ? wasMuted : (window.isPreviewMuted || false); // Save final preview mute state
                 await window.IndexedDBQueueService.saveMessage(record);
             }
         }
@@ -1124,6 +1225,7 @@
     async function handleStatusMediaUpload(blobToUpload, typeToUpload) {
         const captionInput = document.getElementById("camera-preview-caption-input");
         const caption = captionInput ? captionInput.value.trim() : "";
+        const wasMuted = window.isPreviewMuted || false;
         
         let tempId = window.currentStatusUploadId;
         if (!tempId) {
@@ -1140,7 +1242,7 @@
         }
 
         if (window.updateStatusPendingCaptionAndUpload) {
-            window.updateStatusPendingCaptionAndUpload(tempId, caption);
+            window.updateStatusPendingCaptionAndUpload(tempId, caption, wasMuted);
         }
 
         showToast("Status uploading in background...", "info");

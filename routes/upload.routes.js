@@ -258,6 +258,24 @@ function getMediaDuration(filePath) {
     });
 }
 
+function stripAudioTrack(inputPath, outputPath) {
+    return new Promise((resolve, reject) => {
+        execFile("ffmpeg", [
+            "-y",
+            "-i", inputPath,
+            "-c:v", "copy",
+            "-an",
+            outputPath
+        ], (err, stdout, stderr) => {
+            if (err) {
+                console.error("[FFmpeg] Audio stripping failed:", err, stderr);
+                return reject(err);
+            }
+            resolve();
+        });
+    });
+}
+
 async function generateAndUploadThumbnail(filePath, originalKey, isVideo) {
     const tempCoverPath = path.join(os.tmpdir(), `cover_${crypto.randomUUID()}.jpg`);
     const tempCompressedCoverPath = path.join(os.tmpdir(), `cover_270_${crypto.randomUUID()}.jpg`);
@@ -688,12 +706,14 @@ router.post("/api/upload-chunk",
 
 router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
     async (req, res) => {
-        const { fileId, fileName, mimeType, } = req.body;
+        const { fileId, fileName, mimeType, muted } = req.body;
+        console.log("[Complete Upload Payload]", { fileId, fileName, mimeType, muted });
         const chunkDir = path.join(os.tmpdir(), "chunks", fileId);
         try {
             // Check if already completed in Redis
             const cachedCompleted = await redis.get(`cache:upload_completed:${fileId}`);
             if (cachedCompleted) {
+                console.log("[Complete Upload Cached]", fileId);
                 return res.json(JSON.parse(cachedCompleted));
             }
 
@@ -712,9 +732,6 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                 totalSize += stat.size;
             }
 
-            // =========================================================================
-            // Stream Merge, Encrypt, and Upload Direct to R2
-            // =========================================================================
             const isVideo = mimeType.startsWith("video/");
             const isAudio = mimeType.startsWith("audio/");
             const isDocument = [
@@ -731,32 +748,21 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
 
             const key = generateFileKey(fileName, mimeType);
 
-            // Stream chunks directly through encryption stream to s3
-            const mergedStream = new MultiFileReadStream(chunkPaths);
-            const encryptStream = createEncryptStream("v1");
-            const pipedStream = mergedStream.pipe(encryptStream);
+            // =========================================================================
+            // Mute Video on Server Side if Requested
+            // =========================================================================
+            let finalUploadPath = null;
+            let finalUploadSize = totalSize;
+            const isMutedVideo = isVideo && (muted === true || muted === "true" || muted === "1");
+            console.log("[Mute Decision]", { isVideo, isMutedVideo, muted });
 
-            await s3.send(
-                new PutObjectCommand({
-                    Bucket: BUCKET,
-                    Key: key,
-                    Body: pipedStream,
-                    ContentType: mimeType,
-                    ContentLength: totalSize + 16,
-                    CacheControl: "public, max-age=31536000",
-                })
-            );
-
-            const url = getPublicFileUrl(key);
-
-            // Generate thumbnails in parallel by temporarily merging chunks to one file
-            let cover_270 = null;
-            let thumb_50 = null;
-            let duration = null;
-
-            if (isVideo || isAudio) {
-                const tempMergedPath = path.join(os.tmpdir(), `${fileId}_merged_temp`);
+            if (isMutedVideo) {
+                console.log("[Processing Muted Video]", fileId);
+                const ext = path.extname(fileName) || (mimeType.includes("webm") ? ".webm" : ".mp4");
+                const tempMergedPath = path.join(os.tmpdir(), `${fileId}_merged_temp${ext}`);
+                const tempMutedPath = path.join(os.tmpdir(), `${fileId}_muted_temp${ext}`);
                 try {
+                    // Merge chunks to tempMergedPath
                     await new Promise((resolve, reject) => {
                         const writeStream = fse.createWriteStream(tempMergedPath);
                         const readStream = new MultiFileReadStream(chunkPaths);
@@ -766,24 +772,104 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                         readStream.on("error", reject);
                     });
 
-                    if (isVideo) {
-                        const thumbnails = await generateAndUploadThumbnail(tempMergedPath, key, true);
-                        cover_270 = thumbnails.cover_270;
-                        thumb_50 = thumbnails.thumb_50;
-                    }
+                    // Strip audio using FFmpeg
+                    await stripAudioTrack(tempMergedPath, tempMutedPath);
+                    finalUploadPath = tempMutedPath;
 
-                    if (isVideo || isAudio) {
-                        duration = await getMediaDuration(tempMergedPath);
-                    }
-                } catch (thumbErr) {
-                    console.error("Failed to process merged file for chunked upload:", thumbErr);
-                } finally {
+                    const stat = await fse.stat(tempMutedPath);
+                    finalUploadSize = stat.size;
+
+                    // Cleanup temp merged file early
                     await fse.remove(tempMergedPath).catch(() => {});
+                } catch (muteErr) {
+                    console.error("[FFmpeg] Server-side video audio stripping failed, falling back to original:", muteErr);
+                    // Ensure cleanup of any temp files created
+                    await fse.remove(tempMergedPath).catch(() => {});
+                    await fse.remove(tempMutedPath).catch(() => {});
+                    finalUploadPath = null;
+                    finalUploadSize = totalSize;
                 }
             }
 
             // =========================================================================
-            // Cleanup
+            // Stream Merge, Encrypt, and Upload Direct to R2
+            // =========================================================================
+            const bodyStream = finalUploadPath 
+                ? fse.createReadStream(finalUploadPath) 
+                : new MultiFileReadStream(chunkPaths);
+            const encryptStream = createEncryptStream("v1");
+            const pipedStream = bodyStream.pipe(encryptStream);
+
+            await s3.send(
+                new PutObjectCommand({
+                    Bucket: BUCKET,
+                    Key: key,
+                    Body: pipedStream,
+                    ContentType: mimeType,
+                    ContentLength: finalUploadSize + 16,
+                    CacheControl: "public, max-age=31536000",
+                })
+            );
+
+            const url = getPublicFileUrl(key);
+
+            // =========================================================================
+            // Generate Thumbnails & Metadata
+            // =========================================================================
+            let cover_270 = null;
+            let thumb_50 = null;
+            let duration = null;
+
+            if (isVideo || isAudio) {
+                if (finalUploadPath) {
+                    // Use the already muted file on disk
+                    try {
+                        if (isVideo) {
+                            const thumbnails = await generateAndUploadThumbnail(finalUploadPath, key, true);
+                            cover_270 = thumbnails.cover_270;
+                            thumb_50 = thumbnails.thumb_50;
+                        }
+                        duration = await getMediaDuration(finalUploadPath);
+                    } catch (thumbErr) {
+                        console.error("Failed to process muted file for thumbnails/duration:", thumbErr);
+                    }
+                } else {
+                    // Generate thumbnails in parallel by temporarily merging chunks to one file
+                    const tempMergedPath = path.join(os.tmpdir(), `${fileId}_merged_temp`);
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const writeStream = fse.createWriteStream(tempMergedPath);
+                            const readStream = new MultiFileReadStream(chunkPaths);
+                            readStream.pipe(writeStream);
+                            writeStream.on("finish", resolve);
+                            writeStream.on("error", reject);
+                            readStream.on("error", reject);
+                        });
+
+                        if (isVideo) {
+                            const thumbnails = await generateAndUploadThumbnail(tempMergedPath, key, true);
+                            cover_270 = thumbnails.cover_270;
+                            thumb_50 = thumbnails.thumb_50;
+                        }
+
+                        if (isVideo || isAudio) {
+                            duration = await getMediaDuration(tempMergedPath);
+                        }
+                    } catch (thumbErr) {
+                        console.error("Failed to process merged file for chunked upload:", thumbErr);
+                    } finally {
+                        await fse.remove(tempMergedPath).catch(() => {});
+                    }
+                }
+            }
+
+            // Cleanup finalUploadPath (the muted temp file) if present
+            if (finalUploadPath) {
+                await fse.remove(finalUploadPath).catch(() => {});
+            }
+
+            // =========================================================================
+            // Cleanup Chunks Directory
             // =========================================================================
             await fse.remove(chunkDir);
 
@@ -797,7 +883,8 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                     original: url,
                     cover_270: cover_270,
                     thumb_50: thumb_50,
-                    duration: duration
+                    duration: duration,
+                    muted: isMutedVideo
                 };
             } else if (isDocument) {
                 responseData = makeDocumentUrls(url, fileName, totalSize);

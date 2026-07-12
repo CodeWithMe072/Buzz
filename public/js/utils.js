@@ -508,6 +508,13 @@ window.initCustomVideoPlayer = function (video) {
     if (!video || video.dataset.customPlayerInitialized) return;
     video.dataset.customPlayerInitialized = "true";
 
+    // Mute automatically if video URL has muted parameter
+    const srcVal = video.src || video.querySelector("source")?.src || "";
+    const hasMutedUrl = srcVal.includes("muted=1") || srcVal.includes("muted=true");
+    if (hasMutedUrl) {
+        video.muted = true;
+    }
+
     // Disable native controls
     video.controls = false;
 

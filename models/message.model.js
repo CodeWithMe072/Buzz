@@ -103,6 +103,11 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    
+    muted: {
+      type: Boolean,
+      default: false,
+    },
 
     cameraFacing: {
       type: String,

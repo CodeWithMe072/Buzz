@@ -705,9 +705,8 @@ function createMessageElement(message) {
   if (message.isDisappearing) {
     bubbleEl.classList.add("disappearing-bubble");
     const isVideo = message.type === "video";
-    const isMirrored = message.cameraFacing === "user";
     const filterClass = message.cameraFilter ? `filter-${message.cameraFilter}` : "";
-    const videoClass = [isMirrored ? "mirrored-media" : "", filterClass].filter(Boolean).join(" ");
+    const videoClass = filterClass;
     
     const coverUrl = message.cover || message.thumb;
     const mediaPreviewHTML = isVideo
@@ -2511,10 +2510,10 @@ function initAppNavigation() {
     }
   };
 
-  statusBtn.onclick = () => {
+  statusBtn.onclick = async () => {
     statusBtn.classList.add("active");
     chatBtn.classList.remove("active");
-    
+
     if (chatSidebar) {
       chatSidebar.style.display = "none";
       chatSidebar.classList.add("hidden");
@@ -2541,8 +2540,13 @@ function initAppNavigation() {
         </div>
       `;
     }
-    
-    renderStatusSidebar();
+
+    // Fetch from API only on first open; after that render from in-memory State
+    if (!State.statusInitialFetchDone) {
+      await fetchAndCacheStatusData();
+    } else {
+      renderStatusSidebar();
+    }
   };
 
   if (avatarBtn) {
@@ -2572,8 +2576,8 @@ function initAppNavigation() {
     };
   }
 
-  // Render status list initially (to set notifications/dots if any)
-  updateStatusUnseenIndicator();
+  // Prime status data on app init (exactly once)
+  fetchAndCacheStatusData();
 }
 
 function getStatusRingHtml(moments, size = 48, isOwn = false) {
@@ -2623,38 +2627,46 @@ function getStatusRingHtml(moments, size = 48, isOwn = false) {
   return svgContent;
 }
 
-async function renderStatusSidebar() {
+// ── Fetch from API and prime State — called ONCE on init and on reconnect ──────
+async function fetchAndCacheStatusData() {
+  try {
+    const [myRes, feedRes] = await Promise.all([
+      apiRequest("GET", "/api/status/me"),
+      apiRequest("GET", "/api/status/feed"),
+    ]);
+    State.myActiveStatuses = myRes?.data?.data || [];
+    State.statusFeed = Object.values(feedRes?.data?.moments || {});
+    State.statusInitialFetchDone = true;
+    renderStatusSidebar();
+    updateStatusUnseenIndicator();
+  } catch (e) {
+    console.error("[fetchAndCacheStatusData]", e);
+  }
+}
+
+// ── Render sidebar from in-memory State — NO API calls inside ─────────────────
+function renderStatusSidebar() {
   const listEl = document.getElementById("status-sidebar-list");
   if (!listEl) return;
 
-  listEl.innerHTML = `
-    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 0; color: var(--text-secondary); gap: 8px;">
-      <div class="spinner-ring" style="width: 24px; height: 24px; border-width: 2px; border-top-color: #dd2a7b;"></div>
-      <span style="font-size: 13px;">Loading status updates...</span>
-    </div>
-  `;
-
-  // 1. Fetch own status
+  // 1. Render own status card from State
   const myStatusCard = document.getElementById("my-status-item");
   if (myStatusCard && State.currentUser) {
     const avatarContainer = myStatusCard.querySelector(".avatar-container");
     const myStatusSubtext = myStatusCard.querySelector(".my-status-subtext");
+    const myActiveStatuses = State.myActiveStatuses || [];
 
     try {
-      const myRes = await apiRequest("GET", "/api/status/me");
-      const myActiveStatuses = myRes?.data?.data || [];
-      State.myActiveStatuses = myActiveStatuses || [];
       
       if (myActiveStatuses.length > 0) {
         const latestStatus = myActiveStatuses[myActiveStatuses.length - 1];
-        const timeStr = typeof formatRelativeTime === "function" 
-          ? formatRelativeTime(new Date(latestStatus.createdAt)) 
+        const timeStr = typeof formatRelativeTime === "function"
+          ? formatRelativeTime(new Date(latestStatus.createdAt))
           : new Date(latestStatus.createdAt).toLocaleTimeString();
         if (myStatusSubtext) {
           myStatusSubtext.textContent = `Today at ${timeStr} (${myActiveStatuses.length} update${myActiveStatuses.length > 1 ? "s" : ""})`;
         }
 
-        // Set status ring and thumbnail preview
         if (avatarContainer) {
           avatarContainer.className = "avatar-container status-avatar-ring";
           avatarContainer.removeAttribute("style");
@@ -2670,7 +2682,7 @@ async function renderStatusSidebar() {
           } else if (latestStatus.mediaType === "text") {
             innerHtml = `<div style="width: 100%; height: 100%; border-radius: 50%; background: ${latestStatus.backgroundColor || '#3f51b5'}; display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; padding: 4px; box-sizing: border-box; text-align: center; overflow: hidden; font-weight: 700; line-height: 1.1;">${latestStatus.textContent}</div>`;
           }
-          
+
           avatarContainer.innerHTML = `
             ${getStatusRingHtml(myActiveStatuses, 48, true)}
             <div class="avatar-inner" style="position: absolute; top: 4px; left: 4px; width: 40px; height: 40px; border: 2px solid var(--primary-bg, #000); border-radius: 50%; box-sizing: border-box; z-index: 2; overflow: hidden;">
@@ -2679,16 +2691,16 @@ async function renderStatusSidebar() {
             <span class="status-add-badge">+</span>
           `;
         }
-        
+
         myStatusCard.onclick = () => {
           if (typeof window.openStatusViewer === "function") {
             window.openStatusViewer({
               user: {
                 id: State.currentUser._id || State.currentUser.id,
                 username: "My Status",
-                avatar: State.currentUser.avatar
+                avatar: State.currentUser.avatar,
               },
-              moments: myActiveStatuses.map(s => ({
+              moments: myActiveStatuses.map((s) => ({
                 _id: s._id,
                 url: s.mediaUrl,
                 type: s.mediaType,
@@ -2697,8 +2709,8 @@ async function renderStatusSidebar() {
                 caption: s.caption,
                 createdAt: s.createdAt,
                 expiresAt: s.expiresAt,
-                viewers: s.viewers
-              }))
+                viewers: s.viewers,
+              })),
             });
           }
         };
@@ -2720,17 +2732,17 @@ async function renderStatusSidebar() {
         };
       }
     } catch (e) {
-      console.error("Error loading own active status:", e);
-      if (myStatusSubtext) myStatusSubtext.textContent = "Click to add status update";
+      console.error("[renderStatusSidebar] own status card error:", e);
+      if (myStatusCard) {
+        const myStatusSubtext = myStatusCard.querySelector(".my-status-subtext");
+        if (myStatusSubtext) myStatusSubtext.textContent = "Click to add status update";
+      }
     }
   }
 
-  // 2. Fetch friends' feed
+  // 2. Render friends' feed from State (no API call)
   try {
-    const res = await apiRequest("GET", "/api/status/feed");
-    const momentsObj = res?.data?.moments || {};
-    let friendsSharing = Object.values(momentsObj);
-    State.statusFeed = friendsSharing || [];
+    let friendsSharing = State.statusFeed || [];
 
     const recentTitle = document.getElementById("status-recent-title");
 
@@ -2852,41 +2864,40 @@ async function renderStatusSidebar() {
       });
     }
   } catch (err) {
-    console.error("Failed to render status sidebar:", err);
+    console.error("[renderStatusSidebar]", err);
     listEl.innerHTML = `<div style="text-align: center; color: var(--text-secondary); font-size: 13px; padding: 20px;">Error loading status updates</div>`;
   }
 }
 
-async function updateStatusUnseenIndicator() {
+// Reads from State — zero API calls
+function updateStatusUnseenIndicator() {
   const dot = document.getElementById("nav-status-dot");
   if (!dot) return;
-  
-  try {
-    const res = await apiRequest("GET", "/api/status/feed");
-    const momentsObj = res?.data?.moments || {};
-    const friendsSharing = Object.values(momentsObj);
-    let hasUnseen = false;
-    
-    for (const group of friendsSharing) {
-      const unseen = (group.moments || []).filter(m => {
-        return !m.viewers.some(v => {
-          const vId = v?.userId?._id ? v.userId._id.toString() : (v?.userId ? v.userId.toString() : "");
-          const currentId = State.currentUser?._id ? State.currentUser._id.toString() : (State.currentUser?.id ? State.currentUser.id.toString() : "");
-          return vId && currentId && vId === currentId;
-        });
-      });
-      if (unseen.length > 0) {
-        hasUnseen = true;
-        break;
-      }
-    }
-    
-    dot.style.display = hasUnseen ? "block" : "none";
-  } catch (e) {
-    console.error("Error updating status unseen indicator:", e);
-  }
+
+  const feed = State.statusFeed || [];
+  const currentId = State.currentUser?._id
+    ? State.currentUser._id.toString()
+    : State.currentUser?.id
+    ? State.currentUser.id.toString()
+    : "";
+
+  const hasUnseen = feed.some((group) =>
+    (group.moments || []).some((m) =>
+      !m.viewers.some((v) => {
+        const vId = v?.userId?._id
+          ? v.userId._id.toString()
+          : v?.userId
+          ? v.userId.toString()
+          : "";
+        return vId && currentId && vId === currentId;
+      })
+    )
+  );
+
+  dot.style.display = hasUnseen ? "block" : "none";
 }
 
-window.renderStatusSidebar = renderStatusSidebar;
+window.fetchAndCacheStatusData    = fetchAndCacheStatusData;
+window.renderStatusSidebar         = renderStatusSidebar;
 window.updateStatusUnseenIndicator = updateStatusUnseenIndicator;
 

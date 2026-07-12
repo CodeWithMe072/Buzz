@@ -195,6 +195,10 @@ function initSocket() {
       if (window.StatusUploadQueue && typeof window.StatusUploadQueue.flush === "function") {
         window.StatusUploadQueue.flush();
       }
+      // Re-fetch status data on reconnect (may have missed socket events while offline)
+      if (State.statusInitialFetchDone && typeof window.fetchAndCacheStatusData === "function") {
+        window.fetchAndCacheStatusData();
+      }
     }
   });
 
@@ -740,41 +744,98 @@ function initSocket() {
     }
   });
 
-  // ── Status deleted (real-time rollback across all clients) ───
+  // ── Status deleted (real-time rollback across all clients) ───────────────
   socket.on("status:deleted", ({ statusId, userId }) => {
-    
+    const currentUserId = (State.currentUser?._id || State.currentUser?.id || "").toString();
+    const isOwnStatus = userId.toString() === currentUserId;
 
-    // 1. Refresh the status sidebar to remove the deleted status
+    if (isOwnStatus) {
+      // ── Own status deleted: remove from State.myActiveStatuses ─────────────
+      if (State.myActiveStatuses) {
+        State.myActiveStatuses = State.myActiveStatuses.filter((m) => m._id !== statusId);
+      }
+    } else {
+      // ── Friend's status deleted: remove from State.statusFeed ──────────────
+      if (State.statusFeed) {
+        State.statusFeed = State.statusFeed
+          .map((group) => ({
+            ...group,
+            moments: (group.moments || []).filter((m) => m._id !== statusId),
+          }))
+          .filter((group) => group.moments.length > 0);
+      }
+    }
+
+    // Re-render sidebar from updated State
     if (typeof window.renderStatusSidebar === "function") {
       window.renderStatusSidebar();
     }
 
-    // 2. If the viewer is currently open and showing a status from this user,
-    //    remove the deleted moment from the active playback
+    // If viewer is open showing this status, remove it from playback
     if (typeof window.handleRemoteStatusDeletion === "function") {
       window.handleRemoteStatusDeletion(statusId, userId);
     }
   });
 
-  // ── New status posted (real-time push to all contacts) ──────
-  socket.on("status:new", ({ statusId, userId, username, avatar, moment }) => {
-    
 
-    // 1. Refresh the status sidebar to show the new status
+  // ── New status posted (real-time push to all contacts) ───────────────────
+  socket.on("status:new", ({ statusId, userId, username, avatar, moment }) => {
+    if (!moment) return;
+
+    const currentUserId = (State.currentUser?._id || State.currentUser?.id || "").toString();
+    const isOwnStatus = userId.toString() === currentUserId;
+
+    if (isOwnStatus) {
+      // ── Own status: add to State.myActiveStatuses, NOT statusFeed ──────────
+      if (!State.myActiveStatuses) State.myActiveStatuses = [];
+      const alreadyAdded = State.myActiveStatuses.some((m) => m._id === (moment._id || statusId));
+      if (!alreadyAdded) {
+        // Shape must match what getMyStatuses returns
+        State.myActiveStatuses.push({
+          _id: moment._id || statusId,
+          mediaUrl: moment.url || null,
+          mediaType: moment.type,
+          type: moment.type,
+          textContent: moment.textContent || null,
+          backgroundColor: moment.backgroundColor || null,
+          font: moment.font || null,
+          caption: moment.caption || null,
+          duration: moment.duration,
+          viewers: [],
+          viewCount: 0,
+          createdAt: moment.createdAt,
+          expiresAt: moment.expiresAt,
+        });
+      }
+    } else {
+      // ── Friend's status: add to State.statusFeed ───────────────────────────
+      if (!State.statusFeed) State.statusFeed = [];
+      const existing = State.statusFeed.find(
+        (g) => (g.user?.id || g.userId || "").toString() === userId.toString()
+      );
+      if (existing) {
+        const alreadyAdded = (existing.moments || []).some((m) => m._id === (moment._id || statusId));
+        if (!alreadyAdded) existing.moments.push(moment);
+      } else {
+        State.statusFeed.push({
+          user: { id: userId, username, avatar, online: true },
+          moments: [moment],
+        });
+      }
+
+      // Show toast only for friends' statuses
+      if (username) showToast(`${username} added a new status`, "info");
+    }
+
+    // Re-render sidebar + dot from updated State (no API call)
     if (typeof window.renderStatusSidebar === "function") {
       window.renderStatusSidebar();
     }
-
-    // 2. Update the unseen status indicator badge
     if (typeof window.updateStatusUnseenIndicator === "function") {
       window.updateStatusUnseenIndicator();
     }
-
-    // 3. Show a toast notification
-    if (username) {
-      showToast(`${username} added a new status`, "info");
-    }
   });
+
 
   if (typeof window.initVoiceSockets === "function") {
     window.initVoiceSockets();

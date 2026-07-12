@@ -351,6 +351,7 @@ async function uploadFileInChunks(file, msgId) {
     let record = null;
     if (window.IndexedDBQueueService) {
         record = await IndexedDBQueueService.getMessage(msgId);
+        console.log("[uploadFileInChunks] Retrieved record for msgId:", msgId, "isMuted:", record?.isMuted);
     }
     
     // Determine fileId
@@ -441,7 +442,12 @@ async function uploadFileInChunks(file, msgId) {
     const res = await fetch("/api/complete-upload", {
         method: "POST",
         headers: Object.assign({ "Content-Type": "application/json" }, token2 ? { "Authorization": "Bearer " + token2 } : {}),
-        body: JSON.stringify({ fileId, fileName: file.name, mimeType: file.type })
+        body: JSON.stringify({ 
+            fileId, 
+            fileName: file.name, 
+            mimeType: file.type,
+            muted: record?.isMuted || false
+        })
     });
     if (!res.ok) throw new Error("Finalize failed");
     return await res.json();

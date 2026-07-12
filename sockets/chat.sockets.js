@@ -142,7 +142,8 @@ export default function initSocket(io) {
           cover = null, thumb = null, duration = null,
           isDisappearing = false,
           cameraFacing = null,
-          cameraFilter = null
+          cameraFilter = null,
+          muted = false
         } = payload.message || {};
 
         if (!tempId || !to || !type) return;
@@ -189,6 +190,8 @@ export default function initSocket(io) {
           isDisappearing,
           cameraFacing,
           cameraFilter,
+          duration,
+          muted,
           timestamp: now,
           status: { delivered: isOnline },
         });
@@ -196,7 +199,7 @@ export default function initSocket(io) {
         // Sync to sender's other devices
         socket.to(userId).emit("private_message_sync", {
           tempId, to, type, content, fileName, fileSize,
-          caption, cover, thumb, isDisappearing, cameraFacing, cameraFilter, timestamp: now,
+          caption, cover, thumb, isDisappearing, cameraFacing, cameraFilter, duration, muted, timestamp: now,
         });
 
         // Ack to sender immediately
@@ -224,6 +227,7 @@ export default function initSocket(io) {
           isDisappearing,
           cameraFacing,
           cameraFilter,
+          muted,
           status: { sent: true, delivered: isOnline, seen: false },
           deliveredAt: isOnline ? new Date() : null,
         })

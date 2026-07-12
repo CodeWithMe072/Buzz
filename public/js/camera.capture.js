@@ -15,6 +15,8 @@
     let capturedFileType = ""; // "image/jpeg" or "video/webm"
     let currentFlashMode = "off"; // "off", "on", "auto"
     let currentDraftId = null;
+    window.isPreviewMuted = false;
+    
     
     // Story Viewer Timers
     let storyDurationTimer = null;
@@ -121,6 +123,20 @@
             sendBtn.addEventListener("click", sendCapturedMedia);
         }
 
+        // Video Preview Mute Button
+        const muteBtn = document.getElementById("camera-preview-mute-btn");
+        if (muteBtn && muteBtn.dataset.listenerAttached !== "true") {
+            muteBtn.dataset.listenerAttached = "true";
+            muteBtn.addEventListener("click", () => {
+                window.isPreviewMuted = !window.isPreviewMuted;
+                const videoPreview = document.getElementById("camera-capture-video-preview");
+                if (videoPreview) {
+                    videoPreview.muted = window.isPreviewMuted;
+                }
+                updateMuteButtonIcon(window.isPreviewMuted);
+            });
+        }
+
         // Drafts Gallery Button
         const draftsBtn = document.getElementById("camera-drafts-btn");
         if (draftsBtn && draftsBtn.dataset.listenerAttached !== "true") {
@@ -146,6 +162,24 @@
         initCameraFilters();
     }
 
+    function updateMuteButtonIcon(isMuted) {
+        const muteIconContainer = document.getElementById("camera-preview-mute-icon");
+        if (!muteIconContainer) return;
+
+        const svgMute = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <line x1="23" y1="9" x2="17" y2="15"></line>
+            <line x1="17" y1="9" x2="23" y2="15"></line>
+        </svg>`;
+
+        const svgVolume = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        </svg>`;
+
+        muteIconContainer.innerHTML = isMuted ? svgMute : svgVolume;
+    }
+
     // Call static bindings immediately on script execution
     bindStaticCameraEvents();
 
@@ -162,6 +196,11 @@
         overlay.style.display = "flex";
         setCaptureMode("photo"); // reset default mode
         
+        window.isPreviewMuted = false;
+        updateMuteButtonIcon(false);
+        const muteBtn = document.getElementById("camera-preview-mute-btn");
+        if (muteBtn) muteBtn.style.display = "none";
+
         const tabPhoto = document.getElementById("camera-capture-tab-photo");
         if (tabPhoto && tabPhoto.parentElement) {
             if (State.cameraMode === "status") {
@@ -169,6 +208,12 @@
             } else {
                 tabPhoto.parentElement.style.display = "flex";
             }
+        }
+
+        // Show/hide flash button based on status mode
+        const flashBtn = document.getElementById("camera-capture-flash-btn");
+        if (flashBtn) {
+            flashBtn.style.display = (State.cameraMode === "status") ? "none" : "flex";
         }
 
         // Show/hide caption input container
@@ -723,11 +768,7 @@
                 const objectUrl = URL.createObjectURL(capturedBlob);
                 videoPreview.src = objectUrl;
                 videoPreview.style.display = "block";
-                if (currentCameraFacing === "user") {
-                    videoPreview.classList.add("mirrored-media");
-                } else {
-                    videoPreview.classList.remove("mirrored-media");
-                }
+                videoPreview.classList.remove("mirrored-media");
                 videoEl.style.display = "none";
                 videoPreview.play();
             }
@@ -803,6 +844,26 @@
         if (actionControls) actionControls.style.display = "none";
         if (previewControls) previewControls.style.display = "flex";
 
+        // Show/hide preview mute button if preview media is a video
+        const muteBtn = document.getElementById("camera-preview-mute-btn");
+        if (muteBtn) {
+            const isVideo = capturedFileType && capturedFileType.includes("video");
+            muteBtn.style.display = isVideo ? "flex" : "none";
+        }
+        const videoPreview = document.getElementById("camera-capture-video-preview");
+        if (videoPreview) {
+            videoPreview.muted = window.isPreviewMuted;
+        }
+
+        // Update send button text depending on status mode vs chat message mode
+        const sendBtn = document.getElementById("camera-preview-send-btn");
+        if (sendBtn) {
+            const span = sendBtn.querySelector("span");
+            if (span) {
+                span.textContent = (State.cameraMode === "status") ? "Update Status" : "Send to Chat";
+            }
+        }
+
         if (State.cameraMode === "status") {
             const ext = capturedFileType.includes("video") ? "mp4" : "jpg";
             const mimeType = capturedFileType.includes("video") ? "video/mp4" : "image/jpeg";
@@ -841,6 +902,13 @@
 
         if (actionControls) actionControls.style.display = "flex";
         if (previewControls) previewControls.style.display = "none";
+
+        const muteBtn = document.getElementById("camera-preview-mute-btn");
+        if (muteBtn) {
+            muteBtn.style.display = "none";
+        }
+        window.isPreviewMuted = false;
+        updateMuteButtonIcon(false);
 
         if (imgPreview) {
             imgPreview.src = "";
@@ -902,7 +970,7 @@
 
         // Transition draft to queued state immediately so it leaves drafts gallery & count
         if (draftId) {
-            await saveCameraDraft(draftId, { status: "queued" });
+            await saveCameraDraft(draftId, { status: "queued", isMuted: window.isPreviewMuted });
         }
 
         if (sendBtn) {
@@ -913,11 +981,12 @@
 
         const extension = (typeToUpload || "").includes("video") ? "webm" : "jpg";
         const file = new File([blobToUpload], `captured-story-${Date.now()}.${extension}`, { type: typeToUpload });
+        const wasMuted = window.isPreviewMuted || false;
         
         closeCameraCaptureOverlay();
         
         try {
-            await uploadCapturedDisappearingMedia(file, draftId);
+            await uploadCapturedDisappearingMedia(file, draftId, wasMuted);
         } catch (err) {
             console.error("Failed to send disappearing media:", err);
             showToast("Failed to upload recorded file", "error");
@@ -930,10 +999,45 @@
         }
     }
 
-    async function uploadCapturedDisappearingMedia(file, draftId) {
+    async function uploadCapturedDisappearingMedia(file, draftId, wasMuted) {
         const to = State.activeChat;
         const mediaType = file.type.startsWith("image/") ? "image" : "video";
         const tempId = draftId || generateId();
+
+        // Save a temporary record in IndexedDB for the upload queue so uploadFileInChunks has access to isMuted
+        if (!draftId && window.IndexedDBQueueService) {
+            const fileId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            const isVideo = mediaType === "video";
+            const record = {
+                localId: tempId,
+                conversationId: to,
+                type: mediaType,
+                payload: null,
+                mediaBlob: file,
+                fileId: fileId,
+                isMuted: wasMuted || false,
+                mediaMeta: {
+                    fileName: file.name,
+                    fileSize: file.size,
+                    mimeType: file.type,
+                    replyTo: State.replyingTo || null,
+                    caption: null,
+                    cover: null,
+                    thumb: null,
+                    duration: null,
+                    fileId: fileId,
+                    isDisappearing: true,
+                    cameraFacing: currentCameraFacing,
+                    cameraFilter: currentFilter
+                },
+                status: "queued",
+                chunkTotal: Math.ceil(file.size / (2 * 1024 * 1024)),
+                chunksAcked: [],
+                createdAt: Date.now(),
+                retryCount: 0
+            };
+            await window.IndexedDBQueueService.saveMessage(record);
+        }
 
         const message = {
             tempId,
@@ -992,10 +1096,15 @@
                 const realType = data.type || mediaType;
                 const duration = data.duration || null;
 
+                let finalUrl = realUrl;
+                if (wasMuted && realType.startsWith("video")) {
+                    finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'muted=1';
+                }
+
                 const chatId = State.messageIndex[tempId];
                 const msg = chatId ? (State.messages[chatId] || []).find(m => m.tempId === tempId) : null;
                 if (msg) {
-                    msg.content = realUrl;
+                    msg.content = finalUrl;
                     msg.cover = cover;
                     msg.thumb = thumb;
                     msg.type = realType;
@@ -1004,7 +1113,7 @@
                     msg.status = { sent: true, delivered: false, seen: false };
                 }
 
-                updateMediaDOM(tempId, { content: realUrl, cover, thumb, type: realType, uploadStatus: "uploaded", fileName: file.name, fileSize: file.size, duration });
+                updateMediaDOM(tempId, { content: finalUrl, cover, thumb, type: realType, uploadStatus: "uploaded", fileName: file.name, fileSize: file.size, duration });
 
                 if (socket && socket.connected) {
                     socket.emit("private_message", {
@@ -1012,7 +1121,7 @@
                             tempId,
                             to,
                             type: realType,
-                            content: realUrl,
+                            content: finalUrl,
                             caption: null,
                             replyTo: null,
                             fileName: file.name,
@@ -1023,7 +1132,8 @@
                             isDisappearing: true,
                             cameraFacing: message.cameraFacing,
                             cameraFilter: message.cameraFilter,
-                            duration
+                            duration,
+                            muted: wasMuted
                         }
                     });
                 }
@@ -1089,11 +1199,7 @@
         if (details.type === "video") {
             video.src = details.src;
             video.style.display = "block";
-            if (details.cameraFacing === "user") {
-                video.classList.add("mirrored-media");
-            } else {
-                video.classList.remove("mirrored-media");
-            }
+            video.classList.remove("mirrored-media");
             
             // Apply story viewer playback filter class
             const filterClasses = FILTERS.map(f => `filter-${f.name}`);
@@ -1410,6 +1516,7 @@
             
             if (record) {
                 if (details.status) record.status = details.status;
+                if (details.isMuted !== undefined) record.isMuted = details.isMuted;
                 if (details.blob) {
                     record.mediaBlob = details.blob;
                     record.mediaMeta.fileSize = details.blob.size;
@@ -1429,6 +1536,7 @@
                     payload: null,
                     mediaBlob: details.blob,
                     fileId: fileId,
+                    isMuted: details.isMuted || false,
                     mediaMeta: {
                         fileName: fileName,
                         fileSize: details.blob?.size || 0,
@@ -1604,11 +1712,7 @@
             if (videoPreview) {
                 videoPreview.src = objectUrl;
                 videoPreview.style.display = "block";
-                if (currentCameraFacing === "user") {
-                    videoPreview.classList.add("mirrored-media");
-                } else {
-                    videoPreview.classList.remove("mirrored-media");
-                }
+                videoPreview.classList.remove("mirrored-media");
                 videoPreview.play();
             }
             if (imgPreview) {
