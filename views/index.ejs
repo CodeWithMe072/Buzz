@@ -398,7 +398,7 @@
             </div>
             
             <!-- Search Section -->
-            <div style="padding: 0 20px 12px; flex-shrink: 0;">
+            <div style="padding: 0 20px 12px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;">
                 <div style="position: relative; display: flex; align-items: center;">
                     <input type="text" id="camera-song-search-input" placeholder="Search track, artist, video..."
                         style="width: 100%; padding: 10px 15px 10px 35px; border-radius: 20px; border: 1.5px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: white; outline: none; font-size: 14px; font-family: inherit; transition: all 0.3s; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
@@ -406,6 +406,18 @@
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
+                </div>
+                
+                <!-- Toggle Selection Control -->
+                <div style="display: flex; gap: 8px; align-items: center; justify-content: center;">
+                    <button type="button" id="search-source-db-btn"
+                        style="flex: 1; padding: 8px 16px; border-radius: 20px; border: 1.5px solid #25d366; background: #25d366; color: black; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: all 0.25s; text-align: center; outline: none;">
+                        Local Library
+                    </button>
+                    <button type="button" id="search-source-yt-btn"
+                        style="flex: 1; padding: 8px 16px; border-radius: 20px; border: 1.5px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6); font-size: 12.5px; font-weight: 700; cursor: pointer; transition: all 0.25s; text-align: center; outline: none;">
+                        Search YouTube
+                    </button>
                 </div>
             </div>
             

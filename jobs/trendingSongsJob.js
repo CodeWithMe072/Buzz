@@ -6,6 +6,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getMetadata, downloadAudioStream } from "../utils/ytDownloader.js";
 import Song from "../models/song.model.js";
 import { encryptBuffer } from "../utils/mediaEncryption.js";
+import { youtubeApiRequest } from "../utils/youtube.js";
 
 // Curated popular/trending fallback music videos per category if YouTube API key is missing
 const FALLBACK_CATEGORIZED_VIDEOS = {
@@ -18,24 +19,24 @@ const FALLBACK_CATEGORIZED_VIDEOS = {
   ],
   Hindi: [
     { videoId: "Umqb9hx0OBc", title: "Arijit Singh - Tum Hi Ho", channelTitle: "T-Series", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "BddP6PYo2Gs", title: "Kesariya - Brahmāstra", channelTitle: "Sony Music India", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "hXnS5K5mScc", title: "Arijit Singh - Channa Mereya", channelTitle: "Sony Music India", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
+    { videoId: "hXnS5K5mScc", title: "Arijit Singh - Channa Mereya", channelTitle: "T-Series", thumbnailUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=320&h=180&fit=crop" },
     { videoId: "V7LwfY5U5WI", title: "Tera Ban Jaunga", channelTitle: "T-Series", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "Y8Z2X-XoZsw", title: "Kabir Singh - Tujhe Kitna Chahne Aur", channelTitle: "T-Series", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" }
+    { videoId: "Y8Z2X-XoZsw", title: "Kabir Singh - Tujhe Kitna Chahne Aur", channelTitle: "T-Series", thumbnailUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=320&h=180&fit=crop" },
+    { videoId: "GLGuLXKT9BY", title: "Diljit Dosanjh - G.O.A.T.", channelTitle: "Diljit Dosanjh", thumbnailUrl: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=320&h=180&fit=crop" }
   ],
   Punjabi: [
     { videoId: "cl0a3i2wFcc", title: "Sidhu Moose Wala - 295", channelTitle: "Sidhu Moose Wala", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "GLGuLXKT9BY", title: "Diljit Dosanjh - G.O.A.T.", channelTitle: "Diljit Dosanjh", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
+    { videoId: "A3ytNeHkX9s", title: "Sidhu Moose Wala - The Last Ride", channelTitle: "Sidhu Moose Wala", thumbnailUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=320&h=180&fit=crop" },
     { videoId: "vK5e0d49M9k", title: "AP Dhillon - Brown Munde", channelTitle: "Run-Up Records", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "A3ytNeHkX9s", title: "Sidhu Moose Wala - The Last Ride", channelTitle: "Sidhu Moose Wala", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "xR3V5vW6v9k", title: "Shubh - Elevated", channelTitle: "Shubh", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" }
+    { videoId: "d7yvdusE6yM", title: "Sidhu Moose Wala - So High", channelTitle: "Sidhu Moose Wala", thumbnailUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=320&h=180&fit=crop" },
+    { videoId: "0M381iO9J8Q", title: "Diljit Dosanjh - Lover", channelTitle: "Diljit Dosanjh", thumbnailUrl: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=320&h=180&fit=crop" }
   ],
   Haryanvi: [
-    { videoId: "8wA8z2XU2zY", title: "52 Gaj Ka Daman - Pranjal Dahiya", channelTitle: "Desi Records", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "9VzW6U8U9Vw", title: "Chatak Matak - Sapna Choudhary", channelTitle: "Vats Records", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "xW8U7z9V8U2", title: "Kabootar - Renuka Panwar", channelTitle: "Desi Records", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "v8U9z2XU7zY", title: "Coco Cola - Ruchika Jangid", channelTitle: "Dhun Records", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
-    { videoId: "zW8U2zXU9Vy", title: "Gajban Pani Ne Chali", channelTitle: "Desi Records", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" }
+    { videoId: "5oJle09Z5bQ", title: "Diler Kharkiya - Moto", channelTitle: "Diler Kharkiya", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
+    { videoId: "1pM1N4XpQhI", title: "Sumit Goswami - Feelings", channelTitle: "Sumit Goswami", thumbnailUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=320&h=180&fit=crop" },
+    { videoId: "4S1lXW6h7tA", title: "Gulzaar Chhaniwala - Filter Shot", channelTitle: "Gulzaar Chhaniwala", thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=320&h=180&fit=crop" },
+    { videoId: "tZp9x18vU4k", title: "Sumit Goswami - Parindey", channelTitle: "Sumit Goswami", thumbnailUrl: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=320&h=180&fit=crop" },
+    { videoId: "6YV6N3C4n8w", title: "MD Desi Rockstar - Haryanvi Mashup", channelTitle: "MD Desi Rockstar", thumbnailUrl: "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=320&h=180&fit=crop" }
   ]
 };
 
@@ -48,38 +49,39 @@ const CATEGORIES = ["English", "Hindi", "Punjabi", "Haryanvi"];
 export async function runTrendingSongsJob() {
   console.log("[TrendingSongsJob] Starting execution...");
   
-  const apiKey = process.env.YOUTUBE_API_KEY;
+  const hasKeys = process.env.YOUTUBE_API_KEY || process.env.YOUTUBE_API_KEY_2 || process.env.YOUTUBE_API_KEY_1;
   let trendingList = [];
 
   // 1. Fetch trending music videos per category
   for (const category of CATEGORIES) {
     let categorySongs = [];
-    if (apiKey) {
+    if (hasKeys) {
       try {
-        console.log(`[TrendingSongsJob] Querying YouTube Data API for ${category} trending songs...`);
-        // Searching for top 5 music videos for this category
-        const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=5&type=video&videoCategoryId=10&q=${encodeURIComponent(category + " trending song")}&key=${apiKey}`;
-        const response = await fetch(url);
-        
-        if (response.ok) {
-          const data = await response.json();
-          categorySongs = (data.items || []).map(item => ({
-            videoId: item.id.videoId,
-            title: item.snippet.title,
-            channelTitle: item.snippet.channelTitle,
-            thumbnailUrl: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url || ""
-          }));
-        } else {
-          const errText = await response.text();
-          console.error(`[TrendingSongsJob] YouTube API failed for ${category}:`, errText);
-          categorySongs = FALLBACK_CATEGORIZED_VIDEOS[category];
-        }
+        console.log(`[TrendingSongsJob] Querying YouTube Data API (with rotation) for ${category} trending songs...`);
+        const data = await youtubeApiRequest(
+          "search",
+          {
+            part: "snippet",
+            maxResults: "15",
+            type: "video",
+            videoCategoryId: "10",
+            q: `${category} trending song -shorts`
+          },
+          ["YOUTUBE_API_KEY", "YOUTUBE_API_KEY_2", "YOUTUBE_API_KEY_1"]
+        );
+
+        categorySongs = (data.items || []).map(item => ({
+          videoId: item.id.videoId,
+          title: item.snippet.title,
+          channelTitle: item.snippet.channelTitle,
+          thumbnailUrl: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url || ""
+        }));
       } catch (apiErr) {
         console.error(`[TrendingSongsJob] Error querying YouTube API for ${category}, falling back:`, apiErr);
         categorySongs = FALLBACK_CATEGORIZED_VIDEOS[category];
       }
     } else {
-      console.log(`[TrendingSongsJob] YOUTUBE_API_KEY not set. Using fallback list for ${category}...`);
+      console.log(`[TrendingSongsJob] No YouTube API keys set. Using fallback list for ${category}...`);
       categorySongs = FALLBACK_CATEGORIZED_VIDEOS[category];
     }
 

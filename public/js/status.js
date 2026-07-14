@@ -1662,10 +1662,18 @@
         const trimmerSongTitle = document.getElementById("trimmer-song-title");
         const trimmerSongChannel = null;
 
+        let PX_PER_SECOND = 10;
         let isPlaying = false;
         let trimmerStartTime = 0;
         let trimmerDuration = 15; // 15 seconds slot (mutable for videos)
         let totalAudioDuration = 30; // fallback
+
+        let currentSearchSource = "db";
+        let currentQuery = "";
+        let dbPage = 1;
+        let dbHasMore = true;
+        let youtubeNextPageToken = "";
+        let isFetchingPage = false;
 
         function hideCameraPreviewControls() {
             const caption = document.getElementById("camera-preview-caption-container");
@@ -1728,8 +1736,17 @@
         previewSongBtn.onclick = (e) => {
             e.stopPropagation();
 
-            // Stop all sounds (both video preview and song preview) when opening picker
             const videoPreview = document.getElementById("camera-capture-video-preview");
+            // Block song selection if video is longer than 60 seconds
+            if (videoPreview && window.capturedFileType === "video" && !isNaN(videoPreview.duration) && videoPreview.duration > 60) {
+                showToast("Videos must be 60 seconds or shorter to add music", "error");
+                if (videoPreview.style.display !== "none" && videoPreview.src) {
+                    videoPreview.play().catch(() => {});
+                }
+                return;
+            }
+
+            // Stop all sounds (both video preview and song preview) when opening picker
             if (videoPreview) {
                 videoPreview.pause();
             }
@@ -1742,6 +1759,8 @@
                 searchInput.value = "";
                 searchInput.focus();
             }
+            currentSearchSource = "db";
+            updateToggleStyles();
             fetchYouTubeSongs("");
         };
 
@@ -1755,6 +1774,74 @@
                     videoPreview.play().catch(() => {});
                 }
             };
+        }
+
+        // Toggle buttons click handlers and styles
+        const dbTabBtn = document.getElementById("search-source-db-btn");
+        const ytTabBtn = document.getElementById("search-source-yt-btn");
+
+        function updateToggleStyles() {
+            if (dbTabBtn && ytTabBtn) {
+                if (currentSearchSource === "db") {
+                    dbTabBtn.style.background = "#25d366";
+                    dbTabBtn.style.color = "black";
+                    dbTabBtn.style.borderColor = "#25d366";
+
+                    ytTabBtn.style.background = "rgba(255,255,255,0.05)";
+                    ytTabBtn.style.color = "rgba(255,255,255,0.6)";
+                    ytTabBtn.style.borderColor = "rgba(255,255,255,0.15)";
+                } else {
+                    ytTabBtn.style.background = "#25d366";
+                    ytTabBtn.style.color = "black";
+                    ytTabBtn.style.borderColor = "#25d366";
+
+                    dbTabBtn.style.background = "rgba(255,255,255,0.05)";
+                    dbTabBtn.style.color = "rgba(255,255,255,0.6)";
+                    dbTabBtn.style.borderColor = "rgba(255,255,255,0.15)";
+                }
+            }
+        }
+
+        if (dbTabBtn) {
+            dbTabBtn.onclick = () => {
+                if (currentSearchSource === "db") return;
+                currentSearchSource = "db";
+                updateToggleStyles();
+                fetchYouTubeSongs(searchInput ? searchInput.value.trim() : "");
+            };
+        }
+
+        if (ytTabBtn) {
+            ytTabBtn.onclick = () => {
+                if (currentSearchSource === "youtube") return;
+                currentSearchSource = "youtube";
+                updateToggleStyles();
+                fetchYouTubeSongs(searchInput ? searchInput.value.trim() : "");
+            };
+        }
+
+        // Scroll event listener for infinite pagination
+        if (songList) {
+            songList.onscroll = () => {
+                const threshold = 60; // px near bottom
+                const isNearBottom = songList.scrollHeight - songList.scrollTop - songList.clientHeight < threshold;
+                if (isNearBottom) {
+                    loadNextPage();
+                }
+            };
+        }
+
+        function loadNextPage() {
+            if (isFetchingPage) return;
+            
+            if (currentSearchSource === "db") {
+                if (!dbHasMore) return;
+                dbPage++;
+                fetchYouTubeSongsPage(currentQuery, dbPage, "");
+            } else {
+                if (!youtubeNextPageToken) return;
+                fetchYouTubeSongsPage(currentQuery, 1, youtubeNextPageToken);
+            }
         }
 
         // Search input with debouncing (450ms protects quota)
@@ -1870,7 +1957,8 @@
             if (!container) return;
             container.innerHTML = "";
             
-            const totalWidth = totalAudioDuration * 10;
+            const paddingX = 150;
+            const totalWidth = paddingX + (totalAudioDuration * PX_PER_SECOND) + paddingX;
             container.style.position = "relative";
             container.style.width = totalWidth + "px";
             container.style.height = "100%";
@@ -1887,7 +1975,7 @@
                     heightPct = 40; // Minor ticks every 1s
                     opacity = 0.4;
                 }
-                bar.style.cssText = `position: absolute; left: ${i * 10}px; width: 2px; height: ${heightPct}%; background: rgba(255, 255, 255, ${opacity}); border-radius: 1px; top: 50%; transform: translateY(-50%);`;
+                bar.style.cssText = `position: absolute; left: ${paddingX + (i * PX_PER_SECOND)}px; width: 2px; height: ${heightPct}%; background: rgba(255, 255, 255, ${opacity}); border-radius: 1px; top: 50%; transform: translateY(-50%);`;
                 container.appendChild(bar);
             }
         }
@@ -1920,8 +2008,9 @@
             } else {
                 trimmerDuration = 15;
             }
+            PX_PER_SECOND = 150 / trimmerDuration;
 
-            trimmerHighlightWindow.style.width = (trimmerDuration * 10) + "px";
+            trimmerHighlightWindow.style.width = "150px";
             const trimmerWindowLabel = document.getElementById("trimmer-window-label");
             if (trimmerWindowLabel) {
                 if (window.capturedFileType === "video") {
@@ -1934,7 +2023,8 @@
             trimmerTimer.textContent = formatTime(trimmerDuration);
             
             trimmerStartTime = window.pendingStatusSongRef?.startTime || 0;
-            trimmerHighlightWindow.style.left = (trimmerStartTime * 10) + "px";
+            const initialPaddingX = 150;
+            trimmerHighlightWindow.style.left = (initialPaddingX + (trimmerStartTime * PX_PER_SECOND)) + "px";
 
             trimmerStartLabel.textContent = "0:00";
             trimmerEndLabel.textContent = "Loading...";
@@ -1948,18 +2038,36 @@
             trimmerAudio.onloadedmetadata = () => {
                 totalAudioDuration = trimmerAudio.duration;
 
+                // Cap trimmer duration at total audio duration to avoid overflow
+                trimmerDuration = Math.min(trimmerDuration, totalAudioDuration);
+                PX_PER_SECOND = 150 / trimmerDuration;
+
+                // Update trimmerHighlightWindow width and labels in case duration got capped
+                trimmerHighlightWindow.style.width = "150px";
+                const trimmerWindowLabel = document.getElementById("trimmer-window-label");
+                if (trimmerWindowLabel) {
+                    if (window.capturedFileType === "video") {
+                        trimmerWindowLabel.textContent = formatTime(trimmerDuration);
+                    } else {
+                        trimmerWindowLabel.textContent = "15s";
+                    }
+                }
+                trimmerTimer.textContent = formatTime(trimmerDuration);
+
                 // Dynamically size and draw the waveform ticks track
                 drawDecorativeWaveform();
 
                 const initialStart = window.pendingStatusSongRef?.startTime || 0;
                 const maxStart = Math.max(0, totalAudioDuration - trimmerDuration);
                 trimmerStartTime = Math.min(initialStart, maxStart);
-                trimmerHighlightWindow.style.left = (trimmerStartTime * 10) + "px";
+                
+                const paddingX = 150;
+                trimmerHighlightWindow.style.left = (paddingX + (trimmerStartTime * PX_PER_SECOND)) + "px";
 
                 // Position scroll container so the selection is in view
                 isScrollingFromCode = true;
                 if (scrollWrapper) {
-                    scrollWrapper.scrollLeft = Math.max(0, (trimmerStartTime * 10) - 50);
+                    scrollWrapper.scrollLeft = Math.max(0, (paddingX + (trimmerStartTime * PX_PER_SECOND)) - 50);
                 }
                 isScrollingFromCode = false;
 
@@ -1995,12 +2103,14 @@
                     
                     const dx = clientX - dragStartX;
                     let newLeft = dragStartLeft + dx;
-                    const windowWidth = trimmerDuration * 10;
-                    const maxLeft = Math.max(0, (totalAudioDuration * 10) - windowWidth);
-                    newLeft = Math.max(0, Math.min(maxLeft, newLeft));
+                    const windowWidth = 150;
+                    const paddingX = 150;
+                    
+                    const maxLeft = Math.max(0, (totalAudioDuration * PX_PER_SECOND) - windowWidth);
+                    newLeft = Math.max(paddingX, Math.min(paddingX + maxLeft, newLeft));
 
                     trimmerHighlightWindow.style.left = newLeft + "px";
-                    trimmerStartTime = newLeft / 10;
+                    trimmerStartTime = (newLeft - paddingX) / PX_PER_SECOND;
                     if (window.pendingStatusSongRef) {
                         window.pendingStatusSongRef.startTime = trimmerStartTime;
                     }
@@ -2025,9 +2135,9 @@
                                 const actualDiff = prevScroll - scrollWrapper.scrollLeft;
                                 if (actualDiff > 0) {
                                     let currentLeft = parseFloat(trimmerHighlightWindow.style.left) || 0;
-                                    currentLeft = Math.max(0, currentLeft - actualDiff);
+                                    currentLeft = Math.max(paddingX, currentLeft - actualDiff);
                                     trimmerHighlightWindow.style.left = currentLeft + "px";
-                                    trimmerStartTime = currentLeft / 10;
+                                    trimmerStartTime = (currentLeft - paddingX) / PX_PER_SECOND;
                                     if (window.pendingStatusSongRef) {
                                         window.pendingStatusSongRef.startTime = trimmerStartTime;
                                     }
@@ -2048,10 +2158,10 @@
                                 const actualDiff = scrollWrapper.scrollLeft - prevScroll;
                                 if (actualDiff > 0) {
                                     let currentLeft = parseFloat(trimmerHighlightWindow.style.left) || 0;
-                                    const maxL = Math.max(0, (totalAudioDuration * 10) - windowWidth);
-                                    currentLeft = Math.min(maxL, currentLeft + actualDiff);
+                                    const maxL = Math.max(0, (totalAudioDuration * PX_PER_SECOND) - windowWidth);
+                                    currentLeft = Math.min(paddingX + maxL, currentLeft + actualDiff);
                                     trimmerHighlightWindow.style.left = currentLeft + "px";
-                                    trimmerStartTime = currentLeft / 10;
+                                    trimmerStartTime = (currentLeft - paddingX) / PX_PER_SECOND;
                                     if (window.pendingStatusSongRef) {
                                         window.pendingStatusSongRef.startTime = trimmerStartTime;
                                     }
@@ -2212,27 +2322,91 @@
         }
 
         async function fetchYouTubeSongs(search) {
-            if (loadingIndicator) loadingIndicator.style.display = "flex";
+            currentQuery = search;
+            dbPage = 1;
+            dbHasMore = true;
+            youtubeNextPageToken = "";
+            isFetchingPage = false;
+            
+            if (songList) songList.innerHTML = "";
+            await fetchYouTubeSongsPage(search, 1, "");
+        }
+
+        async function fetchYouTubeSongsPage(search, page = 1, token = "") {
+            if (isFetchingPage) return;
+            isFetchingPage = true;
+
+            if (loadingIndicator && page === 1 && !token) {
+                loadingIndicator.style.display = "flex";
+            }
+
+            // Show page loading spinner/indicator at the bottom of the list
+            let pageLoader = document.getElementById("song-list-page-loader");
+            if (!pageLoader && songList) {
+                pageLoader = document.createElement("div");
+                pageLoader.id = "song-list-page-loader";
+                pageLoader.style.cssText = "display:flex;justify-content:center;align-items:center;padding:15px;width:100%;flex-shrink:0;";
+                pageLoader.innerHTML = `<div style="width:20px;height:20px;border:2px solid #25d366;border-top-color:transparent;border-radius:50%;animation:trimmer-spin 0.8s linear infinite;"></div>`;
+                songList.appendChild(pageLoader);
+            } else if (pageLoader) {
+                songList.appendChild(pageLoader);
+                pageLoader.style.display = "flex";
+            }
+
             try {
-                const res = await apiRequest("GET", `/api/songs/search?q=${encodeURIComponent(search)}`);
-                if (res && res.ok && res.data && res.data.status && Array.isArray(res.data.data)) {
-                    renderSongList(res.data.data);
+                let url = `/api/songs/search?q=${encodeURIComponent(search)}&source=${currentSearchSource}&limit=10`;
+                if (currentSearchSource === "db") {
+                    url += `&page=${page}`;
                 } else {
-                    if (songList) songList.innerHTML = `<div style="text-align:center;color:#ff5a5a;font-size:13.5px;padding:20px;">Failed to load songs</div>`;
+                    if (token) {
+                        url += `&pageToken=${encodeURIComponent(token)}`;
+                    }
+                }
+
+                const res = await apiRequest("GET", url);
+                
+                if (pageLoader) pageLoader.style.display = "none";
+
+                if (res && res.ok && res.data && res.data.status && Array.isArray(res.data.data)) {
+                    const fetchedSongs = res.data.data;
+                    
+                    if (currentSearchSource === "db") {
+                        dbHasMore = res.data.hasMore === true;
+                    } else {
+                        youtubeNextPageToken = res.data.nextPageToken || "";
+                    }
+
+                    renderSongListAppend(fetchedSongs, page === 1 && !token);
+                } else {
+                    if (page === 1 && !token && songList) {
+                        songList.innerHTML = `<div style="text-align:center;color:#ff5a5a;font-size:13.5px;padding:20px;">Failed to load songs</div>`;
+                    }
                 }
             } catch (err) {
-                console.error("YouTube search error:", err);
-                if (songList) songList.innerHTML = `<div style="text-align:center;color:#ff5a5a;font-size:13.5px;padding:20px;">Error searching songs</div>`;
+                console.error("YouTube search page error:", err);
+                if (pageLoader) pageLoader.style.display = "none";
+                if (page === 1 && !token && songList) {
+                    songList.innerHTML = `<div style="text-align:center;color:#ff5a5a;font-size:13.5px;padding:20px;">Error searching songs</div>`;
+                }
             } finally {
                 if (loadingIndicator) loadingIndicator.style.display = "none";
+                isFetchingPage = false;
             }
         }
 
-        function renderSongList(songs) {
+        function renderSongListAppend(songs, isReset) {
             if (!songList) return;
-            songList.innerHTML = "";
+            if (isReset) {
+                songList.innerHTML = "";
+            }
 
-            if (songs.length === 0) {
+            // Remove page loader if it exists so we append new items before it, then we can re-append loader if needed
+            const pageLoader = document.getElementById("song-list-page-loader");
+            if (pageLoader) {
+                pageLoader.remove();
+            }
+
+            if (isReset && songs.length === 0) {
                 songList.innerHTML = `<div style="text-align:center;color:#aaa;font-size:13.5px;padding:20px;">No results found</div>`;
                 return;
             }
@@ -2258,34 +2432,112 @@
                     ? `<img src="${song.thumbnailUrl}" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0;" />`
                     : `<div style="width:48px;height:48px;border-radius:8px;background:#333;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`;
 
+                const isYoutube = song.source === "youtube";
+                const badgeHtml = isYoutube ? `<span style="font-size:9px;background:rgba(255,255,255,0.15);color:#aaa;border-radius:4px;padding:1px 4px;font-weight:bold;width:fit-content;margin-top:2px;">YouTube</span>` : ``;
+                
+                let actionHtml = "";
+                if (isYoutube) {
+                    if (song.requestStatus === "pending") {
+                        actionHtml = `<span class="request-status-label" style="font-size:11px;color:#aaa;font-style:italic;">Requested</span>`;
+                    } else if (song.requestStatus === "processing") {
+                        actionHtml = `<span class="request-status-label" style="font-size:11px;color:#eab308;font-weight:bold;">Processing...</span>`;
+                    } else if (song.requestStatus === "failed") {
+                        actionHtml = `<button class="request-song-btn" style="background:#ff4d4d;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:bold;cursor:pointer;transition:transform 0.1s;">Retry</button>`;
+                    } else {
+                        actionHtml = `<button class="request-song-btn" style="background:#25d366;color:black;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:bold;cursor:pointer;transition:transform 0.1s;">Request</button>`;
+                    }
+                }
+
                 item.innerHTML = `
                     ${thumbHtml}
                     <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:2px;">
                         <span style="font-size:13.5px;font-weight:600;color:white;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${song.title}</span>
-                        <span style="font-size:11px;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${song.channelTitle}</span>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span style="font-size:11px;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;">${song.channelTitle}</span>
+                            ${badgeHtml}
+                        </div>
                     </div>
+                    ${actionHtml ? `<div class="action-container" style="flex-shrink:0;margin-left:8px;">${actionHtml}</div>` : ""}
                 `;
 
-                item.onclick = (e) => {
-                    e.stopPropagation();
-                    window.pendingStatusSongRef = {
-                        videoId: song.videoId,
-                        title: song.title,
-                        channelTitle: song.channelTitle,
-                        thumbnailUrl: song.thumbnailUrl,
-                        audioUrl: song.audioUrl,
-                        startTime: 0 // Default start offset
-                    };
-                    updateSongBadgeVisibility();
-                    
-                    initAudioTrimmer(song);
-                    if (trimmerOverlay) {
-                        trimmerOverlay.style.display = "flex";
-                        hideCameraPreviewControls();
+                const triggerRequest = async (e) => {
+                    if (e) e.stopPropagation();
+                    const actionContainer = item.querySelector(".action-container");
+                    if (actionContainer) {
+                        actionContainer.innerHTML = `<span style="font-size:11px;color:#aaa;">Requesting...</span>`;
                     }
-
-                    pickerOverlay.style.display = "none";
+                    
+                    try {
+                        const res = await apiRequest("POST", "/api/songs/request", {
+                            videoId: song.videoId,
+                            title: song.title,
+                            channelTitle: song.channelTitle
+                        });
+                        if (res && res.ok && res.data && res.data.status) {
+                            showToast(res.data.message || "Song requested successfully!", "success");
+                            if (actionContainer) {
+                                const status = res.data.data?.status || "pending";
+                                if (status === "processing") {
+                                    actionContainer.innerHTML = `<span class="request-status-label" style="font-size:11px;color:#eab308;font-weight:bold;">Processing...</span>`;
+                                } else {
+                                    actionContainer.innerHTML = `<span class="request-status-label" style="font-size:11px;color:#aaa;font-style:italic;">Requested</span>`;
+                                }
+                            }
+                        } else {
+                            showToast("Failed to request song", "error");
+                            if (actionContainer) {
+                                actionContainer.innerHTML = actionHtml;
+                                bindButton();
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Song request error:", err);
+                        showToast("Error requesting song", "error");
+                        if (actionContainer) {
+                            actionContainer.innerHTML = actionHtml;
+                            bindButton();
+                        }
+                    }
                 };
+
+                const bindButton = () => {
+                    const btn = item.querySelector(".request-song-btn");
+                    if (btn) {
+                        btn.onclick = triggerRequest;
+                    }
+                };
+
+                if (isYoutube) {
+                    item.onclick = (e) => {
+                        e.stopPropagation();
+                        const btn = item.querySelector(".request-song-btn");
+                        if (btn) {
+                            triggerRequest(e);
+                        }
+                    };
+                    bindButton();
+                } else {
+                    item.onclick = (e) => {
+                        e.stopPropagation();
+                        window.pendingStatusSongRef = {
+                            videoId: song.videoId,
+                            title: song.title,
+                            channelTitle: song.channelTitle,
+                            thumbnailUrl: song.thumbnailUrl,
+                            audioUrl: song.audioUrl,
+                            startTime: 0
+                        };
+                        updateSongBadgeVisibility();
+                        
+                        initAudioTrimmer(song);
+                        if (trimmerOverlay) {
+                            trimmerOverlay.style.display = "flex";
+                            hideCameraPreviewControls();
+                        }
+
+                        pickerOverlay.style.display = "none";
+                    };
+                }
 
                 songList.appendChild(item);
             });

@@ -23,6 +23,7 @@ import initSocket from "./sockets/chat.sockets.js";
 import { startMessageStatusSyncJob } from "./jobs/messageStatusSync.js";
 import { startAutoPruneExpiredStatusesJob } from "./jobs/autoPruneExpiredStatuses.js";
 import { startTrendingSongsJob } from "./jobs/trendingSongsJob.js";
+import "./jobs/songWorker.js";
 import webrtcRoutes from "./routes/webrtc.routes.js";
 import componentRoutes from "./routes/component.routes.js";
 import { protect, readUserFromCookie } from "./middleware/auth.middleware.js";
