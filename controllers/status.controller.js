@@ -22,6 +22,18 @@ const s3 = new S3Client({
 });
 const BUCKET = process.env.R2_BUCKET;
 
+// Song R2 configuration with fallback to default R2
+const useSongR2 = !!(process.env.SONG_R2_ACCESS_KEY_ID && process.env.SONG_R2_SECRET_ACCESS_KEY && process.env.SONG_R2_BUCKET);
+const songS3 = useSongR2 ? new S3Client({
+  region: "auto",
+  endpoint: process.env.SONG_R2_ENDPOINT || process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.SONG_R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.SONG_R2_SECRET_ACCESS_KEY,
+  },
+}) : s3;
+const SONG_BUCKET = useSongR2 ? process.env.SONG_R2_BUCKET : BUCKET;
+
 // ── Redis TTL ─────────────────────────────────────────────────────────────────
 const STATUS_CACHE_TTL = 300; // 5 minutes
 
@@ -119,9 +131,13 @@ function extractKeyFromUrl(url) {
 
 // Helper to download and decrypt a file from R2 to local disk
 async function downloadAndDecryptR2(key, outputPath) {
-  const response = await s3.send(
+  const isSongKey = key.startsWith("songs/");
+  const activeS3 = isSongKey ? songS3 : s3;
+  const activeBucket = isSongKey ? SONG_BUCKET : BUCKET;
+
+  const response = await activeS3.send(
     new GetObjectCommand({
-      Bucket: BUCKET,
+      Bucket: activeBucket,
       Key: key,
     })
   );
