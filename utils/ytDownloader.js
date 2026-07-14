@@ -2,6 +2,7 @@ import fs from "fs-extra";
 import path from "path";
 import { spawn } from "child_process";
 import https from "https";
+import os from "os";
 
 const BIN_DIR = path.join(process.cwd(), "bin");
 const YTDLP_PATH = path.join(BIN_DIR, process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
@@ -72,12 +73,43 @@ function formatDuration(sec) {
 }
 
 /**
+ * Helper to write cookies content to a file if configured in environment variables.
+ */
+async function getCookiesPath() {
+  if (process.env.YOUTUBE_COOKIES) {
+    try {
+      const cookiesPath = path.join(os.tmpdir(), "youtube_cookies.txt");
+      let content = process.env.YOUTUBE_COOKIES;
+      // If it looks like base64, decode it
+      if (!content.includes("\n") && !content.includes("\t") && content.length > 100) {
+        try {
+          content = Buffer.from(content, 'base64').toString('utf-8');
+        } catch (e) {
+          // ignore, use raw
+        }
+      }
+      await fs.writeFile(cookiesPath, content.trim());
+      return cookiesPath;
+    } catch (err) {
+      console.error("[ytDownloader] Failed to write cookies file:", err.message);
+    }
+  }
+  return null;
+}
+
+/**
  * Retrieves video metadata (title, uploader, duration, thumbnail) from YouTube URL.
  */
 export async function getMetadata(videoUrl) {
   const binaryPath = await ensureYtdlp();
+  const cookiesPath = await getCookiesPath();
   return new Promise((resolve, reject) => {
-    const proc = spawn(binaryPath, ["--dump-json", "--no-playlist", videoUrl]);
+    const args = ["--dump-json", "--no-playlist"];
+    if (cookiesPath) {
+      args.push("--cookies", cookiesPath);
+    }
+    args.push(videoUrl);
+    const proc = spawn(binaryPath, args);
     let stdout = "";
     let stderr = "";
 
@@ -116,6 +148,7 @@ export async function getMetadata(videoUrl) {
  */
 export async function downloadAudioStream(videoUrl, outputPath) {
   const binaryPath = await ensureYtdlp();
+  const cookiesPath = await getCookiesPath();
   
   // yt-dlp -o format: we use the parent dir + filename template
   const parsedPath = path.parse(outputPath);
@@ -127,9 +160,12 @@ export async function downloadAudioStream(videoUrl, outputPath) {
       "--audio-format", "mp3",
       "--audio-quality", "0", // Best VBR
       "--no-playlist",
-      "-o", templatePath,
-      videoUrl
+      "-o", templatePath
     ];
+    if (cookiesPath) {
+      args.push("--cookies", cookiesPath);
+    }
+    args.push(videoUrl);
 
     console.log(`[ytDownloader] Downloading and transcoding audio for: ${videoUrl}`);
     const proc = spawn(binaryPath, args);
