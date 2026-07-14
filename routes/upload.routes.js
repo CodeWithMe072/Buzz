@@ -62,6 +62,18 @@ const s3 = new S3Client({
 
 const BUCKET = process.env.R2_BUCKET;
 
+// Song R2 configuration with fallback to default R2
+const useSongR2 = !!(process.env.SONG_R2_ACCESS_KEY_ID && process.env.SONG_R2_SECRET_ACCESS_KEY && process.env.SONG_R2_BUCKET);
+const songS3 = useSongR2 ? new S3Client({
+    region: "auto",
+    endpoint: process.env.SONG_R2_ENDPOINT || process.env.R2_ENDPOINT,
+    credentials: {
+        accessKeyId: process.env.SONG_R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.SONG_R2_SECRET_ACCESS_KEY,
+    },
+}) : s3;
+const SONG_BUCKET = useSongR2 ? process.env.SONG_R2_BUCKET : BUCKET;
+
 // Example:
 // https://pub-xxxxx.r2.dev
 // OR
@@ -1021,6 +1033,10 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
         return res.status(400).json({ error: "Missing key parameter" });
     }
 
+    const isSongKey = key.startsWith("songs/");
+    const activeS3 = isSongKey ? songS3 : s3;
+    const activeBucket = isSongKey ? SONG_BUCKET : BUCKET;
+
     // Authorization Check on Decryption for logs/
     if (key.startsWith("logs/")) {
         // key format: logs/log_${ownerId}_${timestamp}.jpg
@@ -1121,9 +1137,9 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
             const startByteR2 = 16 + blockNumber * 16;
             const endByteR2 = 16 + end;
 
-            const ciphertextResponse = await s3.send(
+            const ciphertextResponse = await activeS3.send(
                 new GetObjectCommand({
-                    Bucket: BUCKET,
+                    Bucket: activeBucket,
                     Key: key,
                     Range: `bytes=${startByteR2}-${endByteR2}`,
                 })
@@ -1154,9 +1170,9 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
             res.end(finalDecryptedSlice);
         } else {
             // Full file request
-            const response = await s3.send(
+            const response = await activeS3.send(
                 new GetObjectCommand({
-                    Bucket: BUCKET,
+                    Bucket: activeBucket,
                     Key: key,
                 })
             );

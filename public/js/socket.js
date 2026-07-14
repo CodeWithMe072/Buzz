@@ -449,7 +449,14 @@ function initSocket() {
     if (user !== State.activeChat) return;
     const t = document.getElementById("typing-indicator");
     if (t) t.style.display = "flex";
-    document.getElementById("messages-container").scrollTop = 99999;
+    
+    const container = document.getElementById("messages-container");
+    if (container) {
+      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
+      if (isAtBottom) {
+        container.scrollTop = 99999;
+      }
+    }
     clearTimeout(State.typingTimeouts[user]);
     State.typingTimeouts[user] = setTimeout(() => { if (t) t.style.display = "none"; }, 3000);
   });
@@ -874,11 +881,12 @@ function insertMessageInOrder(message) {
     }
   }
 
-  // Scroll to bottom if it is the newest message or if the user is close to the bottom
+  // Scroll to bottom if it is sent by me or if the user is close to the bottom
   const container = document.getElementById("messages-container");
   if (container) {
     const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
-    if (k === 0 || isAtBottom) {
+    const isSelf = message.sender === "me";
+    if (isSelf || isAtBottom) {
       container.scrollTop = 99999;
     }
   }

@@ -408,6 +408,11 @@ function renderMessages(chatId) {
   if (messagesContainerEl) {
     messagesContainerEl.scrollTop = 99999;
   }
+  const scrollToBottomBtn = document.getElementById("scroll-to-bottom-btn");
+  if (scrollToBottomBtn) {
+    scrollToBottomBtn.style.display = "none";
+    scrollToBottomBtn.style.opacity = "0";
+  }
   if (typeof MediaViewer !== "undefined") {
     viewer = new MediaViewer(chatId);
   }

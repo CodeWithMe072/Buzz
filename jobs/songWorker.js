@@ -9,6 +9,7 @@ import Song from "../models/song.model.js";
 import SongRequest from "../models/songRequest.model.js";
 import { encryptBuffer } from "../utils/mediaEncryption.js";
 import { redis } from "../lib/redis.js";
+import { saveSongToBothDbs } from "../utils/remoteDb.js";
 
 // Create a dedicated Redis connection for the worker with maxRetriesPerRequest: null
 const workerConnection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
@@ -60,11 +61,15 @@ export const songWorker = new Worker(
       console.log(`[SongWorker] Download completed successfully. Temporary path: ${tempPath}`);
 
       let audioUrl = "";
-      const bucket = process.env.R2_BUCKET;
+      const useSongR2 = !!(process.env.SONG_R2_ACCESS_KEY_ID && process.env.SONG_R2_SECRET_ACCESS_KEY && process.env.SONG_R2_BUCKET);
+      const songEndpoint = useSongR2 ? process.env.SONG_R2_ENDPOINT : process.env.R2_ENDPOINT;
+      const songAccessKeyId = useSongR2 ? process.env.SONG_R2_ACCESS_KEY_ID : process.env.R2_ACCESS_KEY_ID;
+      const songSecretAccessKey = useSongR2 ? process.env.SONG_R2_SECRET_ACCESS_KEY : process.env.R2_SECRET_ACCESS_KEY;
+      const songBucket = useSongR2 ? process.env.SONG_R2_BUCKET : process.env.R2_BUCKET;
 
       // 4. Upload to Cloudflare R2 if configured, otherwise save locally
-      if (process.env.R2_ENDPOINT && process.env.R2_ACCESS_KEY_ID && bucket) {
-        console.log(`[SongWorker] Cloudflare R2 detected. Encrypting and uploading audio stream...`);
+      if (songEndpoint && songAccessKeyId && songBucket) {
+        console.log(`[SongWorker] Cloudflare R2 detected (${songBucket}). Encrypting and uploading audio stream...`);
         const fileBuffer = await fs.readFile(tempPath);
         
         // Encrypt the audio buffer to align with application-wide media encryption
@@ -72,17 +77,17 @@ export const songWorker = new Worker(
 
         const s3 = new S3Client({
           region: "auto",
-          endpoint: process.env.R2_ENDPOINT,
+          endpoint: songEndpoint,
           credentials: {
-            accessKeyId: process.env.R2_ACCESS_KEY_ID,
-            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+            accessKeyId: songAccessKeyId,
+            secretAccessKey: songSecretAccessKey,
           },
         });
 
         const r2Key = `songs/${videoId}.mp3`;
         await s3.send(
           new PutObjectCommand({
-            Bucket: bucket,
+            Bucket: songBucket,
             Key: r2Key,
             Body: encryptedBuffer,
             ContentType: "audio/mpeg",
@@ -122,6 +127,9 @@ export const songWorker = new Worker(
         await song.save();
         console.log(`[SongWorker] Saved new song catalog entry for: ${song.title}`);
       }
+
+      // 5.5 Replicate metadata to remote MongoDB DB
+      await saveSongToBothDbs(song);
 
       // 6. Update request status to completed
       request.status = "completed";

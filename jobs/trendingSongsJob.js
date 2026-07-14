@@ -7,6 +7,7 @@ import { getMetadata, downloadAudioStream } from "../utils/ytDownloader.js";
 import Song from "../models/song.model.js";
 import { encryptBuffer } from "../utils/mediaEncryption.js";
 import { youtubeApiRequest } from "../utils/youtube.js";
+import { saveSongToBothDbs } from "../utils/remoteDb.js";
 
 // Curated popular/trending fallback music videos per category if YouTube API key is missing
 const FALLBACK_CATEGORIZED_VIDEOS = {
@@ -137,11 +138,15 @@ export async function runTrendingSongsJob() {
       console.log(`[TrendingSongsJob] Local download success: ${tempPath}`);
 
       let audioUrl = "";
-      const bucket = process.env.R2_BUCKET;
+      const useSongR2 = !!(process.env.SONG_R2_ACCESS_KEY_ID && process.env.SONG_R2_SECRET_ACCESS_KEY && process.env.SONG_R2_BUCKET);
+      const songEndpoint = useSongR2 ? process.env.SONG_R2_ENDPOINT : process.env.R2_ENDPOINT;
+      const songAccessKeyId = useSongR2 ? process.env.SONG_R2_ACCESS_KEY_ID : process.env.R2_ACCESS_KEY_ID;
+      const songSecretAccessKey = useSongR2 ? process.env.SONG_R2_SECRET_ACCESS_KEY : process.env.R2_SECRET_ACCESS_KEY;
+      const songBucket = useSongR2 ? process.env.SONG_R2_BUCKET : process.env.R2_BUCKET;
       
       // Check if Cloudflare R2 is configured
-      if (process.env.R2_ENDPOINT && process.env.R2_ACCESS_KEY_ID && bucket) {
-        console.log(`[TrendingSongsJob] R2 detected. Encrypting and uploading to storage...`);
+      if (songEndpoint && songAccessKeyId && songBucket) {
+        console.log(`[TrendingSongsJob] R2 detected (${songBucket}). Encrypting and uploading to storage...`);
         const fileBuffer = await fs.readFile(tempPath);
         
         // Encrypt the audio buffer to align with application-wide media encryption
@@ -149,10 +154,10 @@ export async function runTrendingSongsJob() {
         
         const s3 = new S3Client({
           region: "auto",
-          endpoint: process.env.R2_ENDPOINT,
+          endpoint: songEndpoint,
           credentials: {
-            accessKeyId: process.env.R2_ACCESS_KEY_ID,
-            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+            accessKeyId: songAccessKeyId,
+            secretAccessKey: songSecretAccessKey,
           },
         });
 
@@ -160,7 +165,7 @@ export async function runTrendingSongsJob() {
         
         await s3.send(
           new PutObjectCommand({
-            Bucket: bucket,
+            Bucket: songBucket,
             Key: r2Key,
             Body: encryptedBuffer,
             ContentType: "audio/mpeg",
@@ -199,6 +204,9 @@ export async function runTrendingSongsJob() {
 
       await newSong.save();
       console.log(`[TrendingSongsJob] Successfully registered song in database: ${meta.title}`);
+
+      // Replicate to remote MongoDB DB
+      await saveSongToBothDbs(newSong);
 
     } catch (err) {
       console.error(`[TrendingSongsJob] Error downloading/uploading song (${videoId}):`, err.message);

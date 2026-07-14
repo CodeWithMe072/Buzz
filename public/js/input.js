@@ -204,6 +204,34 @@ function initChatWindow() {
         State.replyingTo = null;
         document.getElementById('reply-preview').style.display = 'none';
     });
+
+    // Setup Scroll to Bottom floating button logic
+    const messagesContainerEl = document.getElementById("messages-container");
+    const scrollToBottomBtn = document.getElementById("scroll-to-bottom-btn");
+    if (messagesContainerEl && scrollToBottomBtn) {
+        messagesContainerEl.addEventListener("scroll", () => {
+            const isAtBottom = messagesContainerEl.scrollHeight - messagesContainerEl.scrollTop - messagesContainerEl.clientHeight < 150;
+            if (isAtBottom) {
+                scrollToBottomBtn.style.opacity = "0";
+                setTimeout(() => {
+                    if (messagesContainerEl.scrollHeight - messagesContainerEl.scrollTop - messagesContainerEl.clientHeight < 150) {
+                        scrollToBottomBtn.style.display = "none";
+                    }
+                }, 200);
+            } else {
+                scrollToBottomBtn.style.display = "flex";
+                scrollToBottomBtn.offsetHeight; // trigger reflow
+                scrollToBottomBtn.style.opacity = "1";
+            }
+        });
+
+        scrollToBottomBtn.addEventListener("click", () => {
+            messagesContainerEl.scrollTo({
+                top: messagesContainerEl.scrollHeight,
+                behavior: "smooth"
+            });
+        });
+    }
 }
 
 // =============================================================================

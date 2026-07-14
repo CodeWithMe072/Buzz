@@ -8791,4 +8791,35 @@ input:checked+.slider:before {
     50% { transform: scale(1.05); opacity: 1; }
 }
 
+/* Scroll to bottom button */
+.scroll-to-bottom-btn {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--elevated-bg, #202c33);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3), 0 2px 6px 0 rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary, #aebac1);
+    cursor: pointer;
+    z-index: 99;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    outline: none;
+    padding: 0;
+}
+.scroll-to-bottom-btn:hover {
+    background: var(--hover-bg, #2a3942);
+    color: var(--text-primary, #e9edef);
+    transform: scale(1.08);
+}
+.scroll-to-bottom-btn:active {
+    transform: scale(0.95);
+}
+
 
