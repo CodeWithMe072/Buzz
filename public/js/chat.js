@@ -2549,6 +2549,7 @@ function initAppNavigation() {
     }
   };
 
+
   if (avatarBtn) {
     avatarBtn.onclick = () => {
       if (typeof openProfileModal === "function") {
@@ -2692,7 +2693,14 @@ function renderStatusSidebar() {
           `;
         }
 
-        myStatusCard.onclick = () => {
+        myStatusCard.onclick = (e) => {
+          if (e && e.target && (e.target.classList.contains("status-add-badge") || e.target.closest(".status-add-badge"))) {
+            if (e.stopPropagation) e.stopPropagation();
+            if (typeof window.openStatusComposer === "function") {
+              window.openStatusComposer();
+            }
+            return;
+          }
           if (typeof window.openStatusViewer === "function") {
             window.openStatusViewer({
               user: {
@@ -2896,6 +2904,29 @@ function updateStatusUnseenIndicator() {
 
   dot.style.display = hasUnseen ? "block" : "none";
 }
+
+// Global event delegation for status sidebar header buttons to ensure they work even after DOM replacement/unlocks
+document.addEventListener("click", (e) => {
+  const triggerBtn = e.target.closest("#status-composer-trigger-btn");
+  if (triggerBtn) {
+    e.preventDefault();
+    if (typeof window.openStatusComposer === "function") {
+      window.openStatusComposer();
+    } else {
+      console.warn("window.openStatusComposer is not available yet");
+    }
+    return;
+  }
+
+  const optionsBtn = e.target.closest("#status-options-btn");
+  if (optionsBtn) {
+    e.preventDefault();
+    if (typeof showToast === "function") {
+      showToast("Status privacy is set to: Mutual Connections", "info");
+    }
+    return;
+  }
+});
 
 window.fetchAndCacheStatusData    = fetchAndCacheStatusData;
 window.renderStatusSidebar         = renderStatusSidebar;

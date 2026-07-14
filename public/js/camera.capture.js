@@ -130,8 +130,14 @@
             muteBtn.addEventListener("click", () => {
                 window.isPreviewMuted = !window.isPreviewMuted;
                 const videoPreview = document.getElementById("camera-capture-video-preview");
-                if (videoPreview) {
-                    videoPreview.muted = window.isPreviewMuted;
+                const trimmerAudio = document.getElementById("camera-preview-audio");
+                
+                if (window.pendingStatusSongRef) {
+                    if (videoPreview) videoPreview.muted = true;
+                    if (trimmerAudio) trimmerAudio.muted = window.isPreviewMuted;
+                } else {
+                    if (videoPreview) videoPreview.muted = window.isPreviewMuted;
+                    if (trimmerAudio) trimmerAudio.muted = true;
                 }
                 updateMuteButtonIcon(window.isPreviewMuted);
             });
@@ -369,6 +375,18 @@
         }
         State.cameraMode = null; // Reset cameraMode state
         window.statusGalleryFile = null; // Reset status gallery file
+        window.pendingStatusSongRef = null;
+        if (typeof updateSongBadgeVisibility === "function") {
+            updateSongBadgeVisibility();
+        }
+        const previewAudio = document.getElementById("camera-preview-audio");
+        if (previewAudio) {
+            previewAudio.pause();
+            previewAudio.src = "";
+        }
+        const trimmerOverlay = document.getElementById("camera-song-trimmer-overlay");
+        if (trimmerOverlay) trimmerOverlay.style.display = "none";
+
         resetCameraCaptureToLive();
         
         // Hide caption container
@@ -850,6 +868,13 @@
             const isVideo = capturedFileType && capturedFileType.includes("video");
             muteBtn.style.display = isVideo ? "flex" : "none";
         }
+        const songBtn = document.getElementById("camera-preview-song-btn");
+        if (songBtn) {
+            songBtn.style.display = (State.cameraMode === "status") ? "flex" : "none";
+        }
+        if (typeof updateSongBadgeVisibility === "function") {
+            updateSongBadgeVisibility();
+        }
         const videoPreview = document.getElementById("camera-capture-video-preview");
         if (videoPreview) {
             videoPreview.muted = window.isPreviewMuted;
@@ -900,6 +925,12 @@
         const videoPreview = document.getElementById("camera-capture-video-preview");
         const videoEl = document.getElementById("camera-capture-video");
 
+        if (videoPreview) {
+            videoPreview.pause();
+            videoPreview.src = "";
+            videoPreview.style.display = "none";
+        }
+
         if (actionControls) actionControls.style.display = "flex";
         if (previewControls) previewControls.style.display = "none";
 
@@ -907,6 +938,23 @@
         if (muteBtn) {
             muteBtn.style.display = "none";
         }
+        const songBtn = document.getElementById("camera-preview-song-btn");
+        if (songBtn) {
+            songBtn.style.display = "none";
+        }
+        window.pendingStatusSongRef = null;
+        if (typeof updateSongBadgeVisibility === "function") {
+            updateSongBadgeVisibility();
+        }
+        const previewAudio = document.getElementById("camera-preview-audio");
+        if (previewAudio) {
+            previewAudio.pause();
+            previewAudio.src = "";
+        }
+        const trimmerOverlay = document.getElementById("camera-song-trimmer-overlay");
+        if (trimmerOverlay) trimmerOverlay.style.display = "none";
+        const playOverlay = document.getElementById("video-preview-play-overlay");
+        if (playOverlay) playOverlay.style.display = "none";
         window.isPreviewMuted = false;
         updateMuteButtonIcon(false);
 

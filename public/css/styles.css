@@ -7302,7 +7302,8 @@ input:checked+.slider:before {
 }
 
 /* Camera capture overlay wrapper container styled as a phone mockup on laptop/desktop */
-#camera-capture-overlay {
+#camera-capture-overlay,
+#camera-song-trimmer-overlay {
     display: none;
     position: fixed;
     inset: 0;
@@ -7312,8 +7313,14 @@ input:checked+.slider:before {
     overflow: hidden;
 }
 
+#camera-song-trimmer-overlay {
+    z-index: 2920; /* Keep trimmer overlay above capture preview overlay */
+    background: rgba(0, 0, 0, 0.45); /* Dimmer background overlay for the trimmer mode */
+}
+
 @media (min-width: 768px) {
-    #camera-capture-overlay {
+    #camera-capture-overlay,
+    #camera-song-trimmer-overlay {
         width: 500px;
         height: calc(100vh - 40px);
         margin: auto;

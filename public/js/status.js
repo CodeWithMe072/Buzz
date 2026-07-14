@@ -16,6 +16,7 @@
     let currentSegmentDurationMs = 5000;
     let segmentStartTime = 0;
     let isMuted = false;
+    const statusViewerAudio = new Audio();
 
     // ── WhatsApp-style "Sending..." state on My Status card ─────────────────
     function showStatusSendingState() {
@@ -138,6 +139,65 @@
             };
         }
 
+        if (typeof initStatusSongFeatures === "function") {
+            initStatusSongFeatures();
+        }
+
+        const videoPreview = document.getElementById("camera-capture-video-preview");
+        const trimmerAudio = document.getElementById("camera-preview-audio");
+
+        if (videoPreview) {
+            const playOverlay = document.getElementById("video-preview-play-overlay");
+
+            videoPreview.onclick = () => {
+                if (videoPreview.paused) {
+                    videoPreview.play().catch(() => {});
+                } else {
+                    videoPreview.pause();
+                }
+            };
+
+            videoPreview.onplay = () => {
+                if (playOverlay) playOverlay.style.display = "none";
+                if (window.pendingStatusSongRef && trimmerAudio) {
+                    videoPreview.muted = true;
+                    if (trimmerAudio.paused) {
+                        const startT = window.pendingStatusSongRef.startTime || 0;
+                        trimmerAudio.currentTime = startT;
+                        trimmerAudio.muted = window.isPreviewMuted || false;
+                        trimmerAudio.play().catch(() => {});
+                    }
+                } else {
+                    videoPreview.muted = window.isPreviewMuted || false;
+                    if (trimmerAudio) {
+                        trimmerAudio.pause();
+                    }
+                }
+            };
+
+            videoPreview.onpause = () => {
+                if (playOverlay) playOverlay.style.display = "flex";
+                if (trimmerAudio) {
+                    trimmerAudio.pause();
+                }
+            };
+
+            videoPreview.ontimeupdate = () => {
+                if (window.pendingStatusSongRef && trimmerAudio) {
+                    videoPreview.muted = true;
+                    // If video loops (currentTime goes back to near 0), restart the trimmer audio from selection start
+                    if (videoPreview.currentTime < 0.25 && Math.abs(trimmerAudio.currentTime - (window.pendingStatusSongRef.startTime || 0)) > 1.0) {
+                        const startT = window.pendingStatusSongRef.startTime || 0;
+                        trimmerAudio.currentTime = startT;
+                        trimmerAudio.muted = window.isPreviewMuted || false;
+                        if (trimmerAudio.paused) {
+                            trimmerAudio.play().catch(() => {});
+                        }
+                    }
+                }
+            };
+        }
+
         // Dynamic binder for gallery file input
         function bindGalleryInputIfNeeded(gInput) {
             if (!gInput || gInput.dataset.listenerBound === "true") return;
@@ -194,6 +254,13 @@
                     if (muteBtn) {
                         muteBtn.style.display = isVideo ? "flex" : "none";
                     }
+                    const songBtn = document.getElementById("camera-preview-song-btn");
+                    if (songBtn) {
+                        songBtn.style.display = (State.cameraMode === "status") ? "flex" : "none";
+                    }
+                    if (typeof updateSongBadgeVisibility === "function") {
+                        updateSongBadgeVisibility();
+                    }
                     if (isVideo && videoPreview) {
                         videoPreview.muted = window.isPreviewMuted;
                     }
@@ -207,6 +274,7 @@
                         if (videoPreview) {
                             videoPreview.src = url;
                             videoPreview.style.display = "block";
+                            videoPreview.play().catch(() => {});
                         }
                     } else {
                         if (videoPreview) videoPreview.style.display = "none";
@@ -407,6 +475,10 @@
         const img = document.getElementById("status-viewer-img");
 
         clearStatusTimers();
+        
+        // Reset status viewer audio stream
+        statusViewerAudio.pause();
+        statusViewerAudio.src = "";
 
         if (overlay) overlay.style.display = "none";
         if (video) {
@@ -426,6 +498,12 @@
         if (viewedCard) viewedCard.style.display = "none";
         if (eyeContainer) eyeContainer.style.display = "none";
 
+        const songSheet = document.getElementById("status-viewer-song-sheet");
+        if (songSheet) {
+            songSheet.style.display = "none";
+            songSheet.style.transform = "translateY(100%)";
+        }
+
         activeGroup = null;
         activeIndex = -1;
         isPaused = false;
@@ -440,6 +518,9 @@
             clearInterval(statusProgressInterval);
             statusProgressInterval = null;
         }
+        
+        // Pause status viewer audio on transition/pause
+        statusViewerAudio.pause();
     }
 
     function buildProgressSegments() {
@@ -496,6 +577,84 @@
                 ? formatRelativeTime(new Date(moment.createdAt)) 
                 : new Date(moment.createdAt).toLocaleTimeString();
             timeEl.textContent = `Today at ${relativeTime}`;
+        }
+
+        // Song Attribution Row configuration
+        const songAttributionEl = document.getElementById("status-viewer-song-attribution");
+        const songNameEl = document.getElementById("status-viewer-song-name");
+        const songMarqueeWrapper = document.getElementById("status-viewer-song-marquee-wrapper");
+        
+        if (songAttributionEl && songNameEl && songMarqueeWrapper) {
+            // Close song sheet on segment transitions
+            const songSheet = document.getElementById("status-viewer-song-sheet");
+            if (songSheet) {
+                songSheet.style.display = "none";
+                songSheet.style.transform = "translateY(100%)";
+            }
+
+            if (moment.songRef && moment.songRef.title) {
+                songAttributionEl.style.display = "flex";
+                const displayText = moment.songRef.channelTitle 
+                    ? `${moment.songRef.title} — ${moment.songRef.channelTitle}`
+                    : moment.songRef.title;
+                songNameEl.textContent = displayText;
+                
+                // Reset wrapper state
+                songMarqueeWrapper.style.animation = "none";
+                songMarqueeWrapper.style.transform = "translateX(0)";
+                const duplicate = songMarqueeWrapper.querySelector(".marquee-duplicate");
+                if (duplicate) duplicate.remove();
+                
+                // Measure after layout stabilizes
+                setTimeout(() => {
+                    const marqueeContainer = document.getElementById("status-viewer-song-marquee-container");
+                    if (!marqueeContainer) return;
+                    const containerWidth = marqueeContainer.clientWidth;
+                    const textWidth = songNameEl.offsetWidth;
+                    
+                    if (textWidth > containerWidth) {
+                        // Create clone for seamless loop
+                        const clone = songNameEl.cloneNode(true);
+                        clone.classList.add("marquee-duplicate");
+                        clone.style.paddingLeft = "30px";
+                        songMarqueeWrapper.appendChild(clone);
+                        
+                        const scrollDistance = textWidth + 30;
+                        
+                        // Inject or update dynamic keyframe style
+                        let styleTag = document.getElementById("status-marquee-dynamic-style");
+                        if (!styleTag) {
+                            styleTag = document.createElement("style");
+                            styleTag.id = "status-marquee-dynamic-style";
+                            document.head.appendChild(styleTag);
+                        }
+                        
+                        // Speed: 35px per second
+                        const duration = scrollDistance / 35;
+                        styleTag.innerHTML = `
+                            @keyframes statusMarqueeAnim {
+                                0% { transform: translateX(0); }
+                                100% { transform: translate3d(-${scrollDistance}px, 0, 0); }
+                            }
+                        `;
+                        
+                        songMarqueeWrapper.style.animation = `statusMarqueeAnim ${duration}s linear infinite`;
+                    }
+                }, 50);
+                
+                // Set up click/tap on the row to open the bottom sheet
+                songAttributionEl.onclick = (e) => {
+                    e.stopPropagation();
+                    openSongSheet(moment.songRef);
+                };
+            } else {
+                songAttributionEl.style.display = "none";
+                songNameEl.textContent = "";
+                songMarqueeWrapper.style.animation = "none";
+                songMarqueeWrapper.style.transform = "translateX(0)";
+                const duplicate = songMarqueeWrapper.querySelector(".marquee-duplicate");
+                if (duplicate) duplicate.remove();
+            }
         }
 
         // Viewers / Own status delete option
@@ -782,6 +941,12 @@
             captionBar.style.display = "none";
             captionBar.textContent = "";
         }
+        const songInfoEl = document.getElementById("status-viewer-song-info");
+        const songTextEl = document.getElementById("status-viewer-song-text");
+        if (songInfoEl) {
+            songInfoEl.style.display = "none";
+            songInfoEl.onclick = null;
+        }
 
         // Update blurred copy background
         const blurBg = document.getElementById("status-viewer-blurred-bg");
@@ -844,6 +1009,46 @@
             currentSegmentDurationMs = 5000;
             startSegmentProgressAnimation(currentSegmentDurationMs);
         }
+        
+        // Reset status viewer audio on segment transition
+        statusViewerAudio.pause();
+        statusViewerAudio.src = "";
+        if (songInfoEl) songInfoEl.style.display = "none";
+
+        if (moment.songRef) {
+            if (songInfoEl && songTextEl) {
+                songTextEl.textContent = `${moment.songRef.title} — ${moment.songRef.channelTitle}`;
+                songInfoEl.style.display = "flex";
+                songInfoEl.onclick = (e) => {
+                    e.stopPropagation();
+                    if (moment.songRef.youtubeVideoId) {
+                        window.open(`https://www.youtube.com/watch?v=${moment.songRef.youtubeVideoId}`, "_blank");
+                    }
+                };
+            }
+
+            // Play background music if song has audioUrl AND moment is not a video
+            if (moment.songRef.audioUrl && moment.type !== "video" && moment.mediaType !== "video") {
+                statusViewerAudio.src = moment.songRef.audioUrl;
+                statusViewerAudio.muted = isMuted; // Use current mute state
+                
+                const startOffset = moment.songRef.startTime || 0;
+                statusViewerAudio.currentTime = startOffset;
+                
+                statusViewerAudio.play().catch(err => {
+                    console.warn("[Status Viewer] Audio playback failed:", err.message);
+                });
+
+                // Loop playback inside the 15s window
+                statusViewerAudio.ontimeupdate = () => {
+                    if (statusViewerAudio.paused) return;
+                    const elapsed = statusViewerAudio.currentTime - startOffset;
+                    if (elapsed >= 15 || statusViewerAudio.currentTime >= statusViewerAudio.duration || elapsed < 0) {
+                        statusViewerAudio.currentTime = startOffset;
+                    }
+                };
+            }
+        }
     }
 
     function startSegmentProgressAnimation(durationMs) {
@@ -881,6 +1086,9 @@
             if (moment.type === "video" && video) {
                 video.play();
             }
+            if (statusViewerAudio.src) {
+                statusViewerAudio.play().catch(() => {});
+            }
 
             segmentStartTime = Date.now() - pausedAtMs;
             const remaining = currentSegmentDurationMs - pausedAtMs;
@@ -905,9 +1113,67 @@
             if (moment.type === "video" && video) {
                 video.pause();
             }
+            statusViewerAudio.pause();
 
             clearStatusTimers();
             pausedAtMs = Date.now() - segmentStartTime;
+        }
+    }
+
+    function openSongSheet(songRef) {
+        const sheet = document.getElementById("status-viewer-song-sheet");
+        const thumb = document.getElementById("status-viewer-sheet-thumb");
+        const title = document.getElementById("status-viewer-sheet-title");
+        const artist = document.getElementById("status-viewer-sheet-artist");
+        const youtubeBtn = document.getElementById("status-viewer-sheet-youtube");
+        const closeBtn = document.getElementById("status-viewer-sheet-close");
+
+        if (!sheet) return;
+
+        // Set song details
+        if (thumb) thumb.src = songRef.thumbnailUrl || "/images/default-avatar.png";
+        if (title) title.textContent = songRef.title || "Unknown Song";
+        if (artist) artist.textContent = songRef.channelTitle || "Unknown Artist";
+
+        if (youtubeBtn) {
+            youtubeBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (songRef.youtubeVideoId) {
+                    window.open(`https://www.youtube.com/watch?v=${songRef.youtubeVideoId}`, "_blank");
+                }
+            };
+        }
+
+        if (closeBtn) {
+            closeBtn.onclick = (e) => {
+                e.stopPropagation();
+                closeSongSheet();
+            };
+        }
+
+        // Show sheet and slide it up
+        sheet.style.display = "block";
+        sheet.offsetHeight; // Force reflow
+        sheet.style.transform = "translateY(0)";
+
+        // Pause status playback if not already paused
+        if (!isPaused) {
+            togglePlayPause();
+        }
+    }
+
+    function closeSongSheet() {
+        const sheet = document.getElementById("status-viewer-song-sheet");
+        if (!sheet) return;
+
+        sheet.style.transform = "translateY(100%)";
+        setTimeout(() => {
+            sheet.style.display = "none";
+        }, 300);
+
+        // Resume status playback if paused
+        if (isPaused) {
+            togglePlayPause();
         }
     }
 
@@ -921,6 +1187,7 @@
         if (video) {
             video.muted = isMuted;
         }
+        statusViewerAudio.muted = isMuted;
 
         if (isMuted) {
             if (unmuteIcon) unmuteIcon.style.display = "none";
@@ -1078,6 +1345,7 @@
                 mediaBlob: file,
                 caption: caption,
                 isMuted: window.isPreviewMuted || false,
+                songRef: window.pendingStatusSongRef || null,
                 createdAt: Date.now(),
                 retries: 0
             };
@@ -1160,13 +1428,17 @@
                 const statusRes = await apiRequest("POST", "/api/status", {
                     mediaUrl: finalUrl,
                     mediaType: file.type.startsWith("video") ? "video" : "image",
-                    caption: caption
+                    caption: caption,
+                    songRef: item.songRef || null
                 });
 
                 if (statusRes && statusRes.status) {
-
                     await this.remove(tempId);
-                    showToast("Status updated successfully!", "success");
+                    if (statusRes.data && statusRes.data.songMergeFailed) {
+                        showToast("Music couldn't be merged into video — playing it alongside your status instead", "warning");
+                    } else {
+                        showToast("Status updated successfully!", "success");
+                    }
                     if (typeof window.renderStatusSidebar === "function") {
                         window.renderStatusSidebar();
                     }
@@ -1208,7 +1480,7 @@
         return tempId;
     };
 
-    window.updateStatusPendingCaptionAndUpload = async function(tempId, caption, wasMuted) {
+    window.updateStatusPendingCaptionAndUpload = async function(tempId, caption, wasMuted, songRef) {
         if (!tempId) return;
         if (window.IndexedDBQueueService) {
             const record = await window.IndexedDBQueueService.getMessage(tempId);
@@ -1216,6 +1488,7 @@
                 record.caption = caption;
                 record.status = "status_queued";
                 record.isMuted = wasMuted !== undefined ? wasMuted : (window.isPreviewMuted || false); // Save final preview mute state
+                record.songRef = songRef !== undefined ? songRef : (window.pendingStatusSongRef || null);
                 await window.IndexedDBQueueService.saveMessage(record);
             }
         }
@@ -1226,6 +1499,9 @@
         const captionInput = document.getElementById("camera-preview-caption-input");
         const caption = captionInput ? captionInput.value.trim() : "";
         const wasMuted = window.isPreviewMuted || false;
+        
+        // Capture the songRef BEFORE we close the overlay (which nulls it)
+        const songRef = window.pendingStatusSongRef || null;
         
         let tempId = window.currentStatusUploadId;
         if (!tempId) {
@@ -1242,7 +1518,7 @@
         }
 
         if (window.updateStatusPendingCaptionAndUpload) {
-            window.updateStatusPendingCaptionAndUpload(tempId, caption, wasMuted);
+            window.updateStatusPendingCaptionAndUpload(tempId, caption, wasMuted, songRef);
         }
 
         showToast("Status uploading in background...", "info");
@@ -1320,6 +1596,704 @@
         buildProgressSegments();
         playCurrentStatusSegment();
     }
+
+    // ── YouTube Status Song Features ──
+    window.pendingStatusSongRef = null;
+
+    function updateSongBadgeVisibility() {
+        const badge = document.getElementById("camera-preview-song-badge");
+        const badgeText = document.getElementById("camera-preview-song-badge-text");
+        const songBtn = document.getElementById("camera-preview-song-btn");
+
+        if (badge) {
+            if (window.pendingStatusSongRef) {
+                if (badgeText) {
+                    badgeText.textContent = `${window.pendingStatusSongRef.title}`;
+                }
+                badge.style.display = "flex";
+            } else {
+                badge.style.display = "none";
+            }
+        }
+
+        if (songBtn) {
+            songBtn.style.display = "flex";
+            if (window.pendingStatusSongRef && window.pendingStatusSongRef.thumbnailUrl) {
+                songBtn.innerHTML = `<img src="${window.pendingStatusSongRef.thumbnailUrl}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;" alt="Song Thumb">`;
+                songBtn.style.padding = "0";
+                songBtn.style.border = "2px solid #25d366";
+            } else {
+                songBtn.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>
+                    </svg>
+                `;
+                songBtn.style.padding = "";
+                songBtn.style.border = "none";
+            }
+        }
+    }
+
+    function initStatusSongFeatures() {
+        const previewSongBtn = document.getElementById("camera-preview-song-btn");
+        const pickerOverlay = document.getElementById("camera-song-picker-overlay");
+        const closeBtn = document.getElementById("camera-song-picker-close-btn");
+        const searchInput = document.getElementById("camera-song-search-input");
+        const songList = document.getElementById("camera-song-list");
+        const loadingIndicator = document.getElementById("camera-song-loading");
+        const badgeRemoveBtn = document.getElementById("camera-preview-song-badge-remove");
+
+        // Fullscreen Trimmer elements
+        const trimmerOverlay = document.getElementById("camera-song-trimmer-overlay");
+        const trimmerCancelBtn = document.getElementById("camera-trimmer-cancel-btn");
+        const trimmerDoneBtn = document.getElementById("camera-trimmer-done-btn");
+        const trimmerCoverImg = document.getElementById("trimmer-top-avatar");
+        const trimmerBg = null;
+        const trimmerSpinContainer = null;
+
+        const trimmerAudio = document.getElementById("camera-preview-audio");
+        const trimmerPlayBtn = document.getElementById("camera-preview-audio-play-btn");
+        const trimmerProgressFill = document.getElementById("camera-preview-audio-progress-fill");
+        const trimmerTimer = document.getElementById("camera-preview-audio-timer");
+        const trimmerStartSlider = document.getElementById("trimmer-start-slider");
+        const trimmerHighlightWindow = document.getElementById("trimmer-highlight-window");
+        const trimmerStartLabel = document.getElementById("trimmer-start-time-label");
+        const trimmerEndLabel = document.getElementById("trimmer-end-time-label");
+        const trimmerSongTitle = document.getElementById("trimmer-song-title");
+        const trimmerSongChannel = null;
+
+        let isPlaying = false;
+        let trimmerStartTime = 0;
+        let trimmerDuration = 15; // 15 seconds slot (mutable for videos)
+        let totalAudioDuration = 30; // fallback
+
+        function hideCameraPreviewControls() {
+            const caption = document.getElementById("camera-preview-caption-container");
+            const controls = document.getElementById("camera-preview-controls-section");
+            const songBtn = document.getElementById("camera-preview-song-btn");
+            const muteBtn = document.getElementById("camera-preview-mute-btn");
+            const closeBtn = document.getElementById("camera-preview-close-btn");
+            const badge = document.getElementById("camera-preview-song-badge");
+
+            if (caption) caption.style.display = "none";
+            if (controls) controls.style.display = "none";
+            if (songBtn) songBtn.style.display = "none";
+            if (muteBtn) muteBtn.style.display = "none";
+            if (closeBtn) closeBtn.style.display = "none";
+            if (badge) badge.style.display = "none";
+        }
+
+        function restoreCameraPreviewControls() {
+            const caption = document.getElementById("camera-preview-caption-container");
+            const controls = document.getElementById("camera-preview-controls-section");
+            const songBtn = document.getElementById("camera-preview-song-btn");
+            const muteBtn = document.getElementById("camera-preview-mute-btn");
+            const closeBtn = document.getElementById("camera-preview-close-btn");
+
+            if (caption) caption.style.display = "block";
+            if (controls) controls.style.display = "flex";
+            if (closeBtn) closeBtn.style.display = "flex";
+            
+            // Show song button
+            if (songBtn) {
+                songBtn.style.display = "flex";
+            }
+            
+            // Show mute button only if it's a video preview
+            const videoPreview = document.getElementById("camera-capture-video-preview");
+            const isVideo = videoPreview && videoPreview.style.display !== "none" && videoPreview.src;
+            if (muteBtn) {
+                muteBtn.style.display = isVideo ? "flex" : "none";
+            }
+
+            updateSongBadgeVisibility();
+
+            // If it is a video status and a song is selected, start playing the song in sync
+            const trimmerAudio = document.getElementById("camera-preview-audio");
+            if (isVideo && videoPreview && !videoPreview.paused && window.pendingStatusSongRef && trimmerAudio) {
+                videoPreview.muted = true;
+                const startT = window.pendingStatusSongRef.startTime || 0;
+                trimmerAudio.currentTime = startT;
+                trimmerAudio.muted = window.isPreviewMuted || false;
+                trimmerAudio.play().catch(() => {});
+            }
+        }
+
+        window.hideCameraPreviewControls = hideCameraPreviewControls;
+        window.restoreCameraPreviewControls = restoreCameraPreviewControls;
+
+        if (!previewSongBtn || !pickerOverlay) return;
+
+        // Open Picker Sheet click handler
+        previewSongBtn.onclick = (e) => {
+            e.stopPropagation();
+
+            // Stop all sounds (both video preview and song preview) when opening picker
+            const videoPreview = document.getElementById("camera-capture-video-preview");
+            if (videoPreview) {
+                videoPreview.pause();
+            }
+            if (trimmerAudio) {
+                trimmerAudio.pause();
+            }
+
+            pickerOverlay.style.display = "flex";
+            if (searchInput) {
+                searchInput.value = "";
+                searchInput.focus();
+            }
+            fetchYouTubeSongs("");
+        };
+
+        // Close picker click handler
+        if (closeBtn) {
+            closeBtn.onclick = () => {
+                pickerOverlay.style.display = "none";
+                // Resume video preview when closing picker
+                const videoPreview = document.getElementById("camera-capture-video-preview");
+                if (videoPreview && videoPreview.style.display !== "none" && videoPreview.src) {
+                    videoPreview.play().catch(() => {});
+                }
+            };
+        }
+
+        // Search input with debouncing (450ms protects quota)
+        if (searchInput) {
+            let searchTimeout = null;
+            searchInput.oninput = () => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    const query = searchInput.value.trim();
+                    fetchYouTubeSongs(query);
+                }, 450);
+            };
+        }
+
+        // Remove Song from Badge handler
+        if (badgeRemoveBtn) {
+            badgeRemoveBtn.onclick = (e) => {
+                e.stopPropagation();
+                window.pendingStatusSongRef = null;
+                updateSongBadgeVisibility();
+                if (trimmerAudio) {
+                    trimmerAudio.pause();
+                    trimmerAudio.src = "";
+                }
+                if (trimmerOverlay) trimmerOverlay.style.display = "none";
+            };
+        }
+
+        // Trimmer Cancel / Back button
+        if (trimmerCancelBtn) {
+            trimmerCancelBtn.onclick = (e) => {
+                e.stopPropagation();
+                window.pendingStatusSongRef = null;
+                updateSongBadgeVisibility();
+                if (trimmerAudio) {
+                    trimmerAudio.pause();
+                    trimmerAudio.src = "";
+                }
+                if (trimmerOverlay) trimmerOverlay.style.display = "none";
+                restoreCameraPreviewControls();
+            };
+        }
+
+        // Trimmer Done button
+        if (trimmerDoneBtn) {
+            trimmerDoneBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (trimmerAudio) {
+                    trimmerAudio.pause();
+                }
+                updateSongBadgeVisibility();
+                if (trimmerOverlay) trimmerOverlay.style.display = "none";
+                restoreCameraPreviewControls();
+            };
+        }
+
+        // Play/Pause button on trimmer
+        if (trimmerPlayBtn) {
+            trimmerPlayBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (isPlaying) {
+                    pauseTrimmer();
+                } else {
+                    playTrimmer();
+                }
+            };
+        }
+
+        function playTrimmer() {
+            if (!trimmerAudio || !trimmerAudio.src) return;
+            
+            // If play cursor is out of bounds of the selected 15s window, seek back to start
+            const elapsed = trimmerAudio.currentTime - trimmerStartTime;
+            if (elapsed < 0 || elapsed >= trimmerDuration) {
+                trimmerAudio.currentTime = trimmerStartTime;
+            }
+
+            trimmerAudio.play()
+                .then(() => {
+                    isPlaying = true;
+                    updatePlayBtnState(true);
+                    if (trimmerSpinContainer) trimmerSpinContainer.style.animationPlayState = "running";
+                })
+                .catch(err => console.error("Trimmer audio play failed:", err));
+        }
+
+        function pauseTrimmer() {
+            if (!trimmerAudio) return;
+            trimmerAudio.pause();
+            isPlaying = false;
+            updatePlayBtnState(false);
+            if (trimmerSpinContainer) trimmerSpinContainer.style.animationPlayState = "paused";
+        }
+
+        function updatePlayBtnState(playing) {
+            const playIcon = document.getElementById("audio-play-icon");
+            const pauseIcon = document.getElementById("audio-pause-icon");
+            if (playIcon && pauseIcon) {
+                playIcon.style.display = playing ? "none" : "block";
+                pauseIcon.style.display = playing ? "block" : "none";
+            }
+        }
+
+        function formatTime(seconds) {
+            if (isNaN(seconds) || seconds === null) return "0:00";
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return `${m}:${s.toString().padStart(2, "0")}`;
+        }
+
+        function drawDecorativeWaveform() {
+            const container = document.getElementById("trimmer-waveform-bars");
+            if (!container) return;
+            container.innerHTML = "";
+            
+            const totalWidth = totalAudioDuration * 10;
+            container.style.position = "relative";
+            container.style.width = totalWidth + "px";
+            container.style.height = "100%";
+            
+            const numBars = Math.floor(totalAudioDuration);
+            for (let i = 0; i <= numBars; i++) {
+                const bar = document.createElement("div");
+                let heightPct = 30;
+                let opacity = 0.35;
+                if (i % 5 === 0) {
+                    heightPct = 65; // Major ticks every 5s
+                    opacity = 0.7;
+                } else {
+                    heightPct = 40; // Minor ticks every 1s
+                    opacity = 0.4;
+                }
+                bar.style.cssText = `position: absolute; left: ${i * 10}px; width: 2px; height: ${heightPct}%; background: rgba(255, 255, 255, ${opacity}); border-radius: 1px; top: 50%; transform: translateY(-50%);`;
+                container.appendChild(bar);
+            }
+        }
+
+        function initAudioTrimmer(song) {
+            if (!trimmerAudio) return;
+
+            trimmerAudio.pause();
+            trimmerAudio.src = song.audioUrl || "";
+            
+            trimmerSongTitle.textContent = song.title;
+            if (trimmerSongChannel) {
+                trimmerSongChannel.textContent = song.channelTitle;
+            }
+            
+            if (trimmerCoverImg) {
+                trimmerCoverImg.src = song.thumbnailUrl || "";
+            }
+            
+            isPlaying = false;
+            updatePlayBtnState(false);
+            trimmerProgressFill.style.width = "0%";
+            const playhead = document.getElementById("trimmer-playhead-line");
+            if (playhead) playhead.style.left = "0%";
+
+            // Set dynamic trimmer duration based on media type
+            const videoPreview = document.getElementById("camera-capture-video-preview");
+            if (window.capturedFileType === "video" && videoPreview && !isNaN(videoPreview.duration) && videoPreview.duration > 0) {
+                trimmerDuration = videoPreview.duration;
+            } else {
+                trimmerDuration = 15;
+            }
+
+            trimmerHighlightWindow.style.width = (trimmerDuration * 10) + "px";
+            const trimmerWindowLabel = document.getElementById("trimmer-window-label");
+            if (trimmerWindowLabel) {
+                if (window.capturedFileType === "video") {
+                    trimmerWindowLabel.textContent = formatTime(trimmerDuration);
+                } else {
+                    trimmerWindowLabel.textContent = "15s";
+                }
+            }
+
+            trimmerTimer.textContent = formatTime(trimmerDuration);
+            
+            trimmerStartTime = window.pendingStatusSongRef?.startTime || 0;
+            trimmerHighlightWindow.style.left = (trimmerStartTime * 10) + "px";
+
+            trimmerStartLabel.textContent = "0:00";
+            trimmerEndLabel.textContent = "Loading...";
+
+            // Apply current camera preview mute state
+            trimmerAudio.muted = window.isPreviewMuted || false;
+
+            const scrollWrapper = document.getElementById("trimmer-scroll-wrapper");
+            let isScrollingFromCode = false;
+
+            trimmerAudio.onloadedmetadata = () => {
+                totalAudioDuration = trimmerAudio.duration;
+
+                // Dynamically size and draw the waveform ticks track
+                drawDecorativeWaveform();
+
+                const initialStart = window.pendingStatusSongRef?.startTime || 0;
+                const maxStart = Math.max(0, totalAudioDuration - trimmerDuration);
+                trimmerStartTime = Math.min(initialStart, maxStart);
+                trimmerHighlightWindow.style.left = (trimmerStartTime * 10) + "px";
+
+                // Position scroll container so the selection is in view
+                isScrollingFromCode = true;
+                if (scrollWrapper) {
+                    scrollWrapper.scrollLeft = Math.max(0, (trimmerStartTime * 10) - 50);
+                }
+                isScrollingFromCode = false;
+
+                trimmerStartLabel.textContent = formatTime(trimmerStartTime);
+                trimmerEndLabel.textContent = formatTime(totalAudioDuration);
+                trimmerProgressFill.style.width = ((trimmerStartTime / totalAudioDuration) * 100) + "%";
+
+                playTrimmer();
+            };
+
+            // Draggable Highlight Window with auto-scroll support
+            if (trimmerHighlightWindow && scrollWrapper) {
+                let isDragging = false;
+                let dragStartX = 0;
+                let dragStartLeft = 0;
+                let autoScrollInterval = null;
+
+                const startDrag = (clientX) => {
+                    isDragging = true;
+                    dragStartX = clientX;
+                    dragStartLeft = parseFloat(trimmerHighlightWindow.style.left) || 0;
+                    trimmerHighlightWindow.style.cursor = "grabbing";
+                    trimmerAudio.pause();
+                    
+                    if (autoScrollInterval) {
+                        clearInterval(autoScrollInterval);
+                        autoScrollInterval = null;
+                    }
+                };
+
+                const moveDrag = (clientX) => {
+                    if (!isDragging) return;
+                    
+                    const dx = clientX - dragStartX;
+                    let newLeft = dragStartLeft + dx;
+                    const windowWidth = trimmerDuration * 10;
+                    const maxLeft = Math.max(0, (totalAudioDuration * 10) - windowWidth);
+                    newLeft = Math.max(0, Math.min(maxLeft, newLeft));
+
+                    trimmerHighlightWindow.style.left = newLeft + "px";
+                    trimmerStartTime = newLeft / 10;
+                    if (window.pendingStatusSongRef) {
+                        window.pendingStatusSongRef.startTime = trimmerStartTime;
+                    }
+                    trimmerAudio.currentTime = trimmerStartTime;
+
+                    // Update seek progress fill
+                    trimmerProgressFill.style.width = ((trimmerStartTime / totalAudioDuration) * 100) + "%";
+                    const playhead = document.getElementById("trimmer-playhead-line");
+                    if (playhead) playhead.style.left = "0%";
+
+                    // Auto-scroll checks
+                    const relativeLeft = newLeft - scrollWrapper.scrollLeft;
+                    const relativeRight = relativeLeft + windowWidth;
+                    const edgeThreshold = 15;
+
+                    if (relativeLeft < edgeThreshold) {
+                        // Scroll Left
+                        if (!autoScrollInterval) {
+                            autoScrollInterval = setInterval(() => {
+                                const prevScroll = scrollWrapper.scrollLeft;
+                                scrollWrapper.scrollLeft -= 5;
+                                const actualDiff = prevScroll - scrollWrapper.scrollLeft;
+                                if (actualDiff > 0) {
+                                    let currentLeft = parseFloat(trimmerHighlightWindow.style.left) || 0;
+                                    currentLeft = Math.max(0, currentLeft - actualDiff);
+                                    trimmerHighlightWindow.style.left = currentLeft + "px";
+                                    trimmerStartTime = currentLeft / 10;
+                                    if (window.pendingStatusSongRef) {
+                                        window.pendingStatusSongRef.startTime = trimmerStartTime;
+                                    }
+                                    trimmerAudio.currentTime = trimmerStartTime;
+                                    trimmerProgressFill.style.width = ((trimmerStartTime / totalAudioDuration) * 100) + "%";
+                                } else {
+                                    clearInterval(autoScrollInterval);
+                                    autoScrollInterval = null;
+                                }
+                            }, 16);
+                        }
+                    } else if (relativeRight > scrollWrapper.clientWidth - edgeThreshold) {
+                        // Scroll Right
+                        if (!autoScrollInterval) {
+                            autoScrollInterval = setInterval(() => {
+                                const prevScroll = scrollWrapper.scrollLeft;
+                                scrollWrapper.scrollLeft += 5;
+                                const actualDiff = scrollWrapper.scrollLeft - prevScroll;
+                                if (actualDiff > 0) {
+                                    let currentLeft = parseFloat(trimmerHighlightWindow.style.left) || 0;
+                                    const maxL = Math.max(0, (totalAudioDuration * 10) - windowWidth);
+                                    currentLeft = Math.min(maxL, currentLeft + actualDiff);
+                                    trimmerHighlightWindow.style.left = currentLeft + "px";
+                                    trimmerStartTime = currentLeft / 10;
+                                    if (window.pendingStatusSongRef) {
+                                        window.pendingStatusSongRef.startTime = trimmerStartTime;
+                                    }
+                                    trimmerAudio.currentTime = trimmerStartTime;
+                                    trimmerProgressFill.style.width = ((trimmerStartTime / totalAudioDuration) * 100) + "%";
+                                } else {
+                                    clearInterval(autoScrollInterval);
+                                    autoScrollInterval = null;
+                                }
+                            }, 16);
+                        }
+                    } else {
+                        // Not near edges
+                        if (autoScrollInterval) {
+                            clearInterval(autoScrollInterval);
+                            autoScrollInterval = null;
+                        }
+                    }
+                };
+
+                const endDrag = () => {
+                    if (!isDragging) return;
+                    isDragging = false;
+                    trimmerHighlightWindow.style.cursor = "grab";
+                    if (autoScrollInterval) {
+                        clearInterval(autoScrollInterval);
+                        autoScrollInterval = null;
+                    }
+                    
+                    // Restart video preview and trimmer audio in sync
+                    const videoPreview = document.getElementById("camera-capture-video-preview");
+                    if (videoPreview) {
+                        videoPreview.currentTime = 0;
+                        videoPreview.play().catch(() => {});
+                    }
+                    trimmerAudio.currentTime = trimmerStartTime;
+                    trimmerAudio.play().catch(() => {});
+                    
+                    isPlaying = true;
+                    updatePlayBtnState(true);
+                };
+
+                trimmerHighlightWindow.addEventListener("mousedown", (e) => {
+                    e.stopPropagation();
+                    startDrag(e.clientX);
+                });
+
+                window.addEventListener("mousemove", (e) => {
+                    moveDrag(e.clientX);
+                });
+
+                window.addEventListener("mouseup", () => {
+                    endDrag();
+                });
+
+                // Touch support
+                trimmerHighlightWindow.addEventListener("touchstart", (e) => {
+                    e.stopPropagation();
+                    if (e.touches.length > 0) {
+                        startDrag(e.touches[0].clientX);
+                    }
+                });
+
+                window.addEventListener("touchmove", (e) => {
+                    if (e.touches.length > 0) {
+                        moveDrag(e.touches[0].clientX);
+                    }
+                });
+
+                window.addEventListener("touchend", () => {
+                    endDrag();
+                });
+            }
+
+            if (scrollWrapper) {
+                // Grab-to-scroll functionality for desktop mouse interaction
+                let isDown = false;
+                let startX;
+                let scrollLeftStart;
+
+                scrollWrapper.addEventListener("mousedown", (e) => {
+                    isDown = true;
+                    scrollWrapper.style.cursor = "grabbing";
+                    startX = e.pageX - scrollWrapper.offsetLeft;
+                    scrollLeftStart = scrollWrapper.scrollLeft;
+                    trimmerAudio.pause();
+                });
+
+                scrollWrapper.addEventListener("mouseleave", () => {
+                    if (isDown) {
+                        isDown = false;
+                        scrollWrapper.style.cursor = "grab";
+                        
+                        // Restart video preview and trimmer audio in sync
+                        const videoPreview = document.getElementById("camera-capture-video-preview");
+                        if (videoPreview) {
+                            videoPreview.currentTime = 0;
+                            videoPreview.play().catch(() => {});
+                        }
+                        trimmerAudio.currentTime = trimmerStartTime;
+                        trimmerAudio.play().catch(() => {});
+                        
+                        isPlaying = true;
+                        updatePlayBtnState(true);
+                    }
+                });
+
+                scrollWrapper.addEventListener("mouseup", () => {
+                    if (isDown) {
+                        isDown = false;
+                        scrollWrapper.style.cursor = "grab";
+                        
+                        // Restart video preview and trimmer audio in sync
+                        const videoPreview = document.getElementById("camera-capture-video-preview");
+                        if (videoPreview) {
+                            videoPreview.currentTime = 0;
+                            videoPreview.play().catch(() => {});
+                        }
+                        trimmerAudio.currentTime = trimmerStartTime;
+                        trimmerAudio.play().catch(() => {});
+                        
+                        isPlaying = true;
+                        updatePlayBtnState(true);
+                    }
+                });
+
+                scrollWrapper.addEventListener("mousemove", (e) => {
+                    if (!isDown) return;
+                    e.preventDefault();
+                    const x = e.pageX - scrollWrapper.offsetLeft;
+                    const walk = (x - startX) * 1.5;
+                    scrollWrapper.scrollLeft = scrollLeftStart - walk;
+                });
+            }
+
+            trimmerAudio.ontimeupdate = () => {
+                if (trimmerAudio.paused) return;
+
+                const curr = trimmerAudio.currentTime;
+                const elapsed = curr - trimmerStartTime;
+
+                if (elapsed >= trimmerDuration || curr >= totalAudioDuration || elapsed < 0) {
+                    trimmerAudio.currentTime = trimmerStartTime;
+                    trimmerProgressFill.style.width = ((trimmerStartTime / totalAudioDuration) * 100) + "%";
+                    const playhead = document.getElementById("trimmer-playhead-line");
+                    if (playhead) playhead.style.left = "0%";
+                } else {
+                    const row1Pct = (curr / totalAudioDuration) * 100;
+                    trimmerProgressFill.style.width = row1Pct + "%";
+                    
+                    const playheadPct = (elapsed / trimmerDuration) * 100;
+                    const playhead = document.getElementById("trimmer-playhead-line");
+                    if (playhead) playhead.style.left = playheadPct + "%";
+                    
+                    trimmerTimer.textContent = formatTime(Math.max(0, trimmerDuration - elapsed));
+                }
+            };
+        }
+
+        async function fetchYouTubeSongs(search) {
+            if (loadingIndicator) loadingIndicator.style.display = "flex";
+            try {
+                const res = await apiRequest("GET", `/api/songs/search?q=${encodeURIComponent(search)}`);
+                if (res && res.ok && res.data && res.data.status && Array.isArray(res.data.data)) {
+                    renderSongList(res.data.data);
+                } else {
+                    if (songList) songList.innerHTML = `<div style="text-align:center;color:#ff5a5a;font-size:13.5px;padding:20px;">Failed to load songs</div>`;
+                }
+            } catch (err) {
+                console.error("YouTube search error:", err);
+                if (songList) songList.innerHTML = `<div style="text-align:center;color:#ff5a5a;font-size:13.5px;padding:20px;">Error searching songs</div>`;
+            } finally {
+                if (loadingIndicator) loadingIndicator.style.display = "none";
+            }
+        }
+
+        function renderSongList(songs) {
+            if (!songList) return;
+            songList.innerHTML = "";
+
+            if (songs.length === 0) {
+                songList.innerHTML = `<div style="text-align:center;color:#aaa;font-size:13.5px;padding:20px;">No results found</div>`;
+                return;
+            }
+
+            songs.forEach(song => {
+                const item = document.createElement("div");
+                item.style.cssText = "display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.06);border-radius:12px;padding:8px 12px;cursor:pointer;transition:background 0.2s;border:1.5px solid transparent;";
+                
+                const isSelected = window.pendingStatusSongRef && window.pendingStatusSongRef.videoId === song.videoId;
+                if (isSelected) {
+                    item.style.background = "rgba(255,0,0,0.15)";
+                    item.style.borderColor = "rgba(255,0,0,0.5)";
+                }
+
+                item.onmouseover = () => {
+                    if (!isSelected) item.style.background = "rgba(255,255,255,0.12)";
+                };
+                item.onmouseout = () => {
+                    if (!isSelected) item.style.background = "rgba(255,255,255,0.06)";
+                };
+
+                const thumbHtml = song.thumbnailUrl
+                    ? `<img src="${song.thumbnailUrl}" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0;" />`
+                    : `<div style="width:48px;height:48px;border-radius:8px;background:#333;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></div>`;
+
+                item.innerHTML = `
+                    ${thumbHtml}
+                    <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:2px;">
+                        <span style="font-size:13.5px;font-weight:600;color:white;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${song.title}</span>
+                        <span style="font-size:11px;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${song.channelTitle}</span>
+                    </div>
+                `;
+
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    window.pendingStatusSongRef = {
+                        videoId: song.videoId,
+                        title: song.title,
+                        channelTitle: song.channelTitle,
+                        thumbnailUrl: song.thumbnailUrl,
+                        audioUrl: song.audioUrl,
+                        startTime: 0 // Default start offset
+                    };
+                    updateSongBadgeVisibility();
+                    
+                    initAudioTrimmer(song);
+                    if (trimmerOverlay) {
+                        trimmerOverlay.style.display = "flex";
+                        hideCameraPreviewControls();
+                    }
+
+                    pickerOverlay.style.display = "none";
+                };
+
+                songList.appendChild(item);
+            });
+        }
+        window.initAudioTrimmer = initAudioTrimmer;
+    }
+
+    window.updateSongBadgeVisibility = updateSongBadgeVisibility;
 
     // Expose helpers
     window.openStatusComposer = openStatusComposer;

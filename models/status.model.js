@@ -71,6 +71,18 @@ const statusSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  songMergeFailed: {
+    type: Boolean,
+    default: false
+  },
+  songRef: {
+    youtubeVideoId: { type: String, default: null },
+    title: { type: String, default: null },
+    channelTitle: { type: String, default: null },
+    thumbnailUrl: { type: String, default: null },
+    audioUrl: { type: String, default: null },
+    startTime: { type: Number, default: 0 }
+  },
   createdAt: {
     type: Date,
     default: Date.now

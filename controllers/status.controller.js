@@ -3,6 +3,24 @@ import Status from "../models/status.model.js";
 import { User } from "../models/user.model.js";
 import { Connection } from "../models/connection.model.js";
 import { redis } from "../lib/redis.js";
+import fs from "fs-extra";
+import path from "path";
+import os from "os";
+import crypto from "crypto";
+import { execFile } from "child_process";
+import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { encryptBuffer, createDecryptStream } from "../utils/mediaEncryption.js";
+
+// Initialize S3 client for status controller video merging
+const s3 = new S3Client({
+  region: "auto",
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+});
+const BUCKET = process.env.R2_BUCKET;
 
 // ── Redis TTL ─────────────────────────────────────────────────────────────────
 const STATUS_CACHE_TTL = 300; // 5 minutes
@@ -81,18 +99,147 @@ async function queryStatusMomentsForUsers(userIds, viewerIdStr) {
       viewers: status.viewers,
       viewCount: status.viewCount,
       muted: status.muted || false,
+      songMergeFailed: status.songMergeFailed || false,
+      songRef: status.songRef || null,
     });
   }
   return result;
+}
+
+// Helper to extract key from media URL
+function extractKeyFromUrl(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url, "http://localhost");
+    return parsed.searchParams.get("key");
+  } catch {
+    return null;
+  }
+}
+
+// Helper to download and decrypt a file from R2 to local disk
+async function downloadAndDecryptR2(key, outputPath) {
+  const response = await s3.send(
+    new GetObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+    })
+  );
+
+  return new Promise((resolve, reject) => {
+    const decryptStream = createDecryptStream("v1");
+    const writeStream = fs.createWriteStream(outputPath);
+    
+    response.Body.pipe(decryptStream).pipe(writeStream);
+    
+    writeStream.on("finish", resolve);
+    writeStream.on("error", reject);
+    decryptStream.on("error", reject);
+  });
+}
+
+// Helper to run FFmpeg merge
+function createVideoFromImageAndAudio(imagePath, audioPath, startTime, outputPath) {
+  return new Promise((resolve, reject) => {
+    let resolvedOrRejected = false;
+    const imgPathFixed = imagePath.replace(/\\/g, "/");
+    const audPathFixed = audioPath.replace(/\\/g, "/");
+    const outPathFixed = outputPath.replace(/\\/g, "/");
+
+    const child = execFile(
+      "ffmpeg",
+      [
+        "-y",
+        "-loop", "1",
+        "-i", imgPathFixed,
+        "-ss", String(startTime || 0),
+        "-i", audPathFixed,
+        "-t", "15",
+        "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+        "-c:v", "libx264",
+        "-tune", "stillimage",
+        "-preset", "superfast",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-shortest",
+        outPathFixed,
+      ],
+      (err, stdout, stderr) => {
+        clearTimeout(timer);
+        if (resolvedOrRejected) return;
+        resolvedOrRejected = true;
+        if (err) {
+          console.error("[FFmpeg merge] failed:", err, stderr);
+          return reject(err);
+        }
+        resolve();
+      }
+    );
+
+    const timer = setTimeout(() => {
+      if (resolvedOrRejected) return;
+      resolvedOrRejected = true;
+      console.error("[FFmpeg merge] TIMEOUT: FFmpeg process hung after 25 seconds. Killing it...");
+      child.kill("SIGKILL");
+      reject(new Error("FFmpeg merging process timed out after 25 seconds."));
+    }, 25000);
+  });
+}
+
+// Helper to merge audio into video status, muting original video audio
+function mergeAudioIntoVideo(videoPath, audioPath, startTime, outputPath) {
+  return new Promise((resolve, reject) => {
+    let resolvedOrRejected = false;
+    const vidPathFixed = videoPath.replace(/\\/g, "/");
+    const audPathFixed = audioPath.replace(/\\/g, "/");
+    const outPathFixed = outputPath.replace(/\\/g, "/");
+
+    const child = execFile(
+      "ffmpeg",
+      [
+        "-y",
+        "-i", vidPathFixed,
+        "-ss", String(startTime || 0),
+        "-stream_loop", "-1",
+        "-i", audPathFixed,
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-shortest",
+        outPathFixed,
+      ],
+      (err, stdout, stderr) => {
+        clearTimeout(timer);
+        if (resolvedOrRejected) return;
+        resolvedOrRejected = true;
+        if (err) {
+          console.error("[FFmpeg video audio merge] failed:", err, stderr);
+          return reject(err);
+        }
+        resolve();
+      }
+    );
+
+    const timer = setTimeout(() => {
+      if (resolvedOrRejected) return;
+      resolvedOrRejected = true;
+      console.error("[FFmpeg video audio merge] TIMEOUT: FFmpeg process hung after 25 seconds. Killing it...");
+      child.kill("SIGKILL");
+      reject(new Error("FFmpeg video audio merging process timed out after 25 seconds."));
+    }, 25000);
+  });
 }
 
 // ── POST /api/status ───────────────────────────────────────────────────────────
 export const createStatus = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { mediaUrl, mediaType, type, textContent, backgroundColor, font, caption, duration, muted } = req.body;
+    const { mediaUrl, mediaType, type, textContent, backgroundColor, font, caption, duration, muted, songRef } = req.body;
 
-    const statusType = type || mediaType;
+    let statusType = type || mediaType;
     if (!statusType || !["image", "video", "text"].includes(statusType)) {
       return res.status(400).json({ status: false, message: "Invalid status type" });
     }
@@ -103,6 +250,166 @@ export const createStatus = async (req, res) => {
       return res.status(400).json({ status: false, message: "mediaUrl is required for media status" });
     }
 
+    let finalMediaUrl = mediaUrl;
+    let finalType = statusType;
+    let finalDuration = duration || (statusType === "video" ? 15 : 5);
+
+    // Normalize songRef at ingress once
+    let normalizedSongRef = null;
+    if (songRef) {
+      normalizedSongRef = {
+        youtubeVideoId: songRef.videoId || songRef.youtubeVideoId || null,
+        title: songRef.title || null,
+        channelTitle: songRef.channelTitle || null,
+        thumbnailUrl: songRef.thumbnailUrl || null,
+        audioUrl: songRef.audioUrl || null,
+        startTime: Number(songRef.startTime || 0)
+      };
+    }
+
+    let songMergeFailed = false;
+
+    // Merge static image + 15s trimmed audio on the server side
+    if (statusType === "image" && normalizedSongRef && normalizedSongRef.audioUrl) {
+      console.log("[Status Controller] Music detected on image status. Attempting backend video generation...");
+      const tempImage = path.join(os.tmpdir(), `img_${crypto.randomUUID()}.jpg`);
+      const tempAudio = path.join(os.tmpdir(), `aud_${crypto.randomUUID()}.mp3`);
+      const tempOutput = path.join(os.tmpdir(), `vid_${crypto.randomUUID()}.mp4`);
+      
+      try {
+        // 1. Download and decrypt the image
+        const imageKey = extractKeyFromUrl(mediaUrl);
+        if (!imageKey) {
+          throw new Error("Invalid image key in mediaUrl");
+        }
+        await downloadAndDecryptR2(imageKey, tempImage);
+        console.log("[Status Controller] Image downloaded and decrypted successfully.");
+
+        // 2. Locate or download the audio
+        const audioKey = extractKeyFromUrl(normalizedSongRef.audioUrl);
+        if (audioKey) {
+          await downloadAndDecryptR2(audioKey, tempAudio);
+          console.log("[Status Controller] Audio downloaded and decrypted successfully.");
+        } else {
+          const localPath = path.join(process.cwd(), "public", normalizedSongRef.audioUrl);
+          if (await fs.pathExists(localPath)) {
+            await fs.copy(localPath, tempAudio);
+            console.log("[Status Controller] Using local audio file.");
+          } else {
+            throw new Error(`Audio file not found locally: ${localPath}`);
+          }
+        }
+
+        // 3. Merge into MP4 video using FFmpeg
+        const startTime = normalizedSongRef.startTime || 0;
+        await createVideoFromImageAndAudio(tempImage, tempAudio, startTime, tempOutput);
+        console.log("[Status Controller] FFmpeg video merging SUCCESS.");
+
+        // 4. Encrypt and upload the generated video to R2
+        const videoBuffer = await fs.readFile(tempOutput);
+        const encryptedVideo = encryptBuffer(videoBuffer, "v1");
+        const newVideoKey = `chat_media/status_video_${crypto.randomUUID()}.mp4`;
+        
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: BUCKET,
+            Key: newVideoKey,
+            Body: encryptedVideo,
+            ContentType: "video/mp4",
+            CacheControl: "public, max-age=31536000",
+          })
+        );
+        
+        // 5. Update status properties to make it a video status
+        finalMediaUrl = `/api/media?key=${encodeURIComponent(newVideoKey)}&v=v1`;
+        finalType = "video";
+        finalDuration = 15;
+        console.log("[Status Controller] Generated video uploaded successfully:", finalMediaUrl);
+        
+      } catch (mergeErr) {
+        console.error("[Status Controller] Backend video generation failed. Setting songMergeFailed flag and falling back to static image:", mergeErr);
+        songMergeFailed = true;
+        // Keep finalType as "image" and finalMediaUrl as the original static image URL
+        finalType = "image";
+        finalMediaUrl = mediaUrl;
+        finalDuration = duration || 5;
+      } finally {
+        // Cleanup temp files
+        await fs.remove(tempImage).catch(() => {});
+        await fs.remove(tempAudio).catch(() => {});
+        await fs.remove(tempOutput).catch(() => {});
+      }
+    } else if (statusType === "video" && normalizedSongRef && normalizedSongRef.audioUrl) {
+      console.log("[Status Controller] Music detected on video status. Attempting backend audio merge...");
+      const tempVideo = path.join(os.tmpdir(), `vid_in_${crypto.randomUUID()}.mp4`);
+      const tempAudio = path.join(os.tmpdir(), `aud_${crypto.randomUUID()}.mp3`);
+      const tempOutput = path.join(os.tmpdir(), `vid_out_${crypto.randomUUID()}.mp4`);
+      
+      try {
+        // 1. Download and decrypt the video
+        const videoKey = extractKeyFromUrl(mediaUrl);
+        if (!videoKey) {
+          throw new Error("Invalid video key in mediaUrl");
+        }
+        await downloadAndDecryptR2(videoKey, tempVideo);
+        console.log("[Status Controller] Video downloaded and decrypted successfully.");
+
+        // 2. Locate or download the audio
+        const audioKey = extractKeyFromUrl(normalizedSongRef.audioUrl);
+        if (audioKey) {
+          await downloadAndDecryptR2(audioKey, tempAudio);
+          console.log("[Status Controller] Audio downloaded and decrypted successfully.");
+        } else {
+          const localPath = path.join(process.cwd(), "public", normalizedSongRef.audioUrl);
+          if (await fs.pathExists(localPath)) {
+            await fs.copy(localPath, tempAudio);
+            console.log("[Status Controller] Using local audio file.");
+          } else {
+            throw new Error(`Audio file not found locally: ${localPath}`);
+          }
+        }
+
+        // 3. Merge audio into video status using FFmpeg
+        const startTime = normalizedSongRef.startTime || 0;
+        await mergeAudioIntoVideo(tempVideo, tempAudio, startTime, tempOutput);
+        console.log("[Status Controller] FFmpeg video audio merging SUCCESS.");
+
+        // 4. Encrypt and upload the generated video to R2
+        const videoBuffer = await fs.readFile(tempOutput);
+        const encryptedVideo = encryptBuffer(videoBuffer, "v1");
+        const newVideoKey = `chat_media/status_video_${crypto.randomUUID()}.mp4`;
+        
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: BUCKET,
+            Key: newVideoKey,
+            Body: encryptedVideo,
+            ContentType: "video/mp4",
+            CacheControl: "public, max-age=31536000",
+          })
+        );
+        
+        // 5. Update status properties
+        finalMediaUrl = `/api/media?key=${encodeURIComponent(newVideoKey)}&v=v1`;
+        finalType = "video";
+        finalDuration = duration || 15;
+        console.log("[Status Controller] Generated video uploaded successfully:", finalMediaUrl);
+        
+      } catch (mergeErr) {
+        console.error("[Status Controller] Backend video merging failed. Setting songMergeFailed flag and falling back to original video:", mergeErr);
+        songMergeFailed = true;
+        // Keep finalType as "video" and finalMediaUrl as the original video URL
+        finalType = "video";
+        finalMediaUrl = mediaUrl;
+        finalDuration = duration || 15;
+      } finally {
+        // Cleanup temp files
+        await fs.remove(tempVideo).catch(() => {});
+        await fs.remove(tempAudio).catch(() => {});
+        await fs.remove(tempOutput).catch(() => {});
+      }
+    }
+
     const user = await User.findById(userId);
     const privacy = user?.statusPrivacy || { mode: "contacts", exceptList: [], onlyList: [] };
     let audience = "contacts";
@@ -111,15 +418,29 @@ export const createStatus = async (req, res) => {
     else if (privacy.mode === "onlyContacts") { audience = "onlyContacts"; audienceList = privacy.onlyList || []; }
 
     let thumbnailUrl = null;
-    if (statusType === "video") thumbnailUrl = req.body.thumbnailUrl || req.body.cover_270 || null;
+    if (finalType === "video") {
+      thumbnailUrl = req.body.thumbnailUrl || req.body.cover_270 || mediaUrl || null;
+    }
 
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const newStatus = new Status({
-      userId, type: statusType, mediaUrl, thumbnailUrl, textContent,
-      backgroundColor, font, caption,
-      duration: duration || (statusType === "video" ? 15 : 5),
-      audience, audienceList, viewCount: 0, createdAt: new Date(), expiresAt,
+      userId,
+      type: finalType,
+      mediaUrl: finalMediaUrl,
+      thumbnailUrl,
+      textContent,
+      backgroundColor,
+      font,
+      caption,
+      duration: finalDuration,
+      audience,
+      audienceList,
+      viewCount: 0,
+      createdAt: new Date(),
+      expiresAt,
       muted: muted === true || muted === "true" || false,
+      songMergeFailed,
+      songRef: normalizedSongRef || null,
     });
     await newStatus.save();
 
@@ -158,6 +479,8 @@ export const createStatus = async (req, res) => {
             viewers: [],
             viewCount: 0,
             muted: newStatus.muted,
+            songMergeFailed: newStatus.songMergeFailed,
+            songRef: newStatus.songRef || null,
           },
         };
         for (const friendId of friendIds) req.io.to(friendId.toString()).emit("status:new", payload);
