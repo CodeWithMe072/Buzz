@@ -1,0 +1,5 @@
+# nixpacks.toml
+# Tells Railway/Nixpacks to install python3 and ffmpeg alongside Node.js
+
+[phases.setup]
+nixPkgs = ["...", "python3", "ffmpeg"]
