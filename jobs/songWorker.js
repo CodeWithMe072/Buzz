@@ -50,9 +50,14 @@ export const songWorker = new Worker(
         };
       });
 
-      // Reject if the video is too short (YouTube Shorts are strictly under 60 seconds, pop songs are generally > 90 seconds)
-      if (meta.duration > 0 && meta.duration < 90) {
-        throw new Error(`Video duration is too short (${meta.duration}s). YouTube Shorts or short clips are not supported.`);
+      // Reject if the video is too short or too long
+      if (meta.duration > 0) {
+        if (meta.duration < 90) {
+          throw new Error(`Video duration is too short (${meta.duration}s). YouTube Shorts or short clips are not supported.`);
+        }
+        if (meta.duration > 360) {
+          throw new Error(`Video duration is too long (${meta.duration}s). Songs longer than 6 minutes are not supported.`);
+        }
       }
 
       // 3. Download audio stream and transcode to MP3 locally

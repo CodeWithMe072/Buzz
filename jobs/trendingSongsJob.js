@@ -63,7 +63,7 @@ export async function runTrendingSongsJob() {
           "search",
           {
             part: "snippet",
-            maxResults: "15",
+            maxResults: "50",
             type: "video",
             videoCategoryId: "10",
             q: `${category} trending song -shorts`
@@ -128,6 +128,18 @@ export async function runTrendingSongsJob() {
           formattedDuration: "0:00"
         };
       });
+
+      // Filter by duration (90 seconds to 360 seconds/6 minutes)
+      if (meta.duration > 0) {
+        if (meta.duration < 90) {
+          console.log(`[TrendingSongsJob] Skipping ${songInfo.title} (${videoId}) because it is too short (${meta.duration}s).`);
+          continue;
+        }
+        if (meta.duration > 360) {
+          console.log(`[TrendingSongsJob] Skipping ${songInfo.title} (${videoId}) because it is too long (${meta.duration}s).`);
+          continue;
+        }
+      }
 
       // Temporary local download path
       const tempFilename = `temp_${videoId}.mp3`;
