@@ -708,3 +708,85 @@ export const deleteStatus = async (req, res) => {
     res.status(500).json({ status: false, message: "Failed to delete status" });
   }
 };
+
+// ── POST /api/status/:id/extend ───────────────────────────────────────────────
+export const extendStatus = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const statusId = req.params.id;
+    const { amount, unit } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(statusId)) {
+      return res.status(400).json({ status: false, message: "Invalid status ID" });
+    }
+
+    const parsedAmount = parseInt(amount, 10);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ status: false, message: "Invalid extension amount. Must be a positive integer." });
+    }
+
+    if (!["minutes", "hours", "days"].includes(unit)) {
+      return res.status(400).json({ status: false, message: "Invalid extension unit. Must be minutes, hours, or days." });
+    }
+
+    const status = await Status.findById(statusId);
+    if (!status) {
+      return res.status(404).json({ status: false, message: "Status not found" });
+    }
+
+    if (status.userId.toString() !== userId.toString()) {
+      return res.status(403).json({ status: false, message: "Unauthorized to extend this status" });
+    }
+
+    let additionMs = 0;
+    if (unit === "minutes") {
+      additionMs = parsedAmount * 60 * 1000;
+    } else if (unit === "hours") {
+      additionMs = parsedAmount * 60 * 60 * 1000;
+    } else if (unit === "days") {
+      additionMs = parsedAmount * 24 * 60 * 60 * 1000;
+    }
+
+    // Extend relative to base expiration time (createdAt + 24 hours)
+    const baseExpiresAtTime = status.createdAt.getTime() + 24 * 60 * 60 * 1000;
+    const newExpiresAt = new Date(baseExpiresAtTime + additionMs);
+
+    status.expiresAt = newExpiresAt;
+    await status.save();
+
+    // ── 1. Invalidate: only the poster's contrib key + own me key ─────────────
+    await Promise.all([
+      redis.del(contribKey(userId.toString())),
+      redis.del(meKey(userId.toString())),
+    ]);
+
+    // ── 2. Respond ─────────────────────────────────────────────────────────────
+    res.json({ 
+      status: true, 
+      message: `Status extended successfully by ${parsedAmount} ${unit}`, 
+      newExpiresAt: newExpiresAt.toISOString() 
+    });
+
+    // ── 3. Broadcast over sockets (after invalidation) ────────────────────────
+    if (req.io) {
+      try {
+        const friendIds = await getMutualFriendIds(userId);
+        const payload = { 
+          statusId: statusId.toString(), 
+          userId: userId.toString(), 
+          expiresAt: newExpiresAt.toISOString() 
+        };
+        for (const friendId of friendIds) {
+          req.io.to(friendId.toString()).emit("status:extended", payload);
+        }
+        req.io.to(userId.toString()).emit("status:extended", payload);
+      } catch (broadcastErr) {
+        console.error("[ExtendStatus] broadcast error:", broadcastErr);
+      }
+    }
+  } catch (err) {
+    console.error("[ExtendStatus]", err);
+    res.status(500).json({ status: false, message: "Failed to extend status" });
+  }
+};
+

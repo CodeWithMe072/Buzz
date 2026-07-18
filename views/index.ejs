@@ -537,6 +537,13 @@
                         </button>
                         <!-- Options dropdown list -->
                         <div id="status-viewer-options-menu" style="display: none; position: absolute; right: 0; top: 100%; margin-top: 6px; background: #202024; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); z-index: 3120; width: 130px; overflow: hidden;">
+                            <button type="button" id="status-viewer-opt-extend" style="width: 100%; padding: 10px 12px; background: transparent; border: none; color: #30b0ff; text-align: left; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <polyline points="12 6 12 12 16 14"></polyline>
+                                </svg>
+                                <span>Extend</span>
+                            </button>
                             <button type="button" id="status-viewer-opt-delete" style="width: 100%; padding: 10px 12px; background: transparent; border: none; color: #ff3b30; text-align: left; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="3 6 5 6 21 6"></polyline>
@@ -567,6 +574,34 @@
                     <div style="display: flex; gap: 10px; justify-content: center; width: 100%;">
                         <button type="button" id="status-delete-cancel-btn" style="flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: transparent; color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">Cancel</button>
                         <button type="button" id="status-delete-confirm-btn" style="flex: 1; padding: 9px 12px; border-radius: 8px; border: none; background: #ff3b30; color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">Delete</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Extend Duration Modal -->
+            <div id="status-extend-modal" style="display: none; position: absolute; inset: 0; z-index: 3130; background: rgba(0,0,0,0.75); align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div style="width: 280px; background: #1a1a1e; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; box-shadow: 0 12px 36px rgba(0,0,0,0.7); text-align: left; box-sizing: border-box; font-family: 'Outfit', 'Inter', sans-serif;">
+                    <h4 style="margin: 0 0 8px 0; color: white; font-size: 16px; font-weight: 700; text-align: center;">Extend Status</h4>
+                    <p style="margin: 0 0 16px 0; color: #a0a0a5; font-size: 13px; line-height: 1.45; text-align: center;">Add duration to this status update.</p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+                        <div>
+                            <label style="display: block; color: #a0a0a5; font-size: 11px; font-weight: 600; margin-bottom: 4px; text-transform: uppercase;">Amount</label>
+                            <input type="number" id="status-extend-amount" value="50" min="1" style="width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: #202024; color: white; font-size: 13px; font-family: inherit; box-sizing: border-box; outline: none;"/>
+                        </div>
+                        <div>
+                            <label style="display: block; color: #a0a0a5; font-size: 11px; font-weight: 600; margin-bottom: 4px; text-transform: uppercase;">Unit</label>
+                            <select id="status-extend-unit" style="width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: #202024; color: white; font-size: 13px; font-family: inherit; box-sizing: border-box; outline: none; cursor: pointer;">
+                                <option value="minutes">Minutes</option>
+                                <option value="hours" selected>Hours</option>
+                                <option value="days">Days</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; justify-content: center; width: 100%;">
+                        <button type="button" id="status-extend-cancel-btn" style="flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: transparent; color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">Cancel</button>
+                        <button type="button" id="status-extend-confirm-btn" style="flex: 1; padding: 9px 12px; border-radius: 8px; border: none; background: #30b0ff; color: white; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">Confirm</button>
                     </div>
                 </div>
             </div>

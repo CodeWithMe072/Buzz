@@ -5,7 +5,8 @@ import {
   getStatusFeed,
   getMyStatuses,
   markStatusViewed,
-  deleteStatus
+  deleteStatus,
+  extendStatus
 } from "../controllers/status.controller.js";
 
 const router = express.Router();
@@ -17,5 +18,6 @@ router.get("/api/status/feed", getStatusFeed);
 router.get("/api/status/me", getMyStatuses);
 router.post("/api/status/:id/view", markStatusViewed);
 router.delete("/api/status/:id", deleteStatus);
+router.post("/api/status/:id/extend", extendStatus);
 
 export default router;

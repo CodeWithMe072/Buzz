@@ -784,6 +784,29 @@ function initSocket() {
     }
   });
 
+  // ── Status extended (real-time duration update across all clients) ────────
+  socket.on("status:extended", ({ statusId, userId, expiresAt }) => {
+    const currentUserId = (State.currentUser?._id || State.currentUser?.id || "").toString();
+    const isOwnStatus = userId.toString() === currentUserId;
+
+    if (isOwnStatus) {
+      if (State.myActiveStatuses) {
+        const item = State.myActiveStatuses.find((m) => m._id === statusId);
+        if (item) item.expiresAt = expiresAt;
+      }
+    } else {
+      if (State.statusFeed) {
+        for (const group of State.statusFeed) {
+          const item = (group.moments || []).find((m) => m._id === statusId);
+          if (item) {
+            item.expiresAt = expiresAt;
+            break;
+          }
+        }
+      }
+    }
+  });
+
 
   // ── New status posted (real-time push to all contacts) ───────────────────
   socket.on("status:new", ({ statusId, userId, username, avatar, moment }) => {

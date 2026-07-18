@@ -682,8 +682,16 @@
             };
         }
 
-        // Show Delete only for own, Download only for others
+        const optExtend = document.getElementById("status-viewer-opt-extend");
+        const extendModal = document.getElementById("status-extend-modal");
+        const extendCancelBtn = document.getElementById("status-extend-cancel-btn");
+        const extendConfirmBtn = document.getElementById("status-extend-confirm-btn");
+        const extendAmountInput = document.getElementById("status-extend-amount");
+        const extendUnitSelect = document.getElementById("status-extend-unit");
+
+        // Show Delete and Extend only for own, Download only for others
         if (optDelete) optDelete.style.display = isOwn ? "flex" : "none";
+        if (optExtend) optExtend.style.display = isOwn ? "flex" : "none";
         if (optDownload) optDownload.style.display = isOwn ? "none" : "flex";
 
         if (optDelete) {
@@ -692,6 +700,16 @@
                 if (optionsMenu) optionsMenu.style.display = "none";
                 if (confirmModal) {
                     confirmModal.style.display = "flex";
+                }
+            };
+        }
+
+        if (optExtend) {
+            optExtend.onclick = (e) => {
+                e.stopPropagation();
+                if (optionsMenu) optionsMenu.style.display = "none";
+                if (extendModal) {
+                    extendModal.style.display = "flex";
                 }
             };
         }
@@ -718,12 +736,11 @@
                     if (!response.ok) throw new Error("Download failed");
                     
                     const blob = await response.blob();
-                    const ext = resolvedType === "video" ? "mp4" : "jpg";
-                    const filename = `status_${activeGroup.user.username}_${Date.now()}.${ext}`;
+                    const url = URL.createObjectURL(blob);
                     
                     const a = document.createElement("a");
-                    a.href = URL.createObjectURL(blob);
-                    a.download = filename;
+                    a.href = url;
+                    a.download = moment.fileName || `status_${moment._id}.${resolvedType === "video" ? "mp4" : "jpg"}`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -745,6 +762,59 @@
                 e.stopPropagation();
                 if (confirmModal) confirmModal.style.display = "none";
                 if (isPaused) togglePlayPause();
+            };
+        }
+
+        if (extendCancelBtn) {
+            extendCancelBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (extendModal) extendModal.style.display = "none";
+                if (isPaused) togglePlayPause();
+            };
+        }
+
+        if (extendConfirmBtn) {
+            extendConfirmBtn.onclick = async (e) => {
+                e.stopPropagation();
+                const amount = parseInt(extendAmountInput?.value, 10);
+                const unit = extendUnitSelect?.value;
+
+                if (!amount || isNaN(amount) || amount <= 0) {
+                    showToast("Please enter a valid positive number", "error");
+                    return;
+                }
+
+                if (extendModal) extendModal.style.display = "none";
+
+                try {
+                    showToast("Extending status...", "info");
+                    const res = await apiRequest("POST", `/api/status/${moment._id}/extend`, { amount, unit });
+                    const data = await res.json();
+                    if (res && res.ok) {
+                        showToast(data.message || "Status extended", "success");
+                        
+                        // Update local State.myActiveStatuses
+                        if (State.myActiveStatuses) {
+                            const myStatus = State.myActiveStatuses.find(m => m._id === moment._id);
+                            if (myStatus) {
+                                myStatus.expiresAt = data.newExpiresAt;
+                            }
+                        }
+                        
+                        // Update current moment object so the viewer knows
+                        moment.expiresAt = data.newExpiresAt;
+
+                        // Resume playback
+                        if (isPaused) togglePlayPause();
+                    } else {
+                        showToast(data.message || "Failed to extend status", "error");
+                        if (isPaused) togglePlayPause();
+                    }
+                } catch (err) {
+                    console.error("[Status Extend]", err);
+                    showToast("Failed to extend status", "error");
+                    if (isPaused) togglePlayPause();
+                }
             };
         }
 
