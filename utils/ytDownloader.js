@@ -133,6 +133,9 @@ export async function getMetadata(videoUrl) {
           thumbnail: data.thumbnail || (data.thumbnails && data.thumbnails.length ? data.thumbnails[data.thumbnails.length - 1].url : ""),
           duration: data.duration || 0,
           formattedDuration: formatDuration(data.duration),
+          tags: data.tags || [],
+          description: data.description || "",
+          categories: data.categories || [],
         });
       } catch (err) {
         reject(new Error("Failed to parse video metadata"));

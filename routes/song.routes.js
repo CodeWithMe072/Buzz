@@ -5,6 +5,7 @@ import SongRequest from "../models/songRequest.model.js";
 import { redis } from "../lib/redis.js";
 import { songQueue } from "../lib/songQueue.js";
 import { youtubeApiRequest } from "../utils/youtube.js";
+import { fuzzySearch } from "../utils/songHelpers.js";
 
 const router = express.Router();
 
@@ -18,19 +19,25 @@ router.get("/api/songs/search", protect, async (req, res) => {
     const pageToken = req.query.pageToken || "";
 
     if (source === "db") {
-      // 1. Paginated Local DB Search
+      // 1. Paginated Local DB Search with Fuzzy Ranking
       const skip = (page - 1) * limit;
-      const dbQuery = query
-        ? {
-            $or: [
-              { title: new RegExp(query, "i") },
-              { channelTitle: new RegExp(query, "i") }
-            ]
-          }
-        : {};
+      let matchedSongs = [];
+      let hasMore = false;
 
-      const dbSongs = await Song.find(dbQuery).skip(skip).limit(limit);
-      const dbResults = dbSongs.map(song => ({
+      if (!query) {
+        // Return latest songs if no query
+        const dbSongs = await Song.find({}).sort({ createdAt: -1 }).skip(skip).limit(limit);
+        matchedSongs = dbSongs;
+        hasMore = dbSongs.length === limit;
+      } else {
+        // Query catalog and apply fuzzy match ranker
+        const allSongs = await Song.find({});
+        const fuzzyResults = fuzzySearch(query, allSongs);
+        matchedSongs = fuzzyResults.slice(skip, skip + limit);
+        hasMore = (skip + limit) < fuzzyResults.length;
+      }
+
+      const dbResults = matchedSongs.map(song => ({
         videoId: song.videoId,
         title: song.title,
         channelTitle: song.channelTitle,
@@ -42,7 +49,7 @@ router.get("/api/songs/search", protect, async (req, res) => {
       return res.json({
         status: true,
         data: dbResults,
-        hasMore: dbSongs.length === limit
+        hasMore
       });
     } else {
       // 2. Paginated YouTube Search with Key Rotation

@@ -8,6 +8,7 @@ import Song from "../models/song.model.js";
 import { encryptBuffer } from "../utils/mediaEncryption.js";
 import { youtubeApiRequest } from "../utils/youtube.js";
 import { saveSongToBothDbs } from "../utils/remoteDb.js";
+import { generateKeywordsAndCategory } from "../utils/songHelpers.js";
 
 // Curated popular/trending fallback music videos per category if YouTube API key is missing
 const FALLBACK_CATEGORIZED_VIDEOS = {
@@ -205,13 +206,23 @@ export async function runTrendingSongsJob() {
       }
 
       // Save song details to database
+      const { category, keywords } = generateKeywordsAndCategory(
+        meta.title,
+        meta.uploader,
+        meta.tags || [],
+        meta.description || "",
+        meta.categories || []
+      );
+
       const newSong = new Song({
         videoId,
         title: meta.title,
         channelTitle: meta.uploader,
         thumbnailUrl: meta.thumbnail,
         audioUrl,
-        duration: meta.duration
+        duration: meta.duration,
+        category,
+        keywords
       });
 
       await newSong.save();
@@ -232,6 +243,10 @@ export async function runTrendingSongsJob() {
  * Initializes and schedules the background job.
  */
 export function startTrendingSongsJob() {
+  if (process.env.DOWNLOAD_TRENDING_SONGS !== "true") {
+    console.log("[TrendingSongsJob] Auto trending songs download is disabled by default. (Enable with DOWNLOAD_TRENDING_SONGS=true)");
+    return;
+  }
   console.log("[TrendingSongsJob] Starting background job scheduler...");
 
   // Run immediately once on server boot (asynchronous)

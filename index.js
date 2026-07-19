@@ -57,6 +57,13 @@ const PORT = process.env.PORT || 5500;
 /* ---------- Database ---------- */
 await connectMongo();
 
+// Trigger auto-migration of song search keywords
+import("./utils/songHelpers.js").then(({ autoMigrateSongs }) => {
+  autoMigrateSongs();
+}).catch(err => {
+  console.error("[Startup] Failed to initialize song keyword auto-migration:", err);
+});
+
 /* ---------- Compression ---------- */
 app.use(compression());
 

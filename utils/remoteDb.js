@@ -24,6 +24,8 @@ export async function saveSongToBothDbs(songData) {
       thumbnailUrl: songData.thumbnailUrl || "",
       audioUrl: songData.audioUrl || "",
       duration: songData.duration || 0,
+      category: songData.category || "other",
+      keywords: songData.keywords || [],
       updatedAt: new Date()
     };
 

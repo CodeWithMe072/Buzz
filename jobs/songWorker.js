@@ -10,6 +10,7 @@ import SongRequest from "../models/songRequest.model.js";
 import { encryptBuffer } from "../utils/mediaEncryption.js";
 import { redis } from "../lib/redis.js";
 import { saveSongToBothDbs } from "../utils/remoteDb.js";
+import { generateKeywordsAndCategory } from "../utils/songHelpers.js";
 
 // Create a dedicated Redis connection for the worker with maxRetriesPerRequest: null
 const workerConnection = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
@@ -121,6 +122,14 @@ export const songWorker = new Worker(
       // 5. Save the completed song in the catalog
       let song = await Song.findOne({ videoId });
       if (!song) {
+        const { category, keywords } = generateKeywordsAndCategory(
+          meta.title || request.title,
+          meta.uploader || request.channelTitle,
+          meta.tags || [],
+          meta.description || "",
+          meta.categories || []
+        );
+
         song = new Song({
           videoId,
           title: meta.title || request.title,
@@ -128,9 +137,11 @@ export const songWorker = new Worker(
           thumbnailUrl: meta.thumbnail || "",
           audioUrl,
           duration: meta.duration || 0,
+          category,
+          keywords
         });
         await song.save();
-        console.log(`[SongWorker] Saved new song catalog entry for: ${song.title}`);
+        console.log(`[SongWorker] Saved new song catalog entry for: ${song.title} with category: ${category}`);
       }
 
       // 5.5 Replicate metadata to remote MongoDB DB

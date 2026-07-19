@@ -6,8 +6,22 @@
  * @param {string[]} preferredKeyOrder - Order of key environment variable names to try (e.g. ["YOUTUBE_API_KEY_1", "YOUTUBE_API_KEY_2"])
  */
 export async function youtubeApiRequest(endpoint, params, preferredKeyOrder = []) {
+  // Dynamically resolve all keys in the environment that start with YOUTUBE_API_KEY
+  const allEnvKeys = Object.keys(process.env)
+    .filter(key => key.startsWith("YOUTUBE_API_KEY"))
+    .sort((a, b) => {
+      if (a === "YOUTUBE_API_KEY") return -1;
+      if (b === "YOUTUBE_API_KEY") return 1;
+      return a.localeCompare(b);
+    });
+
+  // Combine preferred order with any other dynamically discovered keys
+  const finalKeyOrder = (preferredKeyOrder && preferredKeyOrder.length > 0)
+    ? Array.from(new Set([...preferredKeyOrder, ...allEnvKeys]))
+    : allEnvKeys;
+
   // Resolve key environment variable names to actual values
-  const keys = preferredKeyOrder.map(name => process.env[name]).filter(Boolean);
+  const keys = finalKeyOrder.map(name => process.env[name]).filter(Boolean);
   
   if (keys.length === 0) {
     throw new Error("No YouTube API keys available in environment");
@@ -17,7 +31,7 @@ export async function youtubeApiRequest(endpoint, params, preferredKeyOrder = []
 
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    const keyName = preferredKeyOrder[i] || `KEY_${i}`;
+    const keyName = finalKeyOrder[i] || `KEY_${i}`;
     const queryParams = new URLSearchParams(params);
     queryParams.set("key", key);
     

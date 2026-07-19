@@ -27,6 +27,16 @@ const songSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  category: {
+    type: String,
+    default: "other",
+    index: true
+  },
+  keywords: {
+    type: [String],
+    default: [],
+    index: true
+  },
   createdAt: {
     type: Date,
     default: Date.now,
