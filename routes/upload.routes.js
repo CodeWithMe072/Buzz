@@ -2,7 +2,7 @@ import express from "express";
 import multer from "multer";
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
-import { Readable } from "stream";
+import { Readable, Transform } from "stream";
 import fse from "fs-extra";
 import path from "path";
 import os from "os";
@@ -126,6 +126,31 @@ class MultiFileReadStream extends Readable {
         callback(err);
     }
 }
+
+class OffsetSkipStream extends Transform {
+    constructor(offset) {
+        super();
+        this.offset = offset;
+        this.skipped = 0;
+    }
+
+    _transform(chunk, encoding, callback) {
+        if (this.skipped < this.offset) {
+            const needed = this.offset - this.skipped;
+            if (chunk.length <= needed) {
+                this.skipped += chunk.length;
+                return callback();
+            } else {
+                const slice = chunk.subarray(needed);
+                this.skipped = this.offset;
+                this.push(slice);
+                return callback();
+            }
+        }
+        this.push(chunk);
+        callback();
+    }
+}
 // =============================================================================
 // Public URL Helper
 // =============================================================================
@@ -203,24 +228,6 @@ async function deleteFromR2(url) {
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function makeImageUrls(originalUrl) {
-    return {
-        type: "image",
-        original: originalUrl,
-        cover_270: originalUrl,
-        thumb_50: originalUrl,
-    };
-}
-
-function makeVideoUrls(originalUrl) {
-    return {
-        type: "video",
-        original: originalUrl,
-        cover_270: null,
-        thumb_50: null,
-    };
-}
 
 function makeDocumentUrls(originalUrl, fileName, fileSize) {
     return {
@@ -984,6 +991,159 @@ async function setRedisCachedMediaMetadata(key, cached) {
     }
 }
 
+async function serveEncryptedMedia(req, res, key, version, activeS3, activeBucket) {
+    const rangeHeader = req.headers.range;
+
+    // Fetch status metadata if key is status
+    let statusDuration = 15;
+    let cacheMaxAge = 3600; // All media files (images, video status, regular files) cached for exactly 1 hour
+    if (key.startsWith("status/")) {
+        try {
+            const filename = key.split("/").pop();
+            const statusDoc = await Status.findOne({ mediaUrl: new RegExp(filename, "i") }).lean();
+            if (statusDoc && statusDoc.duration) {
+                statusDuration = statusDoc.duration;
+            }
+        } catch (dbErr) {
+            // fallback
+        }
+    }
+
+    const isStatusFullLoad = key.startsWith("status/") && 
+        (!rangeHeader || rangeHeader.replace(/\s/g, "") === "bytes=0-");
+
+    if (rangeHeader && !isStatusFullLoad) {
+        let cached = await getRedisCachedMediaMetadata(key);
+        if (!cached) {
+            // Fetch the 16-byte IV and parse total size from Content-Range in one call
+            const ivResponse = await activeS3.send(
+                new GetObjectCommand({
+                    Bucket: activeBucket,
+                    Key: key,
+                    Range: "bytes=0-15",
+                })
+            );
+
+            const ivChunks = [];
+            for await (const chunk of ivResponse.Body) {
+                ivChunks.push(chunk);
+            }
+            const iv = Buffer.concat(ivChunks);
+
+            if (iv.length < 16) {
+                throw new Error("Failed to retrieve encryption IV");
+            }
+
+            const contentRange = ivResponse.ContentRange;
+            if (!contentRange) {
+                throw new Error("Missing Content-Range header from S3 range response");
+            }
+            const totalEncryptedSize = parseInt(contentRange.split("/")[1], 10);
+            const contentType = ivResponse.ContentType || "application/octet-stream";
+
+            cached = {
+                iv,
+                totalEncryptedSize,
+                contentType
+            };
+            await setRedisCachedMediaMetadata(key, cached);
+        }
+
+        const { iv, totalEncryptedSize, contentType } = cached;
+        const totalPlaintextSize = totalEncryptedSize - 16;
+
+        const parts = rangeHeader.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+
+        // Dynamically compute chunk size: 6 seconds of video for status uploads (subsequent), default 10MB otherwise
+        let chunkLimit = 1024 * 1024 * 10; // Default 10MB
+        if (key.startsWith("status/")) {
+            // If it's the very first request (start is 0), fetch a larger chunk to satisfy the preloading target in one request (up to 11s)
+            const targetSec = (start === 0) ? Math.min(statusDuration * 0.25, 11) : 6;
+            const estimatedBytes = Math.ceil((totalPlaintextSize / statusDuration) * targetSec);
+            
+            // For first request, clamp between 2MB and 5MB. For subsequent requests, clamp between 1.2MB and 3MB.
+            const minClamp = (start === 0) ? 2 * 1024 * 1024 : 1.2 * 1024 * 1024;
+            const maxClamp = (start === 0) ? 5 * 1024 * 1024 : 3 * 1024 * 1024;
+            
+            chunkLimit = Math.max(minClamp, Math.min(maxClamp, estimatedBytes));
+        }
+
+        let end = parts[1] ? parseInt(parts[1], 10) : start + chunkLimit - 1;
+        if (end - start + 1 > chunkLimit) {
+            end = start + chunkLimit - 1;
+        }
+        if (end >= totalPlaintextSize) {
+            end = totalPlaintextSize - 1;
+        }
+
+        if (start >= totalPlaintextSize || end >= totalPlaintextSize) {
+            res.status(416).set("Content-Range", `bytes */${totalPlaintextSize}`).end();
+            return;
+        }
+
+        const blockNumber = Math.floor(start / 16);
+        const byteOffset = start % 16;
+
+        const startByteR2 = 16 + blockNumber * 16;
+        const endByteR2 = 16 + end;
+
+        const ciphertextResponse = await activeS3.send(
+            new GetObjectCommand({
+                Bucket: activeBucket,
+                Key: key,
+                Range: `bytes=${startByteR2}-${endByteR2}`,
+            })
+        );
+
+        res.writeHead(206, {
+            "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
+            "Accept-Ranges": "bytes",
+            "Content-Length": (end - start) + 1,
+            "Content-Type": contentType,
+            "Cache-Control": `public, max-age=${cacheMaxAge}`,
+        });
+
+        const adjustedIv = incrementIV(iv, blockNumber);
+        const cipherKey = getKey(version);
+        const decipher = crypto.createDecipheriv("aes-256-ctr", cipherKey, adjustedIv);
+        const skipStream = new OffsetSkipStream(byteOffset);
+
+        ciphertextResponse.Body.pipe(decipher).pipe(skipStream).pipe(res);
+
+        res.on("close", () => {
+            if (ciphertextResponse.Body && typeof ciphertextResponse.Body.destroy === "function") {
+                ciphertextResponse.Body.destroy();
+            }
+            decipher.destroy();
+            skipStream.destroy();
+        });
+    } else {
+        // Full file request
+        const response = await activeS3.send(
+            new GetObjectCommand({
+                Bucket: activeBucket,
+                Key: key,
+            })
+        );
+
+        res.writeHead(200, {
+            "Content-Type": response.ContentType || "application/octet-stream",
+            "Cache-Control": `public, max-age=${cacheMaxAge}`,
+        });
+
+        const decryptStream = createDecryptStream(version);
+        response.Body.pipe(decryptStream).pipe(res);
+
+        res.on("close", () => {
+            if (response.Body && typeof response.Body.destroy === "function") {
+                response.Body.destroy();
+            }
+            decryptStream.destroy();
+        });
+    }
+}
+
 router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
     if (req.query.page) {
         try {
@@ -1053,145 +1213,7 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
     }
 
     try {
-        const rangeHeader = req.headers.range;
-
-        if (rangeHeader) {
-            let cached = await getRedisCachedMediaMetadata(key);
-            if (!cached) {
-                // Fetch the 16-byte IV from R2
-                const ivResponse = await s3.send(
-                    new GetObjectCommand({
-                        Bucket: BUCKET,
-                        Key: key,
-                        Range: "bytes=0-15",
-                    })
-                );
-
-                const ivChunks = [];
-                for await (const chunk of ivResponse.Body) {
-                    ivChunks.push(chunk);
-                }
-                const iv = Buffer.concat(ivChunks);
-
-                if (iv.length < 16) {
-                    return res.status(500).json({ error: "Failed to retrieve encryption IV" });
-                }
-
-                // Retrieve object metadata/size to calculate ranges
-                const headInfo = await s3.send(
-                    new HeadObjectCommand({
-                        Bucket: BUCKET,
-                        Key: key,
-                    })
-                );
-
-                cached = {
-                    iv,
-                    totalEncryptedSize: headInfo.ContentLength,
-                    contentType: headInfo.ContentType || "application/octet-stream"
-                };
-                await setRedisCachedMediaMetadata(key, cached);
-            }
-
-            const { iv, totalEncryptedSize, contentType } = cached;
-            const totalPlaintextSize = totalEncryptedSize - 16;
-
-            const parts = rangeHeader.replace(/bytes=/, "").split("-");
-            const start = parseInt(parts[0], 10);
-
-            // Limit chunk size to maximum 2MB for fast loading and low memory usage
-            const maxChunkSize = 1024 * 1024 * 2; // 2MB
-            let end = parts[1] ? parseInt(parts[1], 10) : start + maxChunkSize - 1;
-            if (end - start + 1 > maxChunkSize) {
-                end = start + maxChunkSize - 1;
-            }
-            if (end >= totalPlaintextSize) {
-                end = totalPlaintextSize - 1;
-            }
-
-            if (start >= totalPlaintextSize || end >= totalPlaintextSize) {
-                res.status(416).set("Content-Range", `bytes */${totalPlaintextSize}`).end();
-                return;
-            }
-
-            const chunkSize = (end - start) + 1;
-
-            // Check Redis for cached decrypted chunk
-            const chunkCacheKey = `cache:media_chunk:${key}:${start}:${end}`;
-            const cachedChunk = await redis.getBuffer(chunkCacheKey).catch(() => null);
-            if (cachedChunk) {
-                res.writeHead(206, {
-                    "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
-                    "Accept-Ranges": "bytes",
-                    "Content-Length": cachedChunk.length,
-                    "Content-Type": contentType,
-                    "Cache-Control": "public, max-age=31536000",
-                });
-                res.end(cachedChunk);
-                return;
-            }
-
-            const blockNumber = Math.floor(start / 16);
-            const byteOffset = start % 16;
-
-            const startByteR2 = 16 + blockNumber * 16;
-            const endByteR2 = 16 + end;
-
-            const ciphertextResponse = await activeS3.send(
-                new GetObjectCommand({
-                    Bucket: activeBucket,
-                    Key: key,
-                    Range: `bytes=${startByteR2}-${endByteR2}`,
-                })
-            );
-
-            const ciphertextChunks = [];
-            for await (const chunk of ciphertextResponse.Body) {
-                ciphertextChunks.push(chunk);
-            }
-            const ciphertext = Buffer.concat(ciphertextChunks);
-
-            const adjustedIv = incrementIV(iv, blockNumber);
-            const cipherKey = getKey(version);
-            const decipher = crypto.createDecipheriv("aes-256-ctr", cipherKey, adjustedIv);
-            const decryptedWholeBlock = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-            const finalDecryptedSlice = decryptedWholeBlock.subarray(byteOffset, byteOffset + chunkSize);
-
-            // Store decrypted segment chunk in Redis with a 5-minute (300s) TTL
-            await redis.setex(chunkCacheKey, 300, finalDecryptedSlice).catch(() => {});
-
-            res.writeHead(206, {
-                "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
-                "Accept-Ranges": "bytes",
-                "Content-Length": finalDecryptedSlice.length,
-                "Content-Type": contentType,
-                "Cache-Control": "public, max-age=31536000",
-            });
-            res.end(finalDecryptedSlice);
-        } else {
-            // Full file request
-            const response = await activeS3.send(
-                new GetObjectCommand({
-                    Bucket: activeBucket,
-                    Key: key,
-                })
-            );
-
-            res.writeHead(200, {
-                "Content-Type": response.ContentType || "application/octet-stream",
-                "Cache-Control": "public, max-age=31536000",
-            });
-
-            const decryptStream = createDecryptStream(version);
-            response.Body.pipe(decryptStream).pipe(res);
-
-            res.on("close", () => {
-                if (response.Body && typeof response.Body.destroy === "function") {
-                    response.Body.destroy();
-                }
-                decryptStream.destroy();
-            });
-        }
+        await serveEncryptedMedia(req, res, key, version, activeS3, activeBucket);
     } catch (err) {
         if (err.name === "NoSuchKey" || err.Code === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
             console.warn(`[api/media] Key not found in S3 storage: ${key}`);
@@ -1208,7 +1230,7 @@ router.get("/api/media", protect, mediaRateLimiter, async (req, res) => {
 function serveDefaultPlaceholder(res, type) {
     res.writeHead(200, {
         "Content-Type": "image/svg+xml",
-        "Cache-Control": "public, max-age=31536000",
+        "Cache-Control": "public, max-age=3600",
     });
     if (type === "video") {
         res.end(`
@@ -1269,7 +1291,7 @@ router.get(["/api/thumbnail/:id", "/thumbnail/:id"], protect, async (req, res) =
 
         res.writeHead(200, {
             "Content-Type": response.ContentType || "image/jpeg",
-            "Cache-Control": "public, max-age=31536000",
+            "Cache-Control": "public, max-age=3600",
         });
 
         const decryptStream = createDecryptStream(version);
@@ -1435,141 +1457,7 @@ router.get(["/api/media/stream/:token", "/media/stream/:token"], async (req, res
         // Extend token expiration by another 60 seconds
         await redis.expire(`stream:${token}`, 60);
 
-        const rangeHeader = req.headers.range;
-
-        if (rangeHeader) {
-            let cached = await getRedisCachedMediaMetadata(key);
-            if (!cached) {
-                const ivResponse = await s3.send(
-                    new GetObjectCommand({
-                        Bucket: BUCKET,
-                        Key: key,
-                        Range: "bytes=0-15",
-                    })
-                );
-
-                const ivChunks = [];
-                for await (const chunk of ivResponse.Body) {
-                    ivChunks.push(chunk);
-                }
-                const iv = Buffer.concat(ivChunks);
-
-                if (iv.length < 16) {
-                    return res.status(500).json({ error: "Failed to retrieve encryption IV" });
-                }
-
-                const headInfo = await s3.send(
-                    new HeadObjectCommand({
-                        Bucket: BUCKET,
-                        Key: key,
-                    })
-                );
-
-                cached = {
-                    iv,
-                    totalEncryptedSize: headInfo.ContentLength,
-                    contentType: headInfo.ContentType || "application/octet-stream"
-                };
-                await setRedisCachedMediaMetadata(key, cached);
-            }
-
-            const { iv, totalEncryptedSize, contentType } = cached;
-            const totalPlaintextSize = totalEncryptedSize - 16;
-
-            const parts = rangeHeader.replace(/bytes=/, "").split("-");
-            const start = parseInt(parts[0], 10);
-
-            const maxChunkSize = 1024 * 1024 * 2; // 2MB
-            let end = parts[1] ? parseInt(parts[1], 10) : start + maxChunkSize - 1;
-            if (end - start + 1 > maxChunkSize) {
-                end = start + maxChunkSize - 1;
-            }
-            if (end >= totalPlaintextSize) {
-                end = totalPlaintextSize - 1;
-            }
-
-            if (start >= totalPlaintextSize || end >= totalPlaintextSize) {
-                res.status(416).set("Content-Range", `bytes */${totalPlaintextSize}`).end();
-                return;
-            }
-
-            const chunkSize = (end - start) + 1;
-
-            // Check Redis for cached decrypted chunk
-            const chunkCacheKey = `cache:media_chunk:${key}:${start}:${end}`;
-            const cachedChunk = await redis.getBuffer(chunkCacheKey).catch(() => null);
-            if (cachedChunk) {
-                res.writeHead(206, {
-                    "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
-                    "Accept-Ranges": "bytes",
-                    "Content-Length": cachedChunk.length,
-                    "Content-Type": contentType,
-                    "Cache-Control": "public, max-age=31536000",
-                });
-                res.end(cachedChunk);
-                return;
-            }
-
-            const blockNumber = Math.floor(start / 16);
-            const byteOffset = start % 16;
-
-            const startByteR2 = 16 + blockNumber * 16;
-            const endByteR2 = 16 + end;
-
-            const ciphertextResponse = await s3.send(
-                new GetObjectCommand({
-                    Bucket: BUCKET,
-                    Key: key,
-                    Range: `bytes=${startByteR2}-${endByteR2}`,
-                })
-            );
-
-            const ciphertextChunks = [];
-            for await (const chunk of ciphertextResponse.Body) {
-                ciphertextChunks.push(chunk);
-            }
-            const ciphertext = Buffer.concat(ciphertextChunks);
-
-            const adjustedIv = incrementIV(iv, blockNumber);
-            const cipherKey = getKey(version);
-            const decipher = crypto.createDecipheriv("aes-256-ctr", cipherKey, adjustedIv);
-            const decryptedWholeBlock = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-            const finalDecryptedSlice = decryptedWholeBlock.subarray(byteOffset, byteOffset + chunkSize);
-
-            // Store decrypted segment chunk in Redis with a 5-minute (300s) TTL
-            await redis.setex(chunkCacheKey, 300, finalDecryptedSlice).catch(() => {});
-
-            res.writeHead(206, {
-                "Content-Range": `bytes ${start}-${end}/${totalPlaintextSize}`,
-                "Accept-Ranges": "bytes",
-                "Content-Length": finalDecryptedSlice.length,
-                "Content-Type": contentType,
-                "Cache-Control": "public, max-age=31536000",
-            });
-            res.end(finalDecryptedSlice);
-        } else {
-            const response = await s3.send(
-                new GetObjectCommand({
-                    Bucket: BUCKET,
-                    Key: key,
-                })
-            );
-
-            res.writeHead(200, {
-                "Content-Type": response.ContentType || "application/octet-stream",
-                "Cache-Control": "public, max-age=31536000",
-            });
-
-            const decryptStream = createDecryptStream(version);
-            response.Body.pipe(decryptStream).pipe(res);
-
-            res.on("close", () => {
-                if (response.Body && typeof response.Body.destroy === "function") {
-                    response.Body.destroy();
-                }
-                decryptStream.destroy();
-            });
-        }
+        await serveEncryptedMedia(req, res, key, version, s3, BUCKET);
     } catch (err) {
         if (err.name === "NoSuchKey" || err.Code === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
             return res.status(404).json({ error: "Media not found" });

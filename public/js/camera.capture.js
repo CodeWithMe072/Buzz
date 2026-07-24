@@ -1281,11 +1281,44 @@
                 storyDay.style.display = "block";
             }
             
+            let currentStoryDurationMs = (details.duration && details.duration > 0) ? details.duration * 1000 : 10000;
+
+            const updateStoryDuration = (newDur) => {
+                if (!newDur || isNaN(newDur) || newDur === Infinity || newDur <= 0) return;
+                const newDurMs = newDur * 1000;
+                if (Math.abs(newDurMs - currentStoryDurationMs) > 300) {
+                    console.log(`[Story Viewer] Updating video story duration dynamically from ${currentStoryDurationMs}ms to ${newDurMs}ms`);
+                    currentStoryDurationMs = newDurMs;
+
+                    if (storyDurationTimer) {
+                        clearTimeout(storyDurationTimer);
+                        const progressBar = document.getElementById("story-progress-bar");
+                        if (progressBar) {
+                            const startTime = Date.now();
+                            clearInterval(storyProgressInterval);
+                            storyProgressInterval = setInterval(() => {
+                                const elapsed = Date.now() - startTime;
+                                const percentage = Math.min(100, (elapsed / currentStoryDurationMs) * 100);
+                                progressBar.style.width = `${percentage}%`;
+                            }, 30);
+                        }
+                        storyDurationTimer = setTimeout(() => {
+                            closeDisappearingStoryViewer();
+                        }, currentStoryDurationMs);
+                    }
+                }
+            };
+
+            video.ondurationchange = () => {
+                updateStoryDuration(video.duration);
+            };
+
             // Wait for video meta to initialize timing
             video.onloadedmetadata = () => {
-                const duration = video.duration || 10;
+                const duration = (video.duration && !isNaN(video.duration) && video.duration !== Infinity && video.duration > 0) ? video.duration : (details.duration || 10);
+                currentStoryDurationMs = duration * 1000;
                 video.play();
-                startStoryProgressTracking(duration * 1000);
+                startStoryProgressTracking(currentStoryDurationMs);
                 
                 // Track chat video data usage
                 if (details.fileSize && window.DataUsageTracker && window.DataUsageTracker.trackFeature) {
@@ -1339,6 +1372,7 @@
         if (video) {
             // Nullify handlers first to prevent browser from firing error event when source is cleared
             video.onloadedmetadata = null;
+            video.ondurationchange = null;
             video.onended = null;
             video.onerror = null;
 

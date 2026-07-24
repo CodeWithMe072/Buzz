@@ -13,7 +13,7 @@ function showChatScreen() {
   if (signupScreen) signupScreen.classList.remove("active");
   const chatScreen = document.getElementById("chat-screen");
   if (chatScreen) chatScreen.classList.add("active");
-  
+
   const currentUsername = document.getElementById("current-username");
   if (currentUsername) currentUsername.textContent = State.currentUser.username;
   const currentUserAvatar = document.getElementById("current-user-avatar");
@@ -50,10 +50,10 @@ function getLastMessageHTML(conv) {
   if (conv.messagesLoaded === false) {
     return `<span style="color: var(--text-secondary); opacity: 0.6;">Loading...</span>`;
   }
-  
+
   const convMessages = State.messages[conv.id] || [];
   const lastMsg = convMessages[0];
-  
+
   if (!lastMsg) {
     return `<span></span>`;
   }
@@ -230,7 +230,7 @@ function openChat(chatId) {
   const avatarEl = document.getElementById("chat-avatar");
   avatarEl.innerHTML = `<span>${conv.avatar}</span>`;
   avatarEl.className = "avatar"; // Reset classes
-  
+
   // Clone element to reset previous click listeners
   const newAvatarEl = avatarEl.cloneNode(true);
   newAvatarEl.style.cursor = "default";
@@ -267,7 +267,7 @@ function openChat(chatId) {
           newAvatarEl.classList.add("has-moments");
         }
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   // Query and check live voice permission
@@ -313,7 +313,7 @@ function openChat(chatId) {
           chatOptionLiveVoice.classList.remove("voice-allowed");
         }
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   document.getElementById("chat-username").textContent = conv.username;
@@ -339,10 +339,10 @@ function openChat(chatId) {
   const chatOptionEl = document.getElementById("chatOption");
   chatOptionEl.classList.remove("active");
   document.getElementById("chat-info-btn").onclick = (e) => {
-    
+
     e.stopPropagation();
     chatOptionEl.classList.toggle("active");
-    
+
   };
 
   // Delete chat
@@ -469,8 +469,8 @@ function getSingleEmoji(text) {
     const segments = [...segmenter.segment(trimmed)];
     if (segments.length === 1) {
       const segment = segments[0].segment;
-      const isEmoji = /\p{Emoji_Presentation}/u.test(segment) || 
-                      ( /[\u2600-\u27BF]/u.test(segment) && !/[0-9#*]/u.test(segment) );
+      const isEmoji = /\p{Emoji_Presentation}/u.test(segment) ||
+        (/[\u2600-\u27BF]/u.test(segment) && !/[0-9#*]/u.test(segment));
       if (isEmoji) return segment;
     }
   } catch (e) {
@@ -509,11 +509,11 @@ function getEmojiAnimationClass(emoji) {
 // =============================================================================
 function renderStatusReplyBubble(statusData, footerHTML, message) {
   const isFailed = message.uploadStatus === "failed";
-  
+
   const accentBorderHtml = `
     <div style="width: 4px; background: linear-gradient(135deg, #f58529, #dd2a7b); border-radius: 4px 0 0 4px; flex-shrink: 0;"></div>
   `;
-  
+
   let typeIcon = "";
   if (statusData.statusType === "video") {
     typeIcon = `<svg viewBox="0 0 24 24" width="14" height="14" fill="rgba(255,255,255,0.7)" style="margin-right: 4px; flex-shrink: 0; display: inline-block; vertical-align: middle;"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>`;
@@ -690,9 +690,9 @@ function createMessageElement(message) {
     const replyMsg = State.messages[State.activeChat].find(
       m => m.id === message.replyTo || m.tempId === message.replyTo
     );
-    
-    
-    
+
+
+
     const replyText = replyMsg
       ? (replyMsg.type === "text"
         ? (replyMsg.content.length > 50
@@ -712,13 +712,13 @@ function createMessageElement(message) {
     const isVideo = message.type === "video";
     const filterClass = message.cameraFilter ? `filter-${message.cameraFilter}` : "";
     const videoClass = filterClass;
-    
+
     const coverUrl = message.cover || message.thumb;
     const mediaPreviewHTML = isVideo
       ? (coverUrl
-          ? `<img src="${coverUrl}" class="${videoClass}" style="width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;" />`
-          : `<div class="disappearing-video-placeholder ${videoClass}" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #1a1a1a; border-radius: inherit;"><svg viewBox="0 0 24 24" width="48" height="48" fill="rgba(255,255,255,0.4)"><path d="M8 5v14l11-7z"/></svg></div>`
-        )
+        ? `<img src="${coverUrl}" class="${videoClass}" style="width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;" />`
+        : `<div class="disappearing-video-placeholder ${videoClass}" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #1a1a1a; border-radius: inherit;"><svg viewBox="0 0 24 24" width="48" height="48" fill="rgba(255,255,255,0.4)"><path d="M8 5v14l11-7z"/></svg></div>`
+      )
       : `<img src="${message.content}" alt="Disappearing Photo" style="width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit;" />`;
 
     // Calculate overlay html for special Snapchat/Instagram filters
@@ -799,7 +799,7 @@ function createMessageElement(message) {
       </div>
       ${footerHTML}
     `;
-    
+
     const previewContainer = bubbleEl.querySelector(".disappearing-preview-content");
     if (previewContainer) {
       previewContainer.addEventListener("click", () => {
@@ -837,7 +837,7 @@ function createMessageElement(message) {
 
     if (isStatusReply && statusReplyData) {
       bubbleEl.innerHTML = renderStatusReplyBubble(statusReplyData, footerHTML, message);
-      
+
       // Bind click handler for status reply preview box
       setTimeout(() => {
         const previewBox = bubbleEl.querySelector(".status-reply-preview-box");
@@ -1004,8 +1004,8 @@ function createMessageElement(message) {
         ${isUploading
         ? `<div class="media-overlay"><div class="loader"></div></div>`
         : (isFailed
-           ? `<div class="media-overlay"><button type="button" class="media-retry">↻</button></div>`
-           : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName || "document"}','${message.id || message._id || message.tempId}')">Save</button>` : ""}</div>`)}
+          ? `<div class="media-overlay"><button type="button" class="media-retry">↻</button></div>`
+          : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName || "document"}','${message.id || message._id || message.tempId}')">Save</button>` : ""}</div>`)}
       </div>
       ${footerHTML}`;
   }
@@ -1317,9 +1317,9 @@ function showMessageOptions(message, msgEl, event) {
     popup.remove();
 
     const msgId = message.id || message._id || message.tempId;
-    const isMe = message.sender === "me" || 
-                 message.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
-                 message.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
+    const isMe = message.sender === "me" ||
+      message.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
+      message.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
 
     // Create and append the confirmation modal dynamically
     const modal = document.createElement("div");
@@ -1457,12 +1457,12 @@ function showMessageOptions(message, msgEl, event) {
 function openForwardModal(message) {
   // Resolve messages to forward
   let messagesToForward = [];
-  
+
   let inputMessages = message;
   if (message instanceof Set) {
     inputMessages = Array.from(message);
   }
-  
+
   const resolveSingleMessage = (m) => {
     if (!m) return null;
     if (typeof m === "string") {
@@ -1511,8 +1511,8 @@ function openForwardModal(message) {
   // Build conversations/chats list
   const chatListHTML = State.conversations.map(c => {
     const isLetterAvatar = c.avatar && c.avatar.length === 1;
-    const avatarHTML = isLetterAvatar 
-      ? `<div class="fwd-avatar">${c.avatar}</div>` 
+    const avatarHTML = isLetterAvatar
+      ? `<div class="fwd-avatar">${c.avatar}</div>`
       : `<img class="fwd-avatar" src="${c.avatar}" alt="${c.username}">`;
 
     return `
@@ -1815,8 +1815,8 @@ function openMomentsCarousel(friendId, clickedSnapUrl = null) {
   lightbox.className = "moments-lightbox";
 
   const slidesHtml = moments.map((m) => {
-    const timeStr = typeof formatRelativeTime === "function" 
-      ? formatRelativeTime(new Date(m.createdAt)) 
+    const timeStr = typeof formatRelativeTime === "function"
+      ? formatRelativeTime(new Date(m.createdAt))
       : new Date(m.createdAt).toLocaleTimeString();
     return `
       <div class="moments-slide">
@@ -1920,10 +1920,10 @@ function openMomentsCarousel(friendId, clickedSnapUrl = null) {
 document.addEventListener("click", (e) => {
   const chatOption = document.getElementById("chatOption");
   const chatInfoBtn = document.getElementById("chat-info-btn");
-  
+
   if (chatOption && chatOption.classList.contains("active")) {
     if (!chatOption.contains(e.target) && chatInfoBtn && !chatInfoBtn.contains(e.target)) {
-      
+
       chatOption.classList.remove("active");
     }
   }
@@ -1938,10 +1938,10 @@ document.addEventListener("click", (e) => {
       return;
     }
 
-    
+
     // If inside a disappearing story preview, handle separately (it has its own listener on disappearing-preview-content)
     if (media.closest(".disappearing-preview-content")) {
-      
+
       return;
     }
 
@@ -1968,21 +1968,21 @@ document.addEventListener("click", (e) => {
     }
 
     const msgEl = media.closest(".message");
-    
+
     if (!msgEl) return;
     if ((!viewer || viewer.chatId !== State.activeChat) && State.activeChat) {
-      
+
       viewer = new MediaViewer(State.activeChat);
     }
     if (viewer) {
-      
+
       viewer.open(msgEl.dataset.messageId, null, true);
     }
   }
 });
 
 // Reusable Global Emoji Reaction Picker Modal Helper
-window.openEmojiPickerModal = function(messageId, chatId) {
+window.openEmojiPickerModal = function (messageId, chatId) {
   const modal = document.getElementById("emoji-modal");
   const grid = document.getElementById("emoji-grid");
   const closeBtn = document.getElementById("close-emoji");
@@ -2041,7 +2041,7 @@ window.openEmojiPickerModal = function(messageId, chatId) {
   modal.addEventListener("click", outsideClickHandler);
 };
 
-window.animateAndDeleteMessageFromDom = function(messageId) {
+window.animateAndDeleteMessageFromDom = function (messageId) {
   const msgEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
   if (msgEl) {
     // Add deletion class to trigger transition/animation
@@ -2064,27 +2064,27 @@ window.animateAndDeleteMessageFromDom = function(messageId) {
 };
 
 // Clear current message selection
-window.clearMessageSelection = function() {
+window.clearMessageSelection = function () {
   document.querySelectorAll(".message.selected").forEach(el => el.classList.remove("selected"));
   document.querySelectorAll(".mobile-emoji-bar").forEach(el => el.remove());
-  
+
   const selectionHeader = document.getElementById("mobile-selection-header");
   const chatHeader = document.querySelector(".chat-header:not(.mobile-selection-header)");
   if (selectionHeader) selectionHeader.style.display = "none";
   if (chatHeader) chatHeader.style.display = "flex";
-  
+
   State.selectedMessageIds = null;
   State.selectedMessage = null;
   State.selectedMessageEl = null;
 };
 
 // Toggle single message selection in multi-selection mode
-window.toggleMessageSelection = function(message, msgEl) {
+window.toggleMessageSelection = function (message, msgEl) {
   const msgId = message.id || message._id || message.tempId;
   if (!State.selectedMessageIds) {
     State.selectedMessageIds = new Set();
   }
-  
+
   if (State.selectedMessageIds.has(msgId)) {
     State.selectedMessageIds.delete(msgId);
     msgEl.classList.remove("selected");
@@ -2123,12 +2123,12 @@ window.toggleMessageSelection = function(message, msgEl) {
 };
 
 // Helper to render mobile reactions bar
-window.showMobileEmojiBarForMessage = function(message, msgEl) {
+window.showMobileEmojiBarForMessage = function (message, msgEl) {
   document.querySelectorAll(".mobile-emoji-bar").forEach(el => el.remove());
-  
+
   const bubble = msgEl.querySelector(".message-bubble");
   if (!bubble) return;
-  
+
   const rect = bubble.getBoundingClientRect();
   const emojiBar = document.createElement("div");
   emojiBar.className = "whatsapp-emoji-bar mobile-emoji-bar";
@@ -2145,16 +2145,16 @@ window.showMobileEmojiBarForMessage = function(message, msgEl) {
 
   const barWidth = 300;
   const viewportWidth = window.innerWidth;
-  
+
   emojiBar.style.position = "fixed";
   let left = rect.left + rect.width / 2 - barWidth / 2;
   left = Math.max(10, Math.min(viewportWidth - barWidth - 10, left));
-  
+
   let top = rect.top - 55;
   if (top < 70) {
     top = rect.bottom + 8;
   }
-  
+
   emojiBar.style.top = `${top}px`;
   emojiBar.style.left = `${left}px`;
   emojiBar.style.zIndex = "1100";
@@ -2208,14 +2208,14 @@ window.showMobileEmojiBarForMessage = function(message, msgEl) {
 };
 
 // Select a message (mobile/tablet view) and initialize selection mode
-window.selectMessageMobile = function(message, msgEl) {
+window.selectMessageMobile = function (message, msgEl) {
   const msgId = message.id || message._id || message.tempId;
   clearMessageSelection();
 
   State.selectedMessageIds = new Set([msgId]);
   State.selectedMessage = message;
   State.selectedMessageEl = msgEl;
-  
+
   msgEl.classList.add("selected");
 
   // Show selection header
@@ -2239,7 +2239,7 @@ window.selectMessageMobile = function(message, msgEl) {
         const clickedInsideMessage = e.target.closest(".message");
         const clickedInsideSelectionHeader = e.target.closest(".mobile-selection-header");
         const clickedInsideDropdown = e.target.closest(".selection-dropdown-menu");
-        
+
         if (!clickedInsideEmojiBar && !clickedInsideMessage && !clickedInsideSelectionHeader && !clickedInsideDropdown) {
           clearMessageSelection();
           document.removeEventListener("click", handleOutsideClick, true);
@@ -2283,7 +2283,7 @@ document.addEventListener("click", (e) => {
   // Copy / More button
   if (e.target.closest("#more-selection-btn")) {
     e.stopPropagation();
-    
+
     // Remove any existing dropdown first
     document.querySelectorAll(".selection-dropdown-menu").forEach(el => el.remove());
 
@@ -2318,62 +2318,62 @@ document.addEventListener("click", (e) => {
 
     // Bind options
     dropdown.querySelector(".copy-opt").onclick = (evt) => {
-        evt.stopPropagation();
-        dropdown.remove();
-        if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
-          const texts = [];
-          for (const msgId of State.selectedMessageIds) {
-            const chatId = State.messageIndex[msgId];
-            if (chatId) {
-              const msg = (State.messages[chatId] || []).find(m => (m.id || m._id || m.tempId) === msgId);
-              if (msg && msg.content) {
-                texts.push(msg.content);
-              }
+      evt.stopPropagation();
+      dropdown.remove();
+      if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+        const texts = [];
+        for (const msgId of State.selectedMessageIds) {
+          const chatId = State.messageIndex[msgId];
+          if (chatId) {
+            const msg = (State.messages[chatId] || []).find(m => (m.id || m._id || m.tempId) === msgId);
+            if (msg && msg.content) {
+              texts.push(msg.content);
             }
           }
-          if (texts.length > 0) {
-            navigator.clipboard.writeText(texts.join("\n")).then(() => {
-              showToast("Copied messages", "success");
-            }).catch(err => {
-              console.error("Failed to copy text: ", err);
-            });
-          } else {
-            showToast("No text to copy", "info");
-          }
         }
-        clearMessageSelection();
+        if (texts.length > 0) {
+          navigator.clipboard.writeText(texts.join("\n")).then(() => {
+            showToast("Copied messages", "success");
+          }).catch(err => {
+            console.error("Failed to copy text: ", err);
+          });
+        } else {
+          showToast("No text to copy", "info");
+        }
+      }
+      clearMessageSelection();
     };
 
     dropdown.querySelector(".forward-opt").onclick = (evt) => {
-        evt.stopPropagation();
-        dropdown.remove();
-        const fwdBtn = document.getElementById("forward-selection-btn");
-        if (fwdBtn) fwdBtn.click();
+      evt.stopPropagation();
+      dropdown.remove();
+      const fwdBtn = document.getElementById("forward-selection-btn");
+      if (fwdBtn) fwdBtn.click();
     };
 
     dropdown.querySelector(".star-opt").onclick = (evt) => {
-        evt.stopPropagation();
-        dropdown.remove();
-        const starBtn = document.getElementById("star-selection-btn");
-        if (starBtn) starBtn.click();
+      evt.stopPropagation();
+      dropdown.remove();
+      const starBtn = document.getElementById("star-selection-btn");
+      if (starBtn) starBtn.click();
     };
 
     dropdown.querySelector(".delete-opt").onclick = (evt) => {
-        evt.stopPropagation();
-        dropdown.remove();
-        const delBtn = document.getElementById("delete-selection-btn");
-        if (delBtn) delBtn.click();
+      evt.stopPropagation();
+      dropdown.remove();
+      const delBtn = document.getElementById("delete-selection-btn");
+      if (delBtn) delBtn.click();
     };
 
     // Close on click outside
     setTimeout(() => {
-        const closeDropdown = (ev) => {
-            if (!dropdown.contains(ev.target)) {
-                dropdown.remove();
-                document.removeEventListener("click", closeDropdown, true);
-            }
-        };
-        document.addEventListener("click", closeDropdown, true);
+      const closeDropdown = (ev) => {
+        if (!dropdown.contains(ev.target)) {
+          dropdown.remove();
+          document.removeEventListener("click", closeDropdown, true);
+        }
+      };
+      document.addEventListener("click", closeDropdown, true);
     }, 0);
 
     return;
@@ -2384,15 +2384,15 @@ document.addEventListener("click", (e) => {
     if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
       let allMine = true;
       const msgIds = Array.from(State.selectedMessageIds);
-      
+
       for (const msgId of msgIds) {
         const chatId = State.messageIndex[msgId];
         if (chatId) {
           const msg = (State.messages[chatId] || []).find(m => (m.id || m._id || m.tempId) === msgId);
           if (msg) {
-            const isMe = msg.sender === "me" || 
-                         msg.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
-                         msg.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
+            const isMe = msg.sender === "me" ||
+              msg.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
+              msg.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
             if (!isMe) {
               allMine = false;
             }
@@ -2463,7 +2463,7 @@ function initAppNavigation() {
   const statusBtn = document.getElementById("nav-status-btn");
   const avatarBtn = document.getElementById("nav-avatar-btn");
   const avatarText = document.getElementById("nav-avatar-text");
-  
+
   const chatSidebar = document.getElementById("chat-list-sidebar");
   const statusSidebar = document.getElementById("status-sidebar");
 
@@ -2486,7 +2486,7 @@ function initAppNavigation() {
   chatBtn.onclick = async () => {
     chatBtn.classList.add("active");
     statusBtn.classList.remove("active");
-    
+
     if (chatSidebar) {
       chatSidebar.style.display = "flex";
       chatSidebar.classList.remove("hidden");
@@ -2588,18 +2588,18 @@ function initAppNavigation() {
 
 function getStatusRingHtml(moments, size = 48, isOwn = false) {
   if (!moments || moments.length === 0) return "";
-  
+
   const N = moments.length;
   const strokeWidth = 2.5;
   const radius = (size / 2) - (strokeWidth / 2) - 1.5;
   const cx = size / 2;
   const cy = size / 2;
   const circumference = 2 * Math.PI * radius;
-  
+
   const gap = N > 1 ? 3 : 0;
   const totalGapSpace = N * gap;
   const segmentLength = (circumference - totalGapSpace) / N;
-  
+
   let svgContent = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="position: absolute; top: 0; left: 0; transform: rotate(-90deg); pointer-events: none; z-index: 1;">`;
   svgContent += `
     <defs>
@@ -2609,12 +2609,12 @@ function getStatusRingHtml(moments, size = 48, isOwn = false) {
       </linearGradient>
     </defs>
   `;
-  
+
   moments.forEach((m, i) => {
     const hasViewed = !isOwn && m.viewers && m.viewers.some(v => v.userId === State.currentUser._id);
     const strokeColor = hasViewed ? "#848487" : "url(#unseen-status-grad)";
     const offset = i * (segmentLength + gap);
-    
+
     svgContent += `
       <circle
         cx="${cx}"
@@ -2628,7 +2628,7 @@ function getStatusRingHtml(moments, size = 48, isOwn = false) {
       />
     `;
   });
-  
+
   svgContent += `</svg>`;
   return svgContent;
 }
@@ -2652,18 +2652,22 @@ async function fetchAndCacheStatusData() {
 
 // ── Render sidebar from in-memory State — NO API calls inside ─────────────────
 function renderStatusSidebar() {
+  if (typeof window.initStatusModule === "function") {
+    window.initStatusModule();
+  }
   const listEl = document.getElementById("status-sidebar-list");
   if (!listEl) return;
 
   // 1. Render own status card from State
   const myStatusCard = document.getElementById("my-status-item");
+  console.log("----------------", myStatusCard)
   if (myStatusCard && State.currentUser) {
     const avatarContainer = myStatusCard.querySelector(".avatar-container");
     const myStatusSubtext = myStatusCard.querySelector(".my-status-subtext");
     const myActiveStatuses = State.myActiveStatuses || [];
 
     try {
-      
+
       if (myActiveStatuses.length > 0) {
         const latestStatus = myActiveStatuses[myActiveStatuses.length - 1];
         const timeStr = typeof formatRelativeTime === "function"
@@ -2744,6 +2748,14 @@ function renderStatusSidebar() {
           }
         };
       }
+
+      if (typeof window.isStatusUploading === "function") {
+        window.isStatusUploading().then(isUploading => {
+          if (isUploading && typeof window.showStatusSendingState === "function") {
+            window.showStatusSendingState();
+          }
+        });
+      }
     } catch (e) {
       console.error("[renderStatusSidebar] own status card error:", e);
       if (myStatusCard) {
@@ -2806,19 +2818,21 @@ function renderStatusSidebar() {
       }
     });
 
+    window.allStatusGroups = [...recentGroups, ...viewedGroups];
+
     function createStatusItemElement(group, isUnseen) {
       const friend = group.user;
       const momentsList = group.moments || [];
-      
+
       const itemEl = document.createElement("div");
       itemEl.className = "status-item";
-      
+
       const letter = friend.username.charAt(0).toUpperCase();
       const latestMoment = momentsList[momentsList.length - 1];
-      const relativeTime = typeof formatRelativeTime === "function" 
-        ? formatRelativeTime(new Date(latestMoment.createdAt)) 
+      const relativeTime = typeof formatRelativeTime === "function"
+        ? formatRelativeTime(new Date(latestMoment.createdAt))
         : new Date(latestMoment.createdAt).toLocaleTimeString();
-      
+
       // Determine status thumbnail preview
       let thumbnailInner = "";
       if (latestMoment.type === "image" || latestMoment.type === "photo") {
@@ -2828,7 +2842,7 @@ function renderStatusSidebar() {
       } else if (latestMoment.type === "text") {
         thumbnailInner = `<div style="width: 100%; height: 100%; border-radius: 50%; background: ${latestMoment.backgroundColor || '#3f51b5'}; display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; padding: 4px; box-sizing: border-box; text-align: center; overflow: hidden; font-weight: 700; line-height: 1.1;">${latestMoment.textContent}</div>`;
       }
-        
+
       itemEl.innerHTML = `
         <div class="status-avatar-ring" style="width: 48px; height: 48px; position: relative;">
           ${getStatusRingHtml(momentsList, 48, false)}
@@ -2891,8 +2905,8 @@ function updateStatusUnseenIndicator() {
   const currentId = State.currentUser?._id
     ? State.currentUser._id.toString()
     : State.currentUser?.id
-    ? State.currentUser.id.toString()
-    : "";
+      ? State.currentUser.id.toString()
+      : "";
 
   const hasUnseen = feed.some((group) =>
     (group.moments || []).some((m) =>
@@ -2900,8 +2914,8 @@ function updateStatusUnseenIndicator() {
         const vId = v?.userId?._id
           ? v.userId._id.toString()
           : v?.userId
-          ? v.userId.toString()
-          : "";
+            ? v.userId.toString()
+            : "";
         return vId && currentId && vId === currentId;
       })
     )
@@ -2915,6 +2929,7 @@ document.addEventListener("click", (e) => {
   const triggerBtn = e.target.closest("#status-composer-trigger-btn");
   if (triggerBtn) {
     e.preventDefault();
+    console.log("Status composer button clicked", e.target);
     if (typeof window.openStatusComposer === "function") {
       window.openStatusComposer();
     } else {
@@ -2933,7 +2948,7 @@ document.addEventListener("click", (e) => {
   }
 });
 
-window.fetchAndCacheStatusData    = fetchAndCacheStatusData;
-window.renderStatusSidebar         = renderStatusSidebar;
+window.fetchAndCacheStatusData = fetchAndCacheStatusData;
+window.renderStatusSidebar = renderStatusSidebar;
 window.updateStatusUnseenIndicator = updateStatusUnseenIndicator;
 

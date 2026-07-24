@@ -39,7 +39,9 @@ export async function init() {
         initMuteState();
     }
 
-    
+    if (typeof window.initStatusModule === "function") {
+        window.initStatusModule();
+    }
 }
 
 // 4. Define background loading of other components and scripts (to be called after connections load)

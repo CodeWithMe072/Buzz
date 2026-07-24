@@ -13,10 +13,13 @@
     // Playback state variables
     let isPaused = false;
     let pausedAtMs = 0;
+    let isBuffering = false;
     let currentSegmentDurationMs = 5000;
     let segmentStartTime = 0;
     let isMuted = false;
     const statusViewerAudio = new Audio();
+    let preloadCleanup = null;
+    let prefetchVideoEl = null;
 
     // ── WhatsApp-style "Sending..." state on My Status card ─────────────────
     function showStatusSendingState() {
@@ -37,21 +40,21 @@
             avatarContainer.innerHTML = `
                 <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="position:absolute;top:0;left:0;z-index:3;">
                     <circle
-                        cx="${size/2}" cy="${size/2}" r="${r}"
+                        cx="${size / 2}" cy="${size / 2}" r="${r}"
                         fill="none"
                         stroke="rgba(255,255,255,0.15)"
                         stroke-width="${stroke}"
                     />
                     <circle
-                        cx="${size/2}" cy="${size/2}" r="${r}"
+                        cx="${size / 2}" cy="${size / 2}" r="${r}"
                         fill="none"
                         stroke="#25d366"
                         stroke-width="${stroke}"
                         stroke-dasharray="${circ}"
                         stroke-dashoffset="${circ * 0.35}"
                         stroke-linecap="round"
-                        transform="rotate(-90 ${size/2} ${size/2})"
-                        style="animation: status-sending-spin 1.2s linear infinite; transform-origin: ${size/2}px ${size/2}px;"
+                        transform="rotate(-90 ${size / 2} ${size / 2})"
+                        style="animation: status-sending-spin 1.2s linear infinite; transform-origin: ${size / 2}px ${size / 2}px;"
                     />
                 </svg>
                 <div style="position:absolute;top:4px;left:4px;width:40px;height:40px;border-radius:50%;background:var(--elevated-bg);border:2px solid var(--border-color);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:rgba(255,255,255,0.5);">
@@ -71,13 +74,20 @@
 
     // Initialize Status Composer
     function openStatusComposer() {
+        console.log("openStatusComposer CALLED! Modal element:", document.getElementById("status-composer-modal"));
         const modal = document.getElementById("status-composer-modal");
         const selectorView = document.getElementById("status-composer-selector-view");
         const textView = document.getElementById("status-composer-text-view");
         const textarea = document.getElementById("status-composer-textarea");
         const canvas = document.getElementById("status-composer-canvas");
 
-        if (!modal || !selectorView || !textView) return;
+        if (!modal || !selectorView || !textView) {
+            console.error("Missing elements for openStatusComposer:", { modal, selectorView, textView });
+            if (typeof showToast === "function") {
+                showToast("Error opening status composer: elements missing", "error");
+            }
+            return;
+        }
 
         // Reset composer state
         modal.style.display = "flex";
@@ -85,6 +95,11 @@
         textView.style.display = "none";
         if (textarea) textarea.value = "";
         
+        console.log("Modal display style set to flex. Current z-index:", modal.style.zIndex || window.getComputedStyle(modal).zIndex);
+        if (typeof showToast === "function") {
+            showToast("Opening status composer...", "info");
+        }
+
         // Reset color dots active outline
         currentBgColor = "#3f51b5";
         if (canvas) canvas.style.background = currentBgColor;
@@ -104,6 +119,10 @@
 
     // Bind all status composer clicks and canvas color dots
     function initStatusModule() {
+        const composerTriggerBtn = document.getElementById("status-composer-trigger-btn");
+        if (!composerTriggerBtn) {
+            return;
+        }
         if (window.statusModuleInitialized) return;
         window.statusModuleInitialized = true;
 
@@ -119,11 +138,13 @@
         const canvas = document.getElementById("status-composer-canvas");
         const galleryInput = document.getElementById("status-gallery-input");
         const optionsBtn = document.getElementById("status-options-btn");
-        const composerTriggerBtn = document.getElementById("status-composer-trigger-btn");
-
+        console.log("model", modal)
         if (closeBtn) closeBtn.onclick = closeStatusComposer;
         if (modal) {
+
             modal.onclick = (e) => {
+                console.log("------------------------button click...")
+
                 if (e.target === modal) closeStatusComposer();
             };
         }
@@ -131,6 +152,15 @@
         // Options trigger
         if (composerTriggerBtn) {
             composerTriggerBtn.onclick = openStatusComposer;
+        }
+
+        const myStatusItem = document.getElementById("my-status-item");
+        if (myStatusItem) {
+            console.log("-------------myStatusItem", myStatusItem)
+            myStatusItem.onclick = () => {
+                console.log("gjhsgfsjkfgsjkdgk")
+                openStatusComposer();
+            };
         }
 
         if (optionsBtn) {
@@ -151,7 +181,7 @@
 
             videoPreview.onclick = () => {
                 if (videoPreview.paused) {
-                    videoPreview.play().catch(() => {});
+                    videoPreview.play().catch(() => { });
                 } else {
                     videoPreview.pause();
                 }
@@ -165,7 +195,7 @@
                         const startT = window.pendingStatusSongRef.startTime || 0;
                         trimmerAudio.currentTime = startT;
                         trimmerAudio.muted = window.isPreviewMuted || false;
-                        trimmerAudio.play().catch(() => {});
+                        trimmerAudio.play().catch(() => { });
                     }
                 } else {
                     videoPreview.muted = window.isPreviewMuted || false;
@@ -191,7 +221,7 @@
                         trimmerAudio.currentTime = startT;
                         trimmerAudio.muted = window.isPreviewMuted || false;
                         if (trimmerAudio.paused) {
-                            trimmerAudio.play().catch(() => {});
+                            trimmerAudio.play().catch(() => { });
                         }
                     }
                 }
@@ -208,7 +238,7 @@
                 if (!file) return;
 
                 closeStatusComposer();
-                
+
                 if (typeof window.saveStatusPendingUpload === "function") {
                     const tempId = await window.saveStatusPendingUpload(file);
                     window.currentStatusUploadId = tempId;
@@ -221,7 +251,7 @@
 
                 if (typeof window.openCameraCaptureOverlay === "function") {
                     await window.openCameraCaptureOverlay();
-                    
+
                     // Immediately switch camera capture to preview state
                     const videoStream = document.getElementById("camera-capture-video");
                     const imgPreview = document.getElementById("camera-capture-img-preview");
@@ -274,7 +304,7 @@
                         if (videoPreview) {
                             videoPreview.src = url;
                             videoPreview.style.display = "block";
-                            videoPreview.play().catch(() => {});
+                            videoPreview.play().catch(() => { });
                         }
                     } else {
                         if (videoPreview) videoPreview.style.display = "none";
@@ -284,7 +314,7 @@
                         }
                     }
                 }
-                
+
                 // Clear input
                 gInput.value = "";
             };
@@ -445,6 +475,55 @@
                 if (!isPaused) togglePlayPause();
             };
         }
+
+        // Status video buffering & loader events
+        const videoEl = document.getElementById("status-viewer-video");
+        const loaderEl = document.getElementById("status-viewer-loader");
+        if (videoEl) {
+            const handleBuffering = () => {
+                if (preloadCleanup !== null) return;
+                if (activeGroup && activeIndex >= 0) {
+                    const moment = activeGroup.moments[activeIndex];
+                    const resolvedType = moment.type || moment.mediaType || (moment.url ? (moment.url.match(/\.(mp4|webm|ogg|mov)/i) ? "video" : "image") : "text");
+                    if (resolvedType === "video") {
+                        if (loaderEl) loaderEl.style.display = "flex";
+                        if (!isPaused && !isBuffering && segmentStartTime > 0) {
+                            isBuffering = true;
+                            clearStatusTimers();
+                            pausedAtMs = Date.now() - segmentStartTime;
+                        }
+                    }
+                }
+            };
+
+            const handlePlaying = () => {
+                if (preloadCleanup !== null) return;
+                if (loaderEl) loaderEl.style.display = "none";
+                if (isBuffering) {
+                    isBuffering = false;
+                    if (!isPaused && activeGroup && activeIndex >= 0) {
+                        segmentStartTime = Date.now() - pausedAtMs;
+                        const remaining = currentSegmentDurationMs - pausedAtMs;
+                        const fill = document.getElementById(`status-fill-${activeIndex}`);
+
+                        statusProgressInterval = setInterval(() => {
+                            const elapsed = Date.now() - segmentStartTime;
+                            const percentage = Math.min(100, (elapsed / currentSegmentDurationMs) * 100);
+                            if (fill) fill.style.width = `${percentage}%`;
+                        }, 50);
+
+                        statusTimer = setTimeout(() => {
+                            advanceSegment(1);
+                        }, remaining);
+                    }
+                }
+            };
+
+            videoEl.onwaiting = handleBuffering;
+            videoEl.onloadstart = handleBuffering;
+            videoEl.onplaying = handlePlaying;
+            videoEl.oncanplay = handlePlaying;
+        }
     }
 
     // ── Status Playback Viewer Overlay ──
@@ -453,7 +532,7 @@
         activeGroup = group;
         activeIndex = 0;
         isPaused = false;
-        
+
         const overlay = document.getElementById("status-viewer-overlay");
         if (!overlay) {
             console.error("[DEBUG] #status-viewer-overlay not found in DOM!");
@@ -461,27 +540,45 @@
         }
 
         overlay.style.display = "flex";
-        
+
         // Build segments
         buildProgressSegments();
-        
+
         // Play first status
         await playCurrentStatusSegment();
     }
 
     function closeStatusViewer() {
+        if (preloadCleanup) {
+            preloadCleanup();
+            preloadCleanup = null;
+        }
+        if (prefetchVideoEl) {
+            prefetchVideoEl.src = "";
+            prefetchVideoEl.load();
+            prefetchVideoEl = null;
+        }
         const overlay = document.getElementById("status-viewer-overlay");
         const video = document.getElementById("status-viewer-video");
         const img = document.getElementById("status-viewer-img");
+        const loader = document.getElementById("status-viewer-loader");
 
         clearStatusTimers();
-        
+        isBuffering = false;
+
+        const remainingTimeEl = document.getElementById("status-viewer-remaining-time");
+        if (remainingTimeEl) remainingTimeEl.textContent = "";
+
         // Reset status viewer audio stream
         statusViewerAudio.pause();
         statusViewerAudio.src = "";
 
         if (overlay) overlay.style.display = "none";
+        if (loader) loader.style.display = "none";
         if (video) {
+            video.onloadedmetadata = null;
+            video.ondurationchange = null;
+            video.onerror = null;
             video.pause();
             video.src = "";
             video.removeAttribute("src");
@@ -518,7 +615,7 @@
             clearInterval(statusProgressInterval);
             statusProgressInterval = null;
         }
-        
+
         // Pause status viewer audio on transition/pause
         statusViewerAudio.pause();
     }
@@ -529,7 +626,7 @@
 
         container.innerHTML = "";
         const count = activeGroup.moments.length;
-        
+
         for (let i = 0; i < count; i++) {
             const track = document.createElement("div");
             track.className = "status-progress-track";
@@ -539,10 +636,15 @@
     }
 
     async function playCurrentStatusSegment() {
-
+        if (preloadCleanup) {
+            preloadCleanup();
+            preloadCleanup = null;
+        }
         clearStatusTimers();
         isPaused = false;
         pausedAtMs = 0;
+        isBuffering = false;
+        segmentStartTime = 0;
 
         // Reset play/pause buttons
         const playIcon = document.getElementById("status-play-icon");
@@ -569,12 +671,37 @@
         const deleteBtn = document.getElementById("status-viewer-delete-btn");
         const replyContainer = document.getElementById("status-viewer-reply-container");
 
+        // Reset media element states and per-segment handlers to prevent stale callback pollution
+        if (video) {
+            video.onloadedmetadata = null;
+            video.ondurationchange = null;
+            video.onerror = null;
+            video.pause();
+            if (resolvedType !== "video") {
+                video.src = "";
+                video.removeAttribute("src");
+                video.style.display = "none";
+            }
+        }
+        if (img && resolvedType !== "image" && resolvedType !== "photo") {
+            img.src = "";
+            img.style.display = "none";
+        }
+        if (textCanvas && resolvedType !== "text") {
+            textCanvas.style.display = "none";
+            textCanvas.textContent = "";
+        }
+        if (captionBar) {
+            captionBar.style.display = "none";
+            captionBar.textContent = "";
+        }
+
         // Set header details
         if (avatar) avatar.src = activeGroup.user.avatar || "/images/default-avatar.png";
         if (username) username.textContent = activeGroup.user.username;
         if (timeEl) {
-            const relativeTime = typeof formatRelativeTime === "function" 
-                ? formatRelativeTime(new Date(moment.createdAt)) 
+            const relativeTime = typeof formatRelativeTime === "function"
+                ? formatRelativeTime(new Date(moment.createdAt))
                 : new Date(moment.createdAt).toLocaleTimeString();
             timeEl.textContent = `Today at ${relativeTime}`;
         }
@@ -583,7 +710,7 @@
         const songAttributionEl = document.getElementById("status-viewer-song-attribution");
         const songNameEl = document.getElementById("status-viewer-song-name");
         const songMarqueeWrapper = document.getElementById("status-viewer-song-marquee-wrapper");
-        
+
         if (songAttributionEl && songNameEl && songMarqueeWrapper) {
             // Close song sheet on segment transitions
             const songSheet = document.getElementById("status-viewer-song-sheet");
@@ -594,33 +721,33 @@
 
             if (moment.songRef && moment.songRef.title) {
                 songAttributionEl.style.display = "flex";
-                const displayText = moment.songRef.channelTitle 
+                const displayText = moment.songRef.channelTitle
                     ? `${moment.songRef.title} — ${moment.songRef.channelTitle}`
                     : moment.songRef.title;
                 songNameEl.textContent = displayText;
-                
+
                 // Reset wrapper state
                 songMarqueeWrapper.style.animation = "none";
                 songMarqueeWrapper.style.transform = "translateX(0)";
                 const duplicate = songMarqueeWrapper.querySelector(".marquee-duplicate");
                 if (duplicate) duplicate.remove();
-                
+
                 // Measure after layout stabilizes
                 setTimeout(() => {
                     const marqueeContainer = document.getElementById("status-viewer-song-marquee-container");
                     if (!marqueeContainer) return;
                     const containerWidth = marqueeContainer.clientWidth;
                     const textWidth = songNameEl.offsetWidth;
-                    
+
                     if (textWidth > containerWidth) {
                         // Create clone for seamless loop
                         const clone = songNameEl.cloneNode(true);
                         clone.classList.add("marquee-duplicate");
                         clone.style.paddingLeft = "30px";
                         songMarqueeWrapper.appendChild(clone);
-                        
+
                         const scrollDistance = textWidth + 30;
-                        
+
                         // Inject or update dynamic keyframe style
                         let styleTag = document.getElementById("status-marquee-dynamic-style");
                         if (!styleTag) {
@@ -628,7 +755,7 @@
                             styleTag.id = "status-marquee-dynamic-style";
                             document.head.appendChild(styleTag);
                         }
-                        
+
                         // Speed: 35px per second
                         const duration = scrollDistance / 35;
                         styleTag.innerHTML = `
@@ -637,11 +764,11 @@
                                 100% { transform: translate3d(-${scrollDistance}px, 0, 0); }
                             }
                         `;
-                        
+
                         songMarqueeWrapper.style.animation = `statusMarqueeAnim ${duration}s linear infinite`;
                     }
                 }, 50);
-                
+
                 // Set up click/tap on the row to open the bottom sheet
                 songAttributionEl.onclick = (e) => {
                     e.stopPropagation();
@@ -670,7 +797,7 @@
             deleteBtn.onclick = (e) => {
                 e.stopPropagation();
                 if (!optionsMenu) return;
-                
+
                 const isOpen = optionsMenu.style.display === "block";
                 if (isOpen) {
                     optionsMenu.style.display = "none";
@@ -734,10 +861,10 @@
                     showToast("Downloading status...", "info");
                     const response = await fetch(moment.url);
                     if (!response.ok) throw new Error("Download failed");
-                    
+
                     const blob = await response.blob();
                     const url = URL.createObjectURL(blob);
-                    
+
                     const a = document.createElement("a");
                     a.href = url;
                     a.download = moment.fileName || `status_${moment._id}.${resolvedType === "video" ? "mp4" : "jpg"}`;
@@ -745,7 +872,7 @@
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(a.href);
-                    
+
                     showToast("Status downloaded!", "success");
                 } catch (err) {
                     console.error("[Status Download]", err);
@@ -792,7 +919,7 @@
                     const data = await res.json();
                     if (res && res.ok) {
                         showToast(data.message || "Status extended", "success");
-                        
+
                         // Update local State.myActiveStatuses
                         if (State.myActiveStatuses) {
                             const myStatus = State.myActiveStatuses.find(m => m._id === moment._id);
@@ -800,7 +927,7 @@
                                 myStatus.expiresAt = data.newExpiresAt;
                             }
                         }
-                        
+
                         // Update current moment object so the viewer knows
                         moment.expiresAt = data.newExpiresAt;
 
@@ -822,17 +949,17 @@
             confirmBtn.onclick = async (e) => {
                 e.stopPropagation();
                 if (confirmModal) confirmModal.style.display = "none";
-                
+
                 clearStatusTimers();
                 try {
                     const res = await apiRequest("DELETE", `/api/status/${moment._id}`);
                     if (res && res.ok) {
                         showToast("Status deleted", "success");
-                        
+
                         if (typeof window.renderStatusSidebar === "function") {
                             window.renderStatusSidebar();
                         }
-                        
+
                         activeGroup.moments.splice(activeIndex, 1);
                         if (activeGroup.moments.length === 0) {
                             closeStatusViewer();
@@ -947,7 +1074,7 @@
                                     const avatarHtml = (v.avatar && v.avatar.length > 2)
                                         ? `<img src="${v.avatar}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover;" />`
                                         : `<div style="width: 38px; height: 38px; border-radius: 50%; background: #dd2a7b; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">${v.avatar || "S"}</div>`;
-                                    
+
                                     const rawDate = new Date(v.viewedAt);
                                     const hours = rawDate.getHours();
                                     const minutes = rawDate.getMinutes().toString().padStart(2, '0');
@@ -999,6 +1126,10 @@
         }
 
         // Reset visibility
+        if (preloadCleanup) {
+            preloadCleanup();
+            preloadCleanup = null;
+        }
         if (img) img.style.display = "none";
         if (video) {
             video.style.display = "none";
@@ -1006,6 +1137,9 @@
             video.src = "";
             video.removeAttribute("src");
         }
+        const loader = document.getElementById("status-viewer-loader");
+        if (loader) loader.style.display = "none";
+        isBuffering = false;
         if (textCanvas) textCanvas.style.display = "none";
         if (captionBar) {
             captionBar.style.display = "none";
@@ -1049,18 +1183,69 @@
             if (video) {
                 video.src = moment.url;
                 video.style.display = "block";
-                
+
                 // Mute if the source URL specifies it is muted, or global mute is on
                 const hasMutedUrl = moment.url && (moment.url.includes("muted=1") || moment.url.includes("muted=true"));
                 video.muted = hasMutedUrl || isMuted;
-                
-                video.onloadedmetadata = () => {
-                    const duration = video.duration || 5;
-                    video.play();
-                    currentSegmentDurationMs = duration * 1000;
-                    startSegmentProgressAnimation(currentSegmentDurationMs);
+
+                const dbDuration = (moment.duration && moment.duration > 0) ? moment.duration : 15;
+                let activeDuration = (video.duration && !isNaN(video.duration) && video.duration !== Infinity && video.duration > 0) ? video.duration : dbDuration;
+                currentSegmentDurationMs = activeDuration * 1000;
+
+                const updateVideoDuration = (newDur) => {
+                    if (!newDur || isNaN(newDur) || newDur === Infinity || newDur <= 0) return;
+                    const newDurMs = newDur * 1000;
+                    if (Math.abs(newDurMs - currentSegmentDurationMs) > 300) {
+                        console.log(`[Status Viewer] Updating video segment duration dynamically from ${currentSegmentDurationMs}ms to ${newDurMs}ms`);
+                        currentSegmentDurationMs = newDurMs;
+                        
+                        const remainingTimeEl = document.getElementById("status-viewer-remaining-time");
+                        if (remainingTimeEl && segmentStartTime > 0 && !isPaused && !isBuffering) {
+                            const elapsed = Date.now() - segmentStartTime;
+                            const remainingSec = Math.max(0, Math.ceil((currentSegmentDurationMs - elapsed) / 1000));
+                            remainingTimeEl.textContent = `${remainingSec}s`;
+                        }
+
+                        if (statusTimer && segmentStartTime > 0 && !isPaused && !isBuffering) {
+                            clearTimeout(statusTimer);
+                            const elapsed = Date.now() - segmentStartTime;
+                            const remaining = Math.max(0, currentSegmentDurationMs - elapsed);
+                            statusTimer = setTimeout(() => {
+                                advanceSegment(1);
+                            }, remaining);
+                        }
+                    }
                 };
-                
+
+                video.ondurationchange = () => {
+                    updateVideoDuration(video.duration);
+                };
+
+                video.onloadedmetadata = () => {
+                    const duration = (video.duration && !isNaN(video.duration) && video.duration !== Infinity && video.duration > 0) ? video.duration : dbDuration;
+                    currentSegmentDurationMs = duration * 1000;
+
+                    const remainingTimeEl = document.getElementById("status-viewer-remaining-time");
+                    if (remainingTimeEl) {
+                        remainingTimeEl.textContent = `${Math.ceil(duration)}s`;
+                    }
+
+                    const loaderEl = document.getElementById("status-viewer-loader");
+                    if (loaderEl) loaderEl.style.display = "flex";
+
+                    video.pause();
+
+                    preloadCleanup = preloadVideoBuffer(video, 11, () => {
+                        preloadCleanup = null;
+                        video.play().then(() => {
+                            startSegmentProgressAnimation(currentSegmentDurationMs);
+                        }).catch(err => {
+                            console.warn("Video play failed:", err);
+                            startSegmentProgressAnimation(currentSegmentDurationMs);
+                        });
+                    });
+                };
+
                 video.onerror = () => {
                     showToast("Failed to load status video", "error");
                     advanceSegment(1);
@@ -1079,7 +1264,7 @@
             currentSegmentDurationMs = 5000;
             startSegmentProgressAnimation(currentSegmentDurationMs);
         }
-        
+
         // Reset status viewer audio on segment transition
         statusViewerAudio.pause();
         statusViewerAudio.src = "";
@@ -1101,10 +1286,10 @@
             if (moment.songRef.audioUrl && moment.type !== "video" && moment.mediaType !== "video") {
                 statusViewerAudio.src = moment.songRef.audioUrl;
                 statusViewerAudio.muted = isMuted; // Use current mute state
-                
+
                 const startOffset = moment.songRef.startTime || 0;
                 statusViewerAudio.currentTime = startOffset;
-                
+
                 statusViewerAudio.play().catch(err => {
                     console.warn("[Status Viewer] Audio playback failed:", err.message);
                 });
@@ -1126,16 +1311,29 @@
         if (!fill) return;
 
         segmentStartTime = Date.now();
-        
+
+        const remainingTimeEl = document.getElementById("status-viewer-remaining-time");
+        if (remainingTimeEl) {
+            remainingTimeEl.textContent = `${Math.ceil(durationMs / 1000)}s`;
+        }
+
         statusProgressInterval = setInterval(() => {
             const elapsed = Date.now() - segmentStartTime;
             const percentage = Math.min(100, (elapsed / durationMs) * 100);
             fill.style.width = `${percentage}%`;
+
+            const remainingSec = Math.max(0, Math.ceil((durationMs - elapsed) / 1000));
+            if (remainingTimeEl) {
+                remainingTimeEl.textContent = `${remainingSec}s`;
+            }
         }, 50);
 
         statusTimer = setTimeout(() => {
             advanceSegment(1);
         }, durationMs);
+
+        // Prefetch next segment in background
+        prefetchNextSegment();
     }
 
     function togglePlayPause() {
@@ -1157,16 +1355,26 @@
                 video.play();
             }
             if (statusViewerAudio.src) {
-                statusViewerAudio.play().catch(() => {});
+                statusViewerAudio.play().catch(() => { });
             }
 
             segmentStartTime = Date.now() - pausedAtMs;
             const remaining = currentSegmentDurationMs - pausedAtMs;
 
+            const remainingTimeEl = document.getElementById("status-viewer-remaining-time");
+            if (remainingTimeEl) {
+                remainingTimeEl.textContent = `${Math.ceil(remaining / 1000)}s`;
+            }
+
             statusProgressInterval = setInterval(() => {
                 const elapsed = Date.now() - segmentStartTime;
                 const percentage = Math.min(100, (elapsed / currentSegmentDurationMs) * 100);
                 if (fill) fill.style.width = `${percentage}%`;
+
+                const remainingSec = Math.max(0, Math.ceil((currentSegmentDurationMs - elapsed) / 1000));
+                if (remainingTimeEl) {
+                    remainingTimeEl.textContent = `${remainingSec}s`;
+                }
             }, 50);
 
             statusTimer = setTimeout(() => {
@@ -1271,7 +1479,7 @@
     function handleSendStatusReply() {
         const replyInput = document.getElementById("status-viewer-reply-input");
         const replyText = replyInput ? replyInput.value.trim() : "";
-        
+
         if (!replyText || !activeGroup) return;
 
         const recipientId = activeGroup.user.id;
@@ -1284,7 +1492,7 @@
         } else if (moment.type === "video") {
             statusPreviewText = moment.caption || "Video";
         }
-        
+
         const replyData = {
             isStatusReply: true,
             statusId: moment._id,
@@ -1314,7 +1522,7 @@
             };
             State.messages[recipientId].unshift(message);
             State.messageIndex[tempId] = recipientId;
-            
+
             // If we are currently chatting with this user, append to DOM!
             if (State.activeChat === recipientId) {
                 const messagesContainer = document.getElementById("messages");
@@ -1374,19 +1582,47 @@
 
     function advanceSegment(direction) {
         clearStatusTimers();
-        
+
         const nextIdx = activeIndex + direction;
-        
+
         if (nextIdx < 0) {
             activeIndex = 0; // lock at beginning
             playCurrentStatusSegment();
         } else if (nextIdx >= activeGroup.moments.length) {
-            // End of statuses for this user
-            closeStatusViewer();
-            
-            // Reload connection sidebar status rings
-            if (typeof window.renderStatusSidebar === "function") {
-                window.renderStatusSidebar();
+            // End of statuses for this user. Check if there is a next user's status group in allStatusGroups
+            let transitionedToNextGroup = false;
+            if (window.allStatusGroups && window.allStatusGroups.length > 0) {
+                const currentGroupIdx = window.allStatusGroups.findIndex(g => {
+                    const currentId = activeGroup.user._id ? activeGroup.user._id.toString() : (activeGroup.user.id ? activeGroup.user.id.toString() : "");
+                    const gId = g.user._id ? g.user._id.toString() : (g.user.id ? g.user.id.toString() : "");
+                    return currentId === gId;
+                });
+                if (currentGroupIdx !== -1 && currentGroupIdx + 1 < window.allStatusGroups.length) {
+                    const nextGroup = window.allStatusGroups[currentGroupIdx + 1];
+                    console.log(`[Auto-Advance] Transitioning to next user status group: ${nextGroup.user.username}`);
+                    
+                    // Reset viewer fields
+                    activeGroup = nextGroup;
+                    activeIndex = 0;
+                    isPaused = false;
+                    pausedAtMs = 0;
+
+                    // Rebuild segments
+                    buildProgressSegments();
+                    
+                    // Play first segment of next user
+                    playCurrentStatusSegment();
+                    transitionedToNextGroup = true;
+                }
+            }
+
+            if (!transitionedToNextGroup) {
+                closeStatusViewer();
+
+                // Reload connection sidebar status rings
+                if (typeof window.renderStatusSidebar === "function") {
+                    window.renderStatusSidebar();
+                }
             }
         } else {
             activeIndex = nextIdx;
@@ -1491,14 +1727,37 @@
                 item.status = "status_creating";
                 await window.IndexedDBQueueService.saveMessage(item);
 
-                if (item.isMuted) {
-                    finalUrl += (finalUrl.includes('?') ? '&' : '?') + 'muted=1';
+                let duration = null;
+                if (file.type.startsWith("video")) {
+                    try {
+                        duration = await new Promise((resolve) => {
+                            const tempVideo = document.createElement("video");
+                            tempVideo.preload = "metadata";
+                            const url = URL.createObjectURL(file);
+                            tempVideo.src = url;
+                            tempVideo.onloadedmetadata = () => {
+                                URL.revokeObjectURL(url);
+                                resolve(tempVideo.duration || null);
+                            };
+                            tempVideo.onerror = () => {
+                                URL.revokeObjectURL(url);
+                                resolve(null);
+                            };
+                            setTimeout(() => {
+                                URL.revokeObjectURL(url);
+                                resolve(null);
+                            }, 5000);
+                        });
+                    } catch (e) {
+                        console.error("[StatusUploadQueue] Failed to read video duration:", e);
+                    }
                 }
 
                 const statusRes = await apiRequest("POST", "/api/status", {
                     mediaUrl: finalUrl,
                     mediaType: file.type.startsWith("video") ? "video" : "image",
                     caption: caption,
+                    duration: duration,
                     songRef: item.songRef || null
                 });
 
@@ -1520,7 +1779,7 @@
                 item.status = "status_failed_upload";
                 item.retries = (item.retries || 0) + 1;
                 await window.IndexedDBQueueService.saveMessage(item);
-                
+
                 if (item.retries < 5) {
                     const delay = Math.pow(2, item.retries) * 1000;
 
@@ -1534,7 +1793,7 @@
         }
     };
 
-    window.saveStatusPendingUpload = async function(file) {
+    window.saveStatusPendingUpload = async function (file) {
         const tempId = "status_" + Date.now();
         const uploadRecord = {
             localId: tempId,
@@ -1550,7 +1809,7 @@
         return tempId;
     };
 
-    window.updateStatusPendingCaptionAndUpload = async function(tempId, caption, wasMuted, songRef) {
+    window.updateStatusPendingCaptionAndUpload = async function (tempId, caption, wasMuted, songRef) {
         if (!tempId) return;
         if (window.IndexedDBQueueService) {
             const record = await window.IndexedDBQueueService.getMessage(tempId);
@@ -1569,10 +1828,10 @@
         const captionInput = document.getElementById("camera-preview-caption-input");
         const caption = captionInput ? captionInput.value.trim() : "";
         const wasMuted = window.isPreviewMuted || false;
-        
+
         // Capture the songRef BEFORE we close the overlay (which nulls it)
         const songRef = window.pendingStatusSongRef || null;
-        
+
         let tempId = window.currentStatusUploadId;
         if (!tempId) {
             const extension = (typeToUpload || "").includes("video") ? "mp4" : "jpg";
@@ -1771,12 +2030,12 @@
             if (caption) caption.style.display = "block";
             if (controls) controls.style.display = "flex";
             if (closeBtn) closeBtn.style.display = "flex";
-            
+
             // Show song button
             if (songBtn) {
                 songBtn.style.display = "flex";
             }
-            
+
             // Show mute button only if it's a video preview
             const videoPreview = document.getElementById("camera-capture-video-preview");
             const isVideo = videoPreview && videoPreview.style.display !== "none" && videoPreview.src;
@@ -1793,7 +2052,7 @@
                 const startT = window.pendingStatusSongRef.startTime || 0;
                 trimmerAudio.currentTime = startT;
                 trimmerAudio.muted = window.isPreviewMuted || false;
-                trimmerAudio.play().catch(() => {});
+                trimmerAudio.play().catch(() => { });
             }
         }
 
@@ -1811,7 +2070,7 @@
             if (videoPreview && window.capturedFileType === "video" && !isNaN(videoPreview.duration) && videoPreview.duration > 60) {
                 showToast("Videos must be 60 seconds or shorter to add music", "error");
                 if (videoPreview.style.display !== "none" && videoPreview.src) {
-                    videoPreview.play().catch(() => {});
+                    videoPreview.play().catch(() => { });
                 }
                 return;
             }
@@ -1841,7 +2100,7 @@
                 // Resume video preview when closing picker
                 const videoPreview = document.getElementById("camera-capture-video-preview");
                 if (videoPreview && videoPreview.style.display !== "none" && videoPreview.src) {
-                    videoPreview.play().catch(() => {});
+                    videoPreview.play().catch(() => { });
                 }
             };
         }
@@ -1903,7 +2162,7 @@
 
         function loadNextPage() {
             if (isFetchingPage) return;
-            
+
             if (currentSearchSource === "db") {
                 if (!dbHasMore) return;
                 dbPage++;
@@ -1982,7 +2241,7 @@
 
         function playTrimmer() {
             if (!trimmerAudio || !trimmerAudio.src) return;
-            
+
             // If play cursor is out of bounds of the selected 15s window, seek back to start
             const elapsed = trimmerAudio.currentTime - trimmerStartTime;
             if (elapsed < 0 || elapsed >= trimmerDuration) {
@@ -2026,13 +2285,13 @@
             const container = document.getElementById("trimmer-waveform-bars");
             if (!container) return;
             container.innerHTML = "";
-            
+
             const paddingX = 150;
             const totalWidth = paddingX + (totalAudioDuration * PX_PER_SECOND) + paddingX;
             container.style.position = "relative";
             container.style.width = totalWidth + "px";
             container.style.height = "100%";
-            
+
             const numBars = Math.floor(totalAudioDuration);
             for (let i = 0; i <= numBars; i++) {
                 const bar = document.createElement("div");
@@ -2055,16 +2314,16 @@
 
             trimmerAudio.pause();
             trimmerAudio.src = song.audioUrl || "";
-            
+
             trimmerSongTitle.textContent = song.title;
             if (trimmerSongChannel) {
                 trimmerSongChannel.textContent = song.channelTitle;
             }
-            
+
             if (trimmerCoverImg) {
                 trimmerCoverImg.src = song.thumbnailUrl || "";
             }
-            
+
             isPlaying = false;
             updatePlayBtnState(false);
             trimmerProgressFill.style.width = "0%";
@@ -2091,7 +2350,7 @@
             }
 
             trimmerTimer.textContent = formatTime(trimmerDuration);
-            
+
             trimmerStartTime = window.pendingStatusSongRef?.startTime || 0;
             const initialPaddingX = 150;
             trimmerHighlightWindow.style.left = (initialPaddingX + (trimmerStartTime * PX_PER_SECOND)) + "px";
@@ -2130,7 +2389,7 @@
                 const initialStart = window.pendingStatusSongRef?.startTime || 0;
                 const maxStart = Math.max(0, totalAudioDuration - trimmerDuration);
                 trimmerStartTime = Math.min(initialStart, maxStart);
-                
+
                 const paddingX = 150;
                 trimmerHighlightWindow.style.left = (paddingX + (trimmerStartTime * PX_PER_SECOND)) + "px";
 
@@ -2161,7 +2420,7 @@
                     dragStartLeft = parseFloat(trimmerHighlightWindow.style.left) || 0;
                     trimmerHighlightWindow.style.cursor = "grabbing";
                     trimmerAudio.pause();
-                    
+
                     if (autoScrollInterval) {
                         clearInterval(autoScrollInterval);
                         autoScrollInterval = null;
@@ -2170,12 +2429,12 @@
 
                 const moveDrag = (clientX) => {
                     if (!isDragging) return;
-                    
+
                     const dx = clientX - dragStartX;
                     let newLeft = dragStartLeft + dx;
                     const windowWidth = 150;
                     const paddingX = 150;
-                    
+
                     const maxLeft = Math.max(0, (totalAudioDuration * PX_PER_SECOND) - windowWidth);
                     newLeft = Math.max(paddingX, Math.min(paddingX + maxLeft, newLeft));
 
@@ -2260,16 +2519,16 @@
                         clearInterval(autoScrollInterval);
                         autoScrollInterval = null;
                     }
-                    
+
                     // Restart video preview and trimmer audio in sync
                     const videoPreview = document.getElementById("camera-capture-video-preview");
                     if (videoPreview) {
                         videoPreview.currentTime = 0;
-                        videoPreview.play().catch(() => {});
+                        videoPreview.play().catch(() => { });
                     }
                     trimmerAudio.currentTime = trimmerStartTime;
-                    trimmerAudio.play().catch(() => {});
-                    
+                    trimmerAudio.play().catch(() => { });
+
                     isPlaying = true;
                     updatePlayBtnState(true);
                 };
@@ -2324,16 +2583,16 @@
                     if (isDown) {
                         isDown = false;
                         scrollWrapper.style.cursor = "grab";
-                        
+
                         // Restart video preview and trimmer audio in sync
                         const videoPreview = document.getElementById("camera-capture-video-preview");
                         if (videoPreview) {
                             videoPreview.currentTime = 0;
-                            videoPreview.play().catch(() => {});
+                            videoPreview.play().catch(() => { });
                         }
                         trimmerAudio.currentTime = trimmerStartTime;
-                        trimmerAudio.play().catch(() => {});
-                        
+                        trimmerAudio.play().catch(() => { });
+
                         isPlaying = true;
                         updatePlayBtnState(true);
                     }
@@ -2343,16 +2602,16 @@
                     if (isDown) {
                         isDown = false;
                         scrollWrapper.style.cursor = "grab";
-                        
+
                         // Restart video preview and trimmer audio in sync
                         const videoPreview = document.getElementById("camera-capture-video-preview");
                         if (videoPreview) {
                             videoPreview.currentTime = 0;
-                            videoPreview.play().catch(() => {});
+                            videoPreview.play().catch(() => { });
                         }
                         trimmerAudio.currentTime = trimmerStartTime;
-                        trimmerAudio.play().catch(() => {});
-                        
+                        trimmerAudio.play().catch(() => { });
+
                         isPlaying = true;
                         updatePlayBtnState(true);
                     }
@@ -2381,11 +2640,11 @@
                 } else {
                     const row1Pct = (curr / totalAudioDuration) * 100;
                     trimmerProgressFill.style.width = row1Pct + "%";
-                    
+
                     const playheadPct = (elapsed / trimmerDuration) * 100;
                     const playhead = document.getElementById("trimmer-playhead-line");
                     if (playhead) playhead.style.left = playheadPct + "%";
-                    
+
                     trimmerTimer.textContent = formatTime(Math.max(0, trimmerDuration - elapsed));
                 }
             };
@@ -2397,7 +2656,7 @@
             dbHasMore = true;
             youtubeNextPageToken = "";
             isFetchingPage = false;
-            
+
             if (songList) songList.innerHTML = "";
             await fetchYouTubeSongsPage(search, 1, "");
         }
@@ -2434,12 +2693,12 @@
                 }
 
                 const res = await apiRequest("GET", url);
-                
+
                 if (pageLoader) pageLoader.style.display = "none";
 
                 if (res && res.ok && res.data && res.data.status && Array.isArray(res.data.data)) {
                     const fetchedSongs = res.data.data;
-                    
+
                     if (currentSearchSource === "db") {
                         dbHasMore = res.data.hasMore === true;
                     } else {
@@ -2484,7 +2743,7 @@
             songs.forEach(song => {
                 const item = document.createElement("div");
                 item.style.cssText = "display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.06);border-radius:12px;padding:8px 12px;cursor:pointer;transition:background 0.2s;border:1.5px solid transparent;";
-                
+
                 const isSelected = window.pendingStatusSongRef && window.pendingStatusSongRef.videoId === song.videoId;
                 if (isSelected) {
                     item.style.background = "rgba(255,0,0,0.15)";
@@ -2504,7 +2763,7 @@
 
                 const isYoutube = song.source === "youtube";
                 const badgeHtml = isYoutube ? `<span style="font-size:9px;background:rgba(255,255,255,0.15);color:#aaa;border-radius:4px;padding:1px 4px;font-weight:bold;width:fit-content;margin-top:2px;">YouTube</span>` : ``;
-                
+
                 let actionHtml = "";
                 if (isYoutube) {
                     if (song.requestStatus === "pending") {
@@ -2536,7 +2795,7 @@
                     if (actionContainer) {
                         actionContainer.innerHTML = `<span style="font-size:11px;color:#aaa;">Requesting...</span>`;
                     }
-                    
+
                     try {
                         const res = await apiRequest("POST", "/api/songs/request", {
                             videoId: song.videoId,
@@ -2598,7 +2857,7 @@
                             startTime: 0
                         };
                         updateSongBadgeVisibility();
-                        
+
                         initAudioTrimmer(song);
                         if (trimmerOverlay) {
                             trimmerOverlay.style.display = "flex";
@@ -2614,6 +2873,114 @@
         }
         window.initAudioTrimmer = initAudioTrimmer;
     }
+
+    function prefetchNextSegment() {
+        if (!activeGroup || activeIndex < 0) return;
+        const nextIdx = activeIndex + 1;
+        if (nextIdx >= activeGroup.moments.length) return;
+
+        const nextMoment = activeGroup.moments[nextIdx];
+        const resolvedType = nextMoment.type || nextMoment.mediaType || (nextMoment.url ? (nextMoment.url.match(/\.(mp4|webm|ogg|mov)/i) ? "video" : "image") : "text");
+
+        console.log(`[Prefetch] Preloading next status segment at index ${nextIdx} (Type: ${resolvedType})...`);
+
+        if (resolvedType === "image" || resolvedType === "photo") {
+            const prefetchImg = new Image();
+            prefetchImg.src = nextMoment.url;
+        } else if (resolvedType === "video") {
+            if (prefetchVideoEl) {
+                prefetchVideoEl.src = "";
+                prefetchVideoEl.load();
+                prefetchVideoEl = null;
+            }
+
+            prefetchVideoEl = document.createElement("video");
+            prefetchVideoEl.preload = "auto";
+            prefetchVideoEl.muted = true;
+            
+            prefetchVideoEl.onloadedmetadata = () => {
+                console.log(`[Prefetch] Next video metadata loaded successfully.`);
+            };
+
+            prefetchVideoEl.src = nextMoment.url;
+            prefetchVideoEl.load();
+        }
+    }
+
+    function preloadVideoBuffer(video, targetBufferSec, onReady) {
+        const loaderEl = document.getElementById("status-viewer-loader");
+        if (loaderEl) loaderEl.style.display = "flex";
+
+        let isReadyCalled = false;
+        
+        const checkBuffer = () => {
+            if (isReadyCalled) return;
+
+            const duration = video.duration || 0;
+            if (!duration) return;
+
+            const target = Math.min(duration * 0.25, targetBufferSec);
+            
+            let bufferedAhead = 0;
+            const currentTime = video.currentTime;
+            
+            for (let i = 0; i < video.buffered.length; i++) {
+                const start = video.buffered.start(i);
+                const end = video.buffered.end(i);
+                if (currentTime >= start && currentTime <= end) {
+                    bufferedAhead = end - currentTime;
+                    break;
+                }
+            }
+
+            if (bufferedAhead >= target || bufferedAhead >= duration - 0.2) {
+                isReadyCalled = true;
+                clearInterval(bufferInterval);
+                video.removeEventListener("progress", checkBuffer);
+                video.removeEventListener("canplaythrough", checkBuffer);
+                if (loaderEl) loaderEl.style.display = "none";
+                onReady();
+            }
+        };
+
+        video.addEventListener("progress", checkBuffer);
+        video.addEventListener("canplaythrough", checkBuffer);
+
+        const bufferInterval = setInterval(checkBuffer, 150);
+
+        // Fallback timeout: if buffering doesn't reach the target within 1.5s, start playback anyway to prevent browser-paused download deadlock
+        const fallbackTimeout = setTimeout(() => {
+            if (isReadyCalled) return;
+            console.warn("[preloadVideoBuffer] Buffering target not reached in 1.5s (fallback). Starting playback...");
+            isReadyCalled = true;
+            clearInterval(bufferInterval);
+            video.removeEventListener("progress", checkBuffer);
+            video.removeEventListener("canplaythrough", checkBuffer);
+            if (loaderEl) loaderEl.style.display = "none";
+            onReady();
+        }, 1500);
+
+        return () => {
+            clearTimeout(fallbackTimeout);
+            clearInterval(bufferInterval);
+            video.removeEventListener("progress", checkBuffer);
+            video.removeEventListener("canplaythrough", checkBuffer);
+        };
+    }
+
+    window.isStatusUploading = async function() {
+        if (!window.IndexedDBQueueService) return false;
+        try {
+            const items = await window.IndexedDBQueueService.getAllStatusUploads();
+            return items.some(item => 
+                item.status !== "status_pending_preview" && 
+                !(item.status === "status_failed_upload" && item.retries >= 5)
+            );
+        } catch (e) {
+            return false;
+        }
+    };
+    window.showStatusSendingState = showStatusSendingState;
 
     window.updateSongBadgeVisibility = updateSongBadgeVisibility;
 
