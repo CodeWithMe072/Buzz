@@ -446,25 +446,43 @@ function initSocket() {
 
   // ── Typing ────────────────────────────────────────────────
   socket.on("typing:start", ({ user }) => {
-    if (user !== State.activeChat) return;
-    const t = document.getElementById("typing-indicator");
-    if (t) t.style.display = "flex";
-    
-    const container = document.getElementById("messages-container");
-    if (container) {
-      const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
-      if (isAtBottom) {
-        container.scrollTop = 99999;
+    if (user === State.activeChat) {
+      const t = document.getElementById("typing-indicator");
+      if (t) t.style.display = "flex";
+      
+      const container = document.getElementById("messages-container");
+      if (container) {
+        const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
+        if (isAtBottom) {
+          container.scrollTop = 99999;
+        }
       }
     }
+    
     clearTimeout(State.typingTimeouts[user]);
-    State.typingTimeouts[user] = setTimeout(() => { if (t) t.style.display = "none"; }, 3000);
+    State.typingTimeouts[user] = setTimeout(() => {
+      if (user === State.activeChat) {
+        const t = document.getElementById("typing-indicator");
+        if (t) t.style.display = "none";
+      }
+      delete State.typingTimeouts[user];
+      safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    }, 3000);
+
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   socket.on("typing:stop", ({ user }) => {
-    if (user !== State.activeChat) return;
-    const t = document.getElementById("typing-indicator");
-    if (t) t.style.display = "none";
+    if (user === State.activeChat) {
+      const t = document.getElementById("typing-indicator");
+      if (t) t.style.display = "none";
+    }
+
+    if (State.typingTimeouts[user]) {
+      clearTimeout(State.typingTimeouts[user]);
+      delete State.typingTimeouts[user];
+    }
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
   });
 
   // ── Reactions ─────────────────────────────────────────────
@@ -526,6 +544,7 @@ function initSocket() {
         unread: 0,
         online: (State.onlineUsers && State.onlineUsers.includes(c.user.id)) || false,
         messagesLoaded: true,
+        draft: c.draft || null,
       }));
       safeRenderChatList();
     }

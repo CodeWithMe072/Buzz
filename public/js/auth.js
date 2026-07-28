@@ -42,6 +42,7 @@ async function bootstrapAfterLogin() {
       unread: 0,
       online: (State.onlineUsers && State.onlineUsers.includes(c.user.id)) || false,
       messagesLoaded: false,
+      draft: c.draft || null,
     }));
   }
 

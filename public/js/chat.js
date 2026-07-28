@@ -195,7 +195,7 @@ function renderChatList(filter = "") {
           <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) : ""}</span>
         </div>
         <div class="chat-item-preview ${conv.unread > 0 ? "unread" : ""} ${conv.messagesLoaded === false ? "loading-preview" : ""}">
-          ${getLastMessageHTML(conv)}
+          ${State.typingTimeouts && State.typingTimeouts[conv.id] ? `<span style="color: #25d366; font-weight: 500;">Typing...</span>` : getLastMessageHTML(conv)}
         </div>
       </div>
       ${conv.unread > 0 ? `<span class="unread-badge">${conv.unread}</span>` : ""}`;
@@ -226,6 +226,15 @@ function openChat(chatId) {
   const messageInput = document.getElementById("message-input");
   messageInput.value = "";
   messageInput.focus();
+
+  if (conv && conv.draft) {
+    messageInput.value = conv.draft;
+    const sendBtn = document.getElementById("send-btn");
+    if (sendBtn) sendBtn.disabled = !conv.draft.trim();
+    if (typeof window.updateInputContainerState === "function") {
+      window.updateInputContainerState();
+    }
+  }
 
   const avatarEl = document.getElementById("chat-avatar");
   avatarEl.innerHTML = `<span>${conv.avatar}</span>`;
@@ -1153,6 +1162,14 @@ function showMessageOptions(message, msgEl, event) {
 
   // Save as and open not show in gif
   const isMediaOrDoc = (message.type === "image" || message.type === "video" || message.type === "document");
+  const isImageOrVideo = (message.type === "image" || message.type === "video");
+  const statusHTML = isImageOrVideo ? `
+    <button class="context-menu-item status-opt">
+      <i class="ti ti-circle-dashed"></i>
+      <span>Add to Status</span>
+    </button>
+  ` : '';
+  
   const mediaDocHTML = isMediaOrDoc ? `
     <div class="context-menu-divider"></div>
     <button class="context-menu-item open-opt">
@@ -1190,18 +1207,7 @@ function showMessageOptions(message, msgEl, event) {
         <i class="ti ti-arrow-forward-up"></i>
         <span>Forward</span>
       </button>
-      <button class="context-menu-item pin-opt">
-        <i class="ti ti-pin"></i>
-        <span>Pin</span>
-      </button>
-      <button class="context-menu-item meta-ai-opt">
-        <i class="ti ti-sparkles" style="color: #3b82f6;"></i>
-        <span>Ask Meta AI</span>
-      </button>
-      <button class="context-menu-item star-opt">
-        <i class="ti ti-star"></i>
-        <span>Star</span>
-      </button>
+      ${statusHTML}
       
       ${mediaDocHTML}
       
@@ -1276,26 +1282,39 @@ function showMessageOptions(message, msgEl, event) {
     openForwardModal(message);
   });
 
-  // Wire pin button
-  popup.querySelector(".pin-opt").addEventListener("click", (e) => {
-    e.stopPropagation();
-    showToast("Message pinned", "success");
-    popup.remove();
-  });
-
-  // Wire Meta AI button
-  popup.querySelector(".meta-ai-opt").addEventListener("click", (e) => {
-    e.stopPropagation();
-    showToast("Meta AI is processing this message...", "info");
-    popup.remove();
-  });
-
-  // Wire star button
-  popup.querySelector(".star-opt").addEventListener("click", (e) => {
-    e.stopPropagation();
-    showToast("Message starred", "success");
-    popup.remove();
-  });
+  // Wire status button if applicable
+  if (isImageOrVideo) {
+    popup.querySelector(".status-opt").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      popup.remove();
+      
+      const mediaUrl = message.content;
+      if (!mediaUrl) {
+        showToast("No media URL found to post to status", "error");
+        return;
+      }
+      
+      showToast("Preparing status update...", "info");
+      
+      try {
+        const response = await fetch(mediaUrl);
+        if (!response.ok) throw new Error("Failed to retrieve media file");
+        const blob = await response.blob();
+        
+        if (typeof window.openStatusPreviewForBlob === "function") {
+          await window.openStatusPreviewForBlob(blob, message.type);
+        } else if (typeof window.handleStatusMediaUpload === "function") {
+          const mimeType = message.type === "video" ? "video/mp4" : "image/jpeg";
+          await window.handleStatusMediaUpload(blob, mimeType);
+        } else {
+          showToast("Status module not loaded. Please try again.", "error");
+        }
+      } catch (err) {
+        console.error("[ContextMenu] Add to Status error:", err);
+        showToast("Failed to prepare status media", "error");
+      }
+    });
+  }
 
   // Wire select button
   popup.querySelector(".select-opt").addEventListener("click", (e) => {
@@ -1766,6 +1785,12 @@ function sendMessage() {
   }
 
   input.value = "";
+  if (State.activeChat) {
+    const conv = State.conversations.find(c => c.id === State.activeChat);
+    if (conv) conv.draft = null;
+    apiRequest("POST", "/api/chat/draft", { partnerId: State.activeChat, draftText: "" })
+      .catch(err => console.error("[sendMessage] Failed to clear server draft:", err));
+  }
   document.getElementById("send-btn").disabled = true;
   State.replyingTo = null;
   document.getElementById("reply-preview").style.display = "none";
@@ -2073,9 +2098,17 @@ window.clearMessageSelection = function () {
   if (selectionHeader) selectionHeader.style.display = "none";
   if (chatHeader) chatHeader.style.display = "flex";
 
+  const statusBtn = document.getElementById("status-selection-btn");
+  if (statusBtn) statusBtn.style.display = "none";
+
   State.selectedMessageIds = null;
   State.selectedMessage = null;
   State.selectedMessageEl = null;
+
+  if (window.activeOutsideClickSelectorHandler) {
+    document.removeEventListener("click", window.activeOutsideClickSelectorHandler, true);
+    window.activeOutsideClickSelectorHandler = null;
+  }
 };
 
 // Toggle single message selection in multi-selection mode
@@ -2099,6 +2132,27 @@ window.toggleMessageSelection = function (message, msgEl) {
     countEl.textContent = count;
   }
 
+  // Update status-selection-btn visibility based on selection content
+  const statusBtn = document.getElementById("status-selection-btn");
+  if (statusBtn) {
+    if (count === 1) {
+      const selectedId = Array.from(State.selectedMessageIds)[0];
+      const selectedChatId = State.messageIndex[selectedId];
+      if (selectedChatId) {
+        const msg = (State.messages[selectedChatId] || []).find(m => m && (m.id || m._id || m.tempId) === selectedId);
+        if (msg && (msg.type === "image" || msg.type === "video")) {
+          statusBtn.style.display = "flex";
+        } else {
+          statusBtn.style.display = "none";
+        }
+      } else {
+        statusBtn.style.display = "none";
+      }
+    } else {
+      statusBtn.style.display = "none";
+    }
+  }
+
   // Dismiss floating reactions bar if not exactly 1 message selected
   if (count !== 1) {
     document.querySelectorAll(".mobile-emoji-bar").forEach(el => el.remove());
@@ -2109,7 +2163,7 @@ window.toggleMessageSelection = function (message, msgEl) {
     if (remainingEl) {
       const remainingChatId = State.messageIndex[remainingId];
       if (remainingChatId) {
-        const msg = (State.messages[remainingChatId] || []).find(m => (m.id || m._id || m.tempId) === remainingId);
+        const msg = (State.messages[remainingChatId] || []).find(m => m && (m.id || m._id || m.tempId) === remainingId);
         if (msg) {
           window.showMobileEmojiBarForMessage(msg, remainingEl);
         }
@@ -2227,12 +2281,26 @@ window.selectMessageMobile = function (message, msgEl) {
   }
   if (chatHeader) chatHeader.style.display = "none";
 
+  const statusBtn = document.getElementById("status-selection-btn");
+  if (statusBtn) {
+    if (message.type === "image" || message.type === "video") {
+      statusBtn.style.display = "flex";
+    } else {
+      statusBtn.style.display = "none";
+    }
+  }
+
   // Show reactions bar
   window.showMobileEmojiBarForMessage(message, msgEl);
 
+  if (window.activeOutsideClickSelectorHandler) {
+    document.removeEventListener("click", window.activeOutsideClickSelectorHandler, true);
+    window.activeOutsideClickSelectorHandler = null;
+  }
+
   // Close selection on clicking outside
   setTimeout(() => {
-    const handleOutsideClick = (e) => {
+    window.activeOutsideClickSelectorHandler = (e) => {
       if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
         const emojiBar = document.querySelector(".mobile-emoji-bar");
         const clickedInsideEmojiBar = emojiBar && emojiBar.contains(e.target);
@@ -2242,13 +2310,12 @@ window.selectMessageMobile = function (message, msgEl) {
 
         if (!clickedInsideEmojiBar && !clickedInsideMessage && !clickedInsideSelectionHeader && !clickedInsideDropdown) {
           clearMessageSelection();
-          document.removeEventListener("click", handleOutsideClick, true);
         }
       } else {
-        document.removeEventListener("click", handleOutsideClick, true);
+        clearMessageSelection();
       }
     };
-    document.addEventListener("click", handleOutsideClick, true);
+    document.addEventListener("click", window.activeOutsideClickSelectorHandler, true);
   }, 0);
 };
 
@@ -2260,10 +2327,36 @@ document.addEventListener("click", (e) => {
     return;
   }
 
-  // Star button
-  if (e.target.closest("#star-selection-btn")) {
-    if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
-      showToast(`${State.selectedMessageIds.size} message${State.selectedMessageIds.size > 1 ? 's' : ''} starred`, "success");
+  // Status button
+  if (e.target.closest("#status-selection-btn")) {
+    if (State.selectedMessageIds && State.selectedMessageIds.size === 1) {
+      const selectedId = Array.from(State.selectedMessageIds)[0];
+      const selectedChatId = State.messageIndex[selectedId];
+      if (selectedChatId) {
+        const msg = (State.messages[selectedChatId] || []).find(m => m && (m.id || m._id || m.tempId) === selectedId);
+        if (msg && (msg.type === "image" || msg.type === "video")) {
+          (async () => {
+            showToast("Preparing status update...", "info");
+            try {
+              const response = await fetch(msg.content);
+              if (!response.ok) throw new Error("Failed to retrieve media file");
+              const blob = await response.blob();
+              
+              if (typeof window.openStatusPreviewForBlob === "function") {
+                await window.openStatusPreviewForBlob(blob, msg.type);
+              } else if (typeof window.handleStatusMediaUpload === "function") {
+                const mimeType = msg.type === "video" ? "video/mp4" : "image/jpeg";
+                await window.handleStatusMediaUpload(blob, mimeType);
+              } else {
+                showToast("Status module not loaded. Please try again.", "error");
+              }
+            } catch (err) {
+              console.error("[SelectionHeader] Add to Status error:", err);
+              showToast("Failed to prepare status media", "error");
+            }
+          })();
+        }
+      }
     }
     clearMessageSelection();
     return;
@@ -2287,6 +2380,24 @@ document.addEventListener("click", (e) => {
     // Remove any existing dropdown first
     document.querySelectorAll(".selection-dropdown-menu").forEach(el => el.remove());
 
+    // Check if status is applicable (exactly 1 image/video selected)
+    const isSingleImageOrVideo = (State.selectedMessageIds && State.selectedMessageIds.size === 1) && (() => {
+      const selectedId = Array.from(State.selectedMessageIds)[0];
+      const selectedChatId = State.messageIndex[selectedId];
+      if (selectedChatId) {
+        const msg = (State.messages[selectedChatId] || []).find(m => m && (m.id || m._id || m.tempId) === selectedId);
+        return msg && (msg.type === "image" || msg.type === "video");
+      }
+      return false;
+    })();
+
+    const statusDropdownHTML = isSingleImageOrVideo ? `
+        <button class="context-menu-item status-opt">
+            <i class="ti ti-circle-dashed"></i>
+            <span>Add to Status</span>
+        </button>
+    ` : '';
+
     const dropdown = document.createElement("div");
     dropdown.className = "whatsapp-context-menu selection-dropdown-menu";
     dropdown.innerHTML = `
@@ -2298,10 +2409,7 @@ document.addEventListener("click", (e) => {
             <i class="ti ti-arrow-forward-up"></i>
             <span>Forward</span>
         </button>
-        <button class="context-menu-item star-opt">
-            <i class="ti ti-star"></i>
-            <span>Star</span>
-        </button>
+        ${statusDropdownHTML}
         <button class="context-menu-item delete-opt" style="color: #ff453a;">
             <i class="ti ti-trash" style="color: #ff453a;"></i>
             <span>Delete</span>
@@ -2325,7 +2433,7 @@ document.addEventListener("click", (e) => {
         for (const msgId of State.selectedMessageIds) {
           const chatId = State.messageIndex[msgId];
           if (chatId) {
-            const msg = (State.messages[chatId] || []).find(m => (m.id || m._id || m.tempId) === msgId);
+            const msg = (State.messages[chatId] || []).find(m => m && (m.id || m._id || m.tempId) === msgId);
             if (msg && msg.content) {
               texts.push(msg.content);
             }
@@ -2351,12 +2459,14 @@ document.addEventListener("click", (e) => {
       if (fwdBtn) fwdBtn.click();
     };
 
-    dropdown.querySelector(".star-opt").onclick = (evt) => {
-      evt.stopPropagation();
-      dropdown.remove();
-      const starBtn = document.getElementById("star-selection-btn");
-      if (starBtn) starBtn.click();
-    };
+    if (isSingleImageOrVideo) {
+      dropdown.querySelector(".status-opt").onclick = (evt) => {
+        evt.stopPropagation();
+        dropdown.remove();
+        const statusBtn = document.getElementById("status-selection-btn");
+        if (statusBtn) statusBtn.click();
+      };
+    }
 
     dropdown.querySelector(".delete-opt").onclick = (evt) => {
       evt.stopPropagation();
@@ -2388,7 +2498,7 @@ document.addEventListener("click", (e) => {
       for (const msgId of msgIds) {
         const chatId = State.messageIndex[msgId];
         if (chatId) {
-          const msg = (State.messages[chatId] || []).find(m => (m.id || m._id || m.tempId) === msgId);
+          const msg = (State.messages[chatId] || []).find(m => m && (m.id || m._id || m.tempId) === msgId);
           if (msg) {
             const isMe = msg.sender === "me" ||
               msg.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||

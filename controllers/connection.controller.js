@@ -178,6 +178,7 @@ export const listConnections = async (req, res) => {
     const contacts = connections.map((c) => {
       const isMe = c.sender._id.toString() === userId;
       const other = isMe ? c.receiver : c.sender;
+      const draft = c.drafts ? (c.drafts instanceof Map ? c.drafts.get(userId) : c.drafts[userId]) || null : null;
       return {
         connectionId: c._id.toString(),
         user: {
@@ -187,6 +188,7 @@ export const listConnections = async (req, res) => {
           lastSeen: other.lastSeen,
         },
         since: c.updatedAt,
+        draft: draft,
       };
     });
 

@@ -210,7 +210,10 @@ function initShowMedia() {
                     await fetchAndShowAllMedia();
                     document.getElementById("passwordOverlay").classList.remove("active");
                     window.unlockScreen = originalUnlock;
-                    document.querySelectorAll("input[type=text]").forEach(i => i.value = "");
+                    const overlay = document.getElementById("passwordOverlay");
+                    if (overlay) {
+                        overlay.querySelectorAll("input").forEach(i => i.value = "");
+                    }
                     return;
                 }
                 remainingAttempts--;
@@ -253,7 +256,8 @@ async function fetchAndShowAllMedia() {
             src: m.content,
             thumb: m.thumb || null,
             cover: m.cover || null,
-            createdAt: m.createdAt
+            createdAt: m.createdAt,
+            originalMsg: m
         }));
 
         if (loaderOverlay) loaderOverlay.style.display = "none";

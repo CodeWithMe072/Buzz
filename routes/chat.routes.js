@@ -1,5 +1,5 @@
 import express from "express";
-import { getMessages, deleteChat, getMedia, getTrendingGifs, searchGifs, deleteMessage } from "../controllers/chat.controller.js";
+import { getMessages, deleteChat, getMedia, getTrendingGifs, searchGifs, deleteMessage, saveDraft } from "../controllers/chat.controller.js";
 import { protect } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(protect);
 
 router.post("/api/messages", getMessages);
+router.post("/api/chat/draft", saveDraft);
 
 router.delete("/api/chat/:userId", deleteChat);
 router.get("/api/chat/:userId/media", getMedia);

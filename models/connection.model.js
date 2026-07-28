@@ -37,6 +37,13 @@ const connectionSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+
+    // User input drafts keyed by userId
+    drafts: {
+      type: Map,
+      of: String,
+      default: {},
+    },
   },
   { timestamps: true }
 );

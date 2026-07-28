@@ -40,6 +40,7 @@ class MediaViewer {
         this.pinBtn = document.getElementById('viewerPin');
         this.reactBtn = document.getElementById('viewerReact');
         this.forwardBtn = document.getElementById('viewerForward');
+        this.addToStatusBtn = document.getElementById('viewerAddToStatus');
         this.replyBtn = document.getElementById('viewerReply');
         this.downloadBtn = document.getElementById('viewerDownload');
         this.moreBtn = document.getElementById('viewerMore');
@@ -98,7 +99,8 @@ class MediaViewer {
                 encryptedFileId: m.encryptedFileId || null,
                 createdAt: m.createdAt || m.timestamp || null,
                 sender: m.sender || null,
-                state: 'waiting' // Initial state
+                state: 'waiting', // Initial state
+                originalMsg: m.originalMsg || m
             }));
         } else {
             // Support scanning chat messages
@@ -132,7 +134,8 @@ class MediaViewer {
                         encryptedFileId: encryptedFileId,
                         createdAt: m.createdAt || m.timestamp || null,
                         sender: m.sender || null,
-                        state: 'waiting'
+                        state: 'waiting',
+                        originalMsg: m.originalMsg || m
                     };
                 }).filter(Boolean);
 
@@ -166,7 +169,8 @@ class MediaViewer {
                 encryptedFileId: m.encryptedFileId || null,
                 createdAt: m.createdAt || null,
                 sender: m.sender || null,
-                state: 'waiting'
+                state: 'waiting',
+                originalMsg: m.originalMsg || m
             }));
             this.renderedCount = 0;
             this.hasMore = initialItems.length === 10 && !onlyChatMedia;
@@ -476,6 +480,7 @@ class MediaViewer {
     }
 
     loadMediaSource(item, streamUrl) {
+        item.currentStreamUrl = streamUrl;
         const index = item.index;
         const slide = this.container.querySelector(`.media-slide[data-index="${index}"]`);
         if (!slide) return;
@@ -936,12 +941,73 @@ class MediaViewer {
             this.forwardBtn.onclick = (e) => {
                 e.stopPropagation();
                 const activeItem = this.mediaItems[this.currentIndex];
-                const msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
+                let msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
+                
+                // Fallback 1: Use originalMsg if available
+                if (!msg) {
+                    msg = activeItem.originalMsg;
+                }
+
+                // Fallback 2: Construct custom message metadata from activeItem fields if needed
+                if (!msg && activeItem) {
+                    msg = {
+                        type: activeItem.type === "pdf" ? "document" : (activeItem.type || "image"),
+                        content: activeItem.encryptedFileId || activeItem.src || (activeItem.originalMsg ? (activeItem.originalMsg.content || activeItem.originalMsg.src) : null),
+                        caption: activeItem.caption || null,
+                        fileName: activeItem.fileName || (activeItem.type === "pdf" ? "document.pdf" : null),
+                        fileSize: activeItem.size || null,
+                        cover: activeItem.cover || null,
+                        thumb: activeItem.thumbnail || null,
+                        isDisappearing: false
+                    };
+                }
+
                 if (msg && typeof openForwardModal === "function") {
                     this.close();
                     openForwardModal(msg);
                 } else {
                     showToast("Forward not available for this item", "error");
+                }
+            };
+        }
+
+        // Add to Status
+        if (this.addToStatusBtn) {
+            this.addToStatusBtn.onclick = async (e) => {
+                e.stopPropagation();
+                const activeItem = this.mediaItems[this.currentIndex];
+                if (!activeItem) return;
+
+                // Let's resolve the decrypted/stream URL
+                const streamUrl = activeItem.currentStreamUrl || activeItem.src || (activeItem.originalMsg ? (activeItem.originalMsg.content || activeItem.originalMsg.src) : null);
+                if (!streamUrl) {
+                    showToast("No media URL found to post to status", "error");
+                    return;
+                }
+
+                showToast("Preparing status update...", "info");
+
+                try {
+                    // Fetch the decrypted/streamed file as a Blob
+                    const response = await fetch(streamUrl);
+                    if (!response.ok) throw new Error("Failed to retrieve media file");
+                    const blob = await response.blob();
+
+                    // Close the media viewer overlay
+                    this.close();
+
+                    // Forward blob to status preview screen/composer to allow adding caption/song
+                    if (typeof window.openStatusPreviewForBlob === "function") {
+                        await window.openStatusPreviewForBlob(blob, activeItem.type || "image");
+                    } else if (typeof window.handleStatusMediaUpload === "function") {
+                        const mimeType = activeItem.type === "video" ? "video/mp4" : "image/jpeg";
+                        await window.handleStatusMediaUpload(blob, mimeType);
+                    } else {
+                        showToast("Status module not loaded. Please try again.", "error");
+                    }
+                } catch (err) {
+                    console.error("[MediaViewer] Add to Status error:", err);
+                    showToast("Failed to prepare status media", "error");
                 }
             };
         }
@@ -967,7 +1033,30 @@ class MediaViewer {
                 document.querySelectorAll(".viewer-dropdown-menu").forEach(el => el.remove());
 
                 const activeItem = this.mediaItems[this.currentIndex];
-                const msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
+                let msg = (State.messages[this.chatId] || []).find(m => String(m.id || m._id || m.tempId) === String(activeItem.id));
+                
+                // Fallback 1: Use originalMsg if available
+                if (!msg) {
+                    msg = activeItem.originalMsg;
+                }
+
+                // Fallback 2: Construct custom message metadata from activeItem fields if needed
+                if (!msg && activeItem) {
+                    msg = {
+                        id: activeItem.id,
+                        tempId: activeItem.id,
+                        type: activeItem.type === "pdf" ? "document" : (activeItem.type || "image"),
+                        content: activeItem.encryptedFileId || activeItem.src || null,
+                        caption: activeItem.caption || null,
+                        fileName: activeItem.fileName || null,
+                        fileSize: activeItem.size || null,
+                        cover: activeItem.cover || null,
+                        thumb: activeItem.thumbnail || null,
+                        sender: activeItem.sender || null,
+                        isDisappearing: false
+                    };
+                }
+
                 if (!msg) return;
 
                 const targetEl = document.querySelector(`.message[data-message-id="${msg.id || msg._id || msg.tempId}"]`);
@@ -996,7 +1085,7 @@ class MediaViewer {
                 dropdown.style.position = "fixed";
                 dropdown.style.top = `${rect.bottom + 8}px`;
                 dropdown.style.right = `${window.innerWidth - rect.right}px`;
-                dropdown.style.zIndex = "3100";
+                dropdown.style.zIndex = "12000";
                 document.body.appendChild(dropdown);
 
                 // Rotate action

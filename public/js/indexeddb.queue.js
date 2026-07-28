@@ -6,12 +6,15 @@ const IndexedDBQueueService = {
 
   init() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open("BuzzOfflineQueue", 1);
+      const request = indexedDB.open("BuzzOfflineQueue", 2);
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains("outgoing_messages")) {
           db.createObjectStore("outgoing_messages", { keyPath: "localId" });
+        }
+        if (!db.objectStoreNames.contains("chat_input_drafts")) {
+          db.createObjectStore("chat_input_drafts", { keyPath: "chatId" });
         }
       };
 
@@ -169,6 +172,51 @@ const IndexedDBQueueService = {
 
   async deleteDraft(draftId) {
     return this.deleteMessage(draftId);
+  },
+
+  async saveInputDraft(chatId, text) {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!this.db) { resolve(); return; }
+        const transaction = this.db.transaction("chat_input_drafts", "readwrite");
+        const store = transaction.objectStore("chat_input_drafts");
+        const request = store.put({ chatId, text });
+        request.onsuccess = () => resolve();
+        request.onerror = (e) => reject(e.target.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  },
+
+  async getInputDraft(chatId) {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!this.db) { resolve(null); return; }
+        const transaction = this.db.transaction("chat_input_drafts", "readonly");
+        const store = transaction.objectStore("chat_input_drafts");
+        const request = store.get(chatId);
+        request.onsuccess = () => resolve(request.result ? request.result.text : null);
+        request.onerror = (e) => reject(e.target.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  },
+
+  async deleteInputDraft(chatId) {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!this.db) { resolve(); return; }
+        const transaction = this.db.transaction("chat_input_drafts", "readwrite");
+        const store = transaction.objectStore("chat_input_drafts");
+        const request = store.delete(chatId);
+        request.onsuccess = () => resolve();
+        request.onerror = (e) => reject(e.target.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
   }
 };
 

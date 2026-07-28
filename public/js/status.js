@@ -2982,6 +2982,90 @@
     };
     window.showStatusSendingState = showStatusSendingState;
 
+    window.openStatusPreviewForBlob = async function(blob, fileType) {
+        // Construct a File object from the blob
+        const extension = fileType.includes("video") ? "mp4" : "jpg";
+        const mimeType = fileType.includes("video") ? "video/mp4" : "image/jpeg";
+        const file = new File([blob], `status_${Date.now()}.${extension}`, { type: mimeType });
+
+        // Save status pending upload in IndexedDB
+        let tempId = null;
+        if (typeof window.saveStatusPendingUpload === "function") {
+            tempId = await window.saveStatusPendingUpload(file);
+            window.currentStatusUploadId = tempId;
+        }
+
+        const url = URL.createObjectURL(file);
+        window.statusGalleryFile = file; // Save reference for upload
+        State.cameraMode = "status";
+
+        if (typeof window.openCameraCaptureOverlay === "function") {
+            await window.openCameraCaptureOverlay();
+
+            // Immediately switch camera capture to preview state
+            const videoStream = document.getElementById("camera-capture-video");
+            const imgPreview = document.getElementById("camera-capture-img-preview");
+            const videoPreview = document.getElementById("camera-capture-video-preview");
+            const captureControls = document.getElementById("camera-capture-controls-section");
+            const previewControls = document.getElementById("camera-preview-controls-section");
+            const captionContainer = document.getElementById("camera-preview-caption-container");
+            const captionInput = document.getElementById("camera-preview-caption-input");
+
+            if (videoStream) videoStream.style.display = "none";
+            if (captureControls) captureControls.style.display = "none";
+            if (previewControls) previewControls.style.display = "flex";
+            if (captionContainer) captionContainer.style.display = "block";
+            if (captionInput) captionInput.value = "";
+
+            // Set send button text to Update Status
+            const sendBtn = document.getElementById("camera-preview-send-btn");
+            if (sendBtn) {
+                const span = sendBtn.querySelector("span");
+                if (span) span.textContent = "Update Status";
+            }
+
+            // Hide save draft for gallery uploads
+            const draftBtn = document.getElementById("camera-preview-draft-btn");
+            if (draftBtn) draftBtn.style.display = "none";
+
+            // Show/hide mute button for gallery preview
+            const isVideo = file.type.startsWith("video");
+            const muteBtn = document.getElementById("camera-preview-mute-btn");
+            if (muteBtn) {
+                muteBtn.style.display = isVideo ? "flex" : "none";
+            }
+            const songBtn = document.getElementById("camera-preview-song-btn");
+            if (songBtn) {
+                songBtn.style.display = (State.cameraMode === "status") ? "flex" : "none";
+            }
+            if (typeof updateSongBadgeVisibility === "function") {
+                updateSongBadgeVisibility();
+            }
+            if (isVideo && videoPreview) {
+                videoPreview.muted = window.isPreviewMuted;
+            }
+
+            // Save captured variables globally
+            window.capturedBlob = file;
+            window.capturedFileType = file.type.startsWith("video") ? "video" : "photo";
+
+            if (window.capturedFileType === "video") {
+                if (imgPreview) imgPreview.style.display = "none";
+                if (videoPreview) {
+                    videoPreview.src = url;
+                    videoPreview.style.display = "block";
+                    videoPreview.play().catch(() => { });
+                }
+            } else {
+                if (videoPreview) videoPreview.style.display = "none";
+                if (imgPreview) {
+                    imgPreview.src = url;
+                    imgPreview.style.display = "block";
+                }
+            }
+        }
+    };
+
     window.updateSongBadgeVisibility = updateSongBadgeVisibility;
 
     // Expose helpers

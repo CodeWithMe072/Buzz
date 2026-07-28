@@ -126,9 +126,25 @@ function initChatWindow() {
         });
     }
 
+    let draftSyncTimeout = null;
     messageInput.addEventListener('input', () => {
-        sendBtn.disabled = !messageInput.value.trim();
-        if (messageInput.value.trim() && State.activeChat) handleTyping();
+        const val = messageInput.value;
+        sendBtn.disabled = !val.trim();
+        if (val.trim() && State.activeChat) handleTyping();
+        
+        if (State.activeChat) {
+            // Save locally instantly
+            const conv = State.conversations.find(c => c.id === State.activeChat);
+            if (conv) conv.draft = val;
+
+            // Debounce sync to MongoDB server (750ms delay)
+            clearTimeout(draftSyncTimeout);
+            const activeChatId = State.activeChat;
+            draftSyncTimeout = setTimeout(() => {
+                apiRequest("POST", "/api/chat/draft", { partnerId: activeChatId, draftText: val })
+                    .catch(err => console.error("[DraftSync] Failed to sync draft to server:", err));
+            }, 750);
+        }
     });
 
     messageInput.addEventListener('focus', () => {

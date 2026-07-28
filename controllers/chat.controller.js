@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { Message } from "../models/message.model.js";
 import { Connection } from "../models/connection.model.js";
+import { redis } from "../lib/redis.js";
 
 /* ═══════════════════════════════════════════════════════════
    HELPER — verify two users are connected (accepted)
@@ -349,5 +350,52 @@ export const deleteMessage = async (req, res) => {
   } catch (err) {
     console.error("[deleteMessage] error:", err);
     res.status(500).json({ status: false, message: "Failed to delete message" });
+  }
+};
+
+export const saveDraft = async (req, res) => {
+  try {
+    const { partnerId, draftText } = req.body;
+    const myId = req.user._id;
+
+    if (!partnerId) {
+      return res.status(400).json({ status: false, message: "partnerId is required" });
+    }
+
+    // Find connection between myId and partnerId
+    const conn = await Connection.findOne({
+      $or: [
+        { sender: myId, receiver: partnerId },
+        { sender: partnerId, receiver: myId }
+      ],
+      status: "accepted"
+    });
+
+    if (!conn) {
+      return res.status(404).json({ status: false, message: "Connection not found" });
+    }
+
+    if (!conn.drafts) {
+      conn.drafts = new Map();
+    }
+
+    const myIdStr = myId.toString();
+    if (draftText) {
+      conn.drafts.set(myIdStr, draftText);
+    } else {
+      conn.drafts.delete(myIdStr);
+    }
+
+    await conn.save();
+
+    // Invalidate Redis caches
+    await redis.del(`cache:connections:${myIdStr}`);
+    await redis.del(`cache:connections:${partnerId.toString()}`);
+
+    res.json({ status: true, message: "Draft saved successfully" });
+
+  } catch (err) {
+    console.error("[SaveDraft] error:", err);
+    res.status(500).json({ status: false, message: "Failed to save draft" });
   }
 };
