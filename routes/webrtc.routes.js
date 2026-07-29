@@ -47,11 +47,30 @@ router.get("/ice-servers", protect, async (req, res) => {
         const iceServers = [...stunServers];
 
         for (const s of turnServers) {
-            // Add the server as-is
-            iceServers.push(s);
+            let urls = s.urls;
+            if (typeof urls === "string") {
+                urls = [urls];
+            } else if (!Array.isArray(urls)) {
+                urls = [];
+            }
 
-            const rawUrl = typeof s.urls === "string" ? s.urls : (Array.isArray(s.urls) ? s.urls[0] : "");
+            // Enforce turns: protocol on port 443
+            const sanitizedUrls = urls.map(u => {
+                if (u.startsWith("turn:") && u.includes(":443")) {
+                    return u.replace(/^turn:/, "turns:");
+                }
+                return u;
+            });
+
+            const rawUrl = sanitizedUrls[0] || "";
             if (!rawUrl) continue;
+
+            // Push sanitized base server
+            iceServers.push({
+                urls: sanitizedUrls.length === 1 ? sanitizedUrls[0] : sanitizedUrls,
+                username: s.username,
+                credential: s.credential
+            });
 
             // Add TCP variant — works when UDP is blocked (common on mobile data)
             if (rawUrl.startsWith("turn:") && !rawUrl.includes("transport=tcp")) {
@@ -63,7 +82,6 @@ router.get("/ice-servers", protect, async (req, res) => {
             }
 
             // Add TLS/443 variant — works through DPI, strict firewalls, Telegram WebView
-            // Port 443 looks like HTTPS to ISPs so it's almost never blocked
             if (rawUrl.startsWith("turn:") && !rawUrl.includes(":443")) {
                 const host = rawUrl.replace(/^turn:/, "").split(/[:?]/)[0];
                 iceServers.push({

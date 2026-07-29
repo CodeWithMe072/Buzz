@@ -126,7 +126,7 @@ function initChatWindow() {
         });
     }
 
-    let draftSyncTimeout = null;
+
     messageInput.addEventListener('input', () => {
         const val = messageInput.value;
         sendBtn.disabled = !val.trim();
@@ -138,9 +138,9 @@ function initChatWindow() {
             if (conv) conv.draft = val;
 
             // Debounce sync to MongoDB server (750ms delay)
-            clearTimeout(draftSyncTimeout);
+            clearTimeout(window._draftSyncTimeout);
             const activeChatId = State.activeChat;
-            draftSyncTimeout = setTimeout(() => {
+            window._draftSyncTimeout = setTimeout(() => {
                 apiRequest("POST", "/api/chat/draft", { partnerId: activeChatId, draftText: val })
                     .catch(err => console.error("[DraftSync] Failed to sync draft to server:", err));
             }, 750);

@@ -200,7 +200,16 @@ async function bootstrapAfterLogin() {
   });
 
   initSocket();
-  if (typeof CallManager !== "undefined") CallManager.wireSocket(socket);
+
+  // CallManager is loaded asynchronously via screens/call.js.
+  // Wire it now if already loaded, otherwise set a deferred callback
+  // so screens/call.js can pick up the current socket when it finishes loading.
+  if (typeof CallManager !== "undefined") {
+    CallManager.wireSocket(socket);
+  }
+  // Always store the latest socket reference for deferred wiring
+  window._pendingCallSocket = socket;
+
   NetworkMonitor.isSocketConnected = socket.connected;
   renderChatList();
 
@@ -1995,7 +2004,8 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
     // Handle ICE candidates
     videoPC.onicecandidate = (e) => {
       if (e.candidate) {
-        socket.emit("stream:ice", { to, candidate: e.candidate, type: "video" });
+        const candidateJSON = typeof e.candidate.toJSON === "function" ? e.candidate.toJSON() : e.candidate;
+        socket.emit("stream:ice", { to, candidate: candidateJSON, type: "video" });
       }
     };
 
@@ -2119,7 +2129,8 @@ async function startReceivingVideoStream(friendId) {
 
     videoPC.onicecandidate = (e) => {
       if (e.candidate) {
-        socket.emit("stream:ice", { to: friendId, candidate: e.candidate, type: "video" });
+        const candidateJSON = typeof e.candidate.toJSON === "function" ? e.candidate.toJSON() : e.candidate;
+        socket.emit("stream:ice", { to: friendId, candidate: candidateJSON, type: "video" });
       }
     };
 

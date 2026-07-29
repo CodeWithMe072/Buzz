@@ -27,8 +27,13 @@ export async function init() {
 
     // Wire up CallManager with socket if socket is active
     if (typeof CallManager !== "undefined") {
-        if (window.socket) {
-            CallManager.wireSocket(window.socket);
+        // Use the deferred socket reference from setupSocket(), or fallback to global
+        const activeSocket = window._pendingCallSocket || window.socket;
+        if (activeSocket) {
+            CallManager.wireSocket(activeSocket);
+            console.log("[Screen:Call] CallManager wired to socket:", activeSocket.id);
+        } else {
+            console.warn("[Screen:Call] No active socket found for CallManager");
         }
         if (CallManager.initButtons) {
             CallManager.initButtons();

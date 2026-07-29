@@ -176,6 +176,12 @@ const CallManager = (() => {
 
   // ─── LOCAL STREAM ─────────────────────────────────────────
   async function _getLocalStream(video) {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+      console.error("[WebRTC] Secure context (HTTPS) is required for camera/microphone access.");
+      showToast("Secure context (HTTPS) is required for calling", "error");
+      return false;
+    }
+
     try {
       const audioConstraints = {
         echoCancellation: true,
@@ -225,7 +231,6 @@ const CallManager = (() => {
         for (const constraints of constraintsLadder) {
           try {
             loadedStream = await navigator.mediaDevices.getUserMedia(constraints);
-            
             break;
           } catch (err) {
             console.warn("[WebRTC Call] Constraint ladder fallback:", err);
@@ -234,19 +239,34 @@ const CallManager = (() => {
         }
 
         if (!loadedStream) {
-          throw lastError || new Error("Failed to access camera");
+          console.warn("[WebRTC Call] Camera access failed, falling back to audio-only");
+          try {
+            loadedStream = await navigator.mediaDevices.getUserMedia({
+              audio: audioConstraints,
+              video: false
+            });
+            // Switch current call state mode to audio
+            _mode = "audio";
+            showToast("Camera not found — starting voice call", "warning");
+            $("video-call-screen").style.display = "none";
+            $("audio-call-screen").style.display = "flex";
+            $("call-modal").classList.remove("video-mode");
+            $("call-modal").classList.add("audio-mode");
+          } catch (audioErr) {
+            throw lastError || audioErr;
+          }
         }
 
         _localStream = loadedStream;
       }
-      if (video) {
+      if (_mode === "video" && video) {
         const lv = $("local-video");
         if (lv) { lv.srcObject = _localStream; lv.style.opacity = "1"; lv.play().catch(() => {}); }
       }
       return true;
     } catch (err) {
       console.error("[WebRTC] getUserMedia failed:", err);
-      showToast("Camera/mic permission denied", "error");
+      showToast("Camera/microphone permission denied", "error");
       return false;
     }
   }
@@ -285,7 +305,8 @@ const CallManager = (() => {
       // Log type so we can see what's being gathered
       const type = c.includes("typ relay") ? "RELAY" : c.includes("typ srflx") ? "SRFLX" : c.includes("typ host") ? "HOST" : "?";
       
-      socket.emit("call:ice", { to: _activePeer.id, candidate });
+      const candidateJSON = typeof candidate.toJSON === "function" ? candidate.toJSON() : candidate;
+      socket.emit("call:ice", { to: _activePeer.id, candidate: candidateJSON });
     };
 
     _pc.onicegatheringstatechange = () =>
@@ -643,6 +664,11 @@ const CallManager = (() => {
 
   // ─── INCOMING CALL POPUP ─────────────────────────────────
   function showIncoming(from, type, offerSdp, roomId, isRejoin) {
+    if (!from || !from.id) {
+      console.error("[WebRTC] Incoming call offer is missing caller 'from' metadata:", from);
+      return;
+    }
+
     // If we're already connected (ICE restart offer) — handle as renegotiation
     if (_callState === "connected" && _pc && _roomId === roomId) {
       _handleRenegotiation(from, offerSdp, type);
@@ -1103,9 +1129,19 @@ const CallManager = (() => {
 
   // ─── SOCKET EVENTS ───────────────────────────────────────
   function wireSocket(sock) {
+    console.log("[WebRTC] wireSocket called, socket.id=", sock?.id, "connected=", sock?.connected);
+
+    // Remove any previously registered call listeners to avoid duplicates
+    const callEvents = [
+      "call:offer", "call:receiver_offline", "call:rejoin_request",
+      "call:accept", "call:ice", "call:reject", "call:end",
+      "call:missed_message", "call:declined"
+    ];
+    callEvents.forEach(evt => sock.removeAllListeners(evt));
 
     // Incoming call offer
     sock.on("call:offer", ({ from, type, sdp, roomId, isRejoin }) => {
+      console.log("[WebRTC] Received call:offer event:", { from, type, roomId, isRejoin, hasSdp: !!sdp });
       showIncoming(from, type, sdp, roomId, isRejoin);
     });
 

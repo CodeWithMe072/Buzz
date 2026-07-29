@@ -485,11 +485,27 @@ export default function initSocket(io) {
        call:end     { to }
     ───────────────────────────────────────────────────────── */
     socket.on("call:offer", ({ to, type, from, sdp, roomId }) => {
-      if (!to || !type) return;
+      console.log(`[Call] call:offer received from ${userId} → to ${to}, type=${type}, roomId=${roomId}`);
+      if (!to || !type) {
+        console.warn("[Call] call:offer rejected: missing 'to' or 'type'");
+        return;
+      }
+
+      const callerFrom = {
+        id: userId,
+        username: socket.user.username,
+        avatar: socket.user.avatar || ""
+      };
 
       // Check if receiver is online
       redis.smembers(`user:${to}:sockets`).then(async (receiverSockets) => {
         const isOnline = receiverSockets.length > 0;
+        console.log(`[Call] Receiver ${to} online=${isOnline}, sockets=[${receiverSockets.join(",")}]`);
+
+        // Also check Socket.io room membership
+        const roomSockets = await io.in(to).fetchSockets();
+        console.log(`[Call] io.in("${to}") has ${roomSockets.length} sockets: [${roomSockets.map(s => s.id).join(",")}]`);
+
         try {
           // ALWAYS save call message to MongoDB
           const callMsg = await Message.create({
@@ -507,7 +523,8 @@ export default function initSocket(io) {
 
           if (isOnline) {
             // Receiver online — relay offer directly, and ALSO emit private_message call log
-            io.to(to).emit("call:offer", { from, type, sdp, roomId });
+            console.log(`[Call] Emitting call:offer to room "${to}" with callerFrom:`, JSON.stringify(callerFrom));
+            io.to(to).emit("call:offer", { from: callerFrom, type, sdp, roomId });
             io.to(to).emit("private_message", {
               id: callMsg.tempId, // roomId is msg.id in client state
               from: userId,
@@ -521,6 +538,7 @@ export default function initSocket(io) {
               status: { delivered: true },
             });
           } else {
+            console.log(`[Call] Receiver ${to} is OFFLINE, emitting call:receiver_offline to caller`);
             // Receiver offline — notify via call:missed_message so it updates their UI if they connect
             io.to(to).emit("call:missed_message", {
               message: {
@@ -557,7 +575,7 @@ export default function initSocket(io) {
           console.error("[Call] Failed to save call message:", err.message);
           // Fallback if DB save fails
           if (isOnline) {
-            io.to(to).emit("call:offer", { from, type, sdp, roomId });
+            io.to(to).emit("call:offer", { from: callerFrom, type, sdp, roomId });
           }
         }
       });

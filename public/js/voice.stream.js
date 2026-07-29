@@ -93,7 +93,8 @@
       // Emit ICE candidates to receiver
       voicePC.onicecandidate = (e) => {
         if (e.candidate) {
-          socket.emit("stream:ice", { to: requesterId, candidate: e.candidate, type: "voice" });
+          const candidateJSON = typeof e.candidate.toJSON === "function" ? e.candidate.toJSON() : e.candidate;
+          socket.emit("stream:ice", { to: requesterId, candidate: candidateJSON, type: "voice" });
         }
       };
 
@@ -226,7 +227,8 @@
       // Emit ICE candidates to sender
       voicePC.onicecandidate = (e) => {
         if (e.candidate) {
-          socket.emit("stream:ice", { to: friendId, candidate: e.candidate, type: "voice" });
+          const candidateJSON = typeof e.candidate.toJSON === "function" ? e.candidate.toJSON() : e.candidate;
+          socket.emit("stream:ice", { to: friendId, candidate: candidateJSON, type: "voice" });
         }
       };
 

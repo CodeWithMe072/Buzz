@@ -1788,6 +1788,9 @@ function sendMessage() {
   if (State.activeChat) {
     const conv = State.conversations.find(c => c.id === State.activeChat);
     if (conv) conv.draft = null;
+    // Cancel any pending debounced draft save — otherwise it fires after
+    // sendMessage and overwrites the cleared draft with the old text
+    clearTimeout(window._draftSyncTimeout);
     apiRequest("POST", "/api/chat/draft", { partnerId: State.activeChat, draftText: "" })
       .catch(err => console.error("[sendMessage] Failed to clear server draft:", err));
   }
