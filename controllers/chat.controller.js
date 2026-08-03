@@ -135,7 +135,7 @@ export const getMedia = async (req, res) => {
         { from: myId, to: userId },
         { from: userId, to: myId },
       ],
-      type: { $in: ["image", "video", "audio"] }
+      type: { $in: ["image", "video", "audio","document"] }
     };
 
     if (before) {
@@ -167,9 +167,13 @@ export const getMedia = async (req, res) => {
         id: m._id || m.tempId,
         type: m.type,
         thumbnail: `/api/thumbnail/${m._id || m.tempId}`,
+        fileName: m.fileName || m.caption || null,
+        caption: m.caption || null,
         size: m.fileSize || "0 B",
         duration: m.duration || null,
         encryptedFileId: encryptedFileId,
+        content: url,
+        from: m.from || null,
         createdAt: m.createdAt
       };
     });
@@ -179,6 +183,61 @@ export const getMedia = async (req, res) => {
   } catch (err) {
     console.error("[GetMedia]", err);
     res.status(500).json({ status: false, message: "Failed to fetch media" });
+  }
+};
+
+
+/* ═══════════════════════════════════════════════════════════
+   GET LINKS
+   GET /api/chat/:userId/links
+   Protected: requires JWT
+   Returns text messages that contain URLs
+═══════════════════════════════════════════════════════════ */
+export const getLinks = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const myId = req.user._id;
+    const { limit = 100 } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ status: false, message: "Invalid userId" });
+    }
+
+    const connected = await areConnected(myId, userId);
+    if (!connected) {
+      return res.status(403).json({ status: false, message: "Not connected" });
+    }
+
+    const query = {
+      $or: [
+        { from: myId, to: userId },
+        { from: userId, to: myId },
+      ],
+      type: "text",
+      content: { $regex: "https?://", $options: "i" },
+    };
+
+    const messages = await Message.find(query)
+      .sort({ createdAt: -1 })
+      .limit(Number(limit))
+      .select("content from createdAt")
+      .lean();
+
+    // Extract all URLs from each message
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const links = [];
+    for (const m of messages) {
+      const urls = m.content.match(urlRegex) || [];
+      for (const url of urls) {
+        links.push({ url, from: m.from, createdAt: m.createdAt });
+      }
+    }
+
+    res.json({ status: true, count: links.length, data: links });
+
+  } catch (err) {
+    console.error("[GetLinks]", err);
+    res.status(500).json({ status: false, message: "Failed to fetch links" });
   }
 };
 

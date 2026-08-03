@@ -283,6 +283,13 @@ async function getSearchGif(query, limit = 14, offset = 0) {
 window.TokenStore = TokenStore;
 window.fetchMedia = fetchMedia;
 
+async function fetchLinks(activeChat, limit = 100) {
+  const url = `/api/chat/${activeChat}/links?limit=${limit}`;
+  const res = await apiRequest("GET", url);
+  return { Data: res?.data, code: res?.status };
+}
+window.fetchLinks = fetchLinks;
+
 async function uploadMomentPhoto(image) {
   try {
     const blob = dataURLtoBlob(image);

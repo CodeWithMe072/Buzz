@@ -95,18 +95,26 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
             audioContainer.replaceWith(newPlayer);
         }
 
-        if (updates.type === "document" && updates.content) {
+        if ((updates.type === "document" || msg.type === "document") && (updates.content || msg.content)) {
             const docContainer = msgEl.querySelector(".message-document");
             if (docContainer) {
                 const meta = docContainer.querySelector(".doc-meta");
-                if (meta) meta.textContent = updates.fileSize ? formatFileSize(updates.fileSize) : "";
-                const actionsDiv = docContainer.querySelector(".doc-actions");
-                if (actionsDiv) {
-                    actionsDiv.innerHTML = `
-                        <a href="${msg.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a>
-                        <button class="doc-btn doc-save" onclick="forceDownload('${msg.content}', '${msg.fileName || 'document'}', '${msg.id || msg.tempId}')">Save as</button>
-                    `;
+                if (meta) meta.textContent = (updates.fileSize || msg.fileSize) ? formatFileSize(updates.fileSize || msg.fileSize) : "Document";
+                
+                let actionsDiv = docContainer.querySelector(".doc-actions");
+                if (!actionsDiv) {
+                    actionsDiv = document.createElement("div");
+                    actionsDiv.className = "doc-actions";
+                    docContainer.appendChild(actionsDiv);
                 }
+                const contentUrl = updates.content || msg.content;
+                const safeName = updates.fileName || msg.fileName || 'document';
+                const msgId = msg.id || msg._id || msg.tempId;
+                actionsDiv.innerHTML = `
+                    <button type="button" class="doc-btn doc-open" onclick="openDocument('${contentUrl}', '${safeName}', '${msgId}', this)"><i class="ti ti-external-link"></i><span>Open</span></button>
+                    <button type="button" class="doc-btn doc-save" onclick="forceDownload('${contentUrl}', '${safeName}', '${msgId}', this)"><i class="ti ti-download"></i><span>Save</span></button>
+                `;
+                actionsDiv.style.display = "flex";
             }
         }
     }
@@ -222,14 +230,21 @@ function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus, fil
 
     if (type === "document" && mediaDocument) {
         const meta = mediaDocument.querySelector(".doc-meta");
-        if (meta) meta.textContent = fileSize ? formatFileSize(fileSize) : "";
-        const actionsDiv = mediaDocument.querySelector(".doc-actions");
-        if (actionsDiv) {
-            actionsDiv.innerHTML = `
-                <a href="${content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a>
-                <button class="doc-btn doc-save" onclick="forceDownload('${content}', '${fileName || 'document'}', '${tempId}')">Save as</button>
-            `;
+        if (meta) meta.textContent = fileSize ? formatFileSize(fileSize) : "Document";
+        
+        let actionsDiv = mediaDocument.querySelector(".doc-actions");
+        if (!actionsDiv) {
+            actionsDiv = document.createElement("div");
+            actionsDiv.className = "doc-actions";
+            mediaDocument.appendChild(actionsDiv);
         }
+        
+        const safeName = fileName || 'document';
+        actionsDiv.innerHTML = `
+            <button type="button" class="doc-btn doc-open" onclick="openDocument('${content}', '${safeName}', '${tempId}', this)"><i class="ti ti-external-link"></i><span>Open</span></button>
+            <button type="button" class="doc-btn doc-save" onclick="forceDownload('${content}', '${safeName}', '${tempId}', this)"><i class="ti ti-download"></i><span>Save</span></button>
+        `;
+        actionsDiv.style.display = "flex";
     }
 
     const statusEl = msgEl.querySelector(".msg-status-wrap");

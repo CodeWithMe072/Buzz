@@ -135,52 +135,174 @@ function startTimeTicker() {
     }, 30000);
 }
 
-async function forceDownload(url, fileName, mediaId) {
-    try {
-        showToast("Downloading...", "info");
-        let fetchUrl = url;
+function getMimeTypeFromFileName(fileName) {
+    const ext = (fileName || "").split(".").pop().toLowerCase();
+    const mimeMap = {
+        pdf: "application/pdf",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        webp: "image/webp",
+        gif: "image/gif",
+        svg: "image/svg+xml",
+        txt: "text/plain;charset=utf-8",
+        html: "text/html",
+        mp4: "video/mp4",
+        webm: "video/webm",
+        mp3: "audio/mpeg",
+        ogg: "audio/ogg",
+        wav: "audio/wav",
+        json: "application/json",
+    };
+    return mimeMap[ext] || "application/octet-stream";
+}
 
-        if (mediaId) {
+function setDocCardLoading(btnElement, isLoading, actionType = "open") {
+    if (!btnElement) return null;
+    const cardActions = btnElement.closest(".doc-actions") || btnElement.parentElement;
+    const allBtns = cardActions ? cardActions.querySelectorAll(".doc-btn") : [btnElement];
+    
+    const originalHtml = btnElement.innerHTML;
+
+    if (isLoading) {
+        allBtns.forEach(b => {
+            b.disabled = true;
+            b.classList.add("is-loading");
+        });
+        const spinnerText = actionType === "open" ? "Opening..." : "Saving...";
+        btnElement.innerHTML = `<span class="loader-sm"></span><span>${spinnerText}</span>`;
+    } else {
+        allBtns.forEach(b => {
+            b.disabled = false;
+            b.classList.remove("is-loading");
+        });
+    }
+
+    return originalHtml;
+}
+
+async function getDecryptedStreamUrl(url, mediaId) {
+    let fetchUrl = url;
+    if (mediaId && typeof mediaId === "string" && !mediaId.startsWith("temp-")) {
+        try {
             const res = await apiRequest("POST", "/api/media/decrypt", { mediaId });
             const data = res?.data || res?.Data || res;
             if (data && data.token) {
-                fetchUrl = `/api/media/stream/${data.token}`;
-            } else {
-                throw new Error("Failed to get download decryption token");
+                return `/api/media/stream/${data.token}`;
             }
-        } else {
-            let target = url;
-            if (target.includes("/api/media")) {
-                target = "/api/media" + target.split("/api/media")[1];
-            }
-            if (target.startsWith("/api/media")) {
-                const parsed = new URL(target, window.location.origin);
-                const key = parsed.searchParams.get("key");
-                if (key) {
-                    const res = await apiRequest("POST", "/api/media/decrypt", { key });
-                    const data = res?.data || res?.Data || res;
-                    if (data && data.token) {
-                        fetchUrl = `/api/media/stream/${data.token}`;
-                    } else {
-                        throw new Error("Failed to get download decryption token");
-                    }
-                }
+        } catch {
+            // Fallback to key extraction
+        }
+    }
+    let target = url || "";
+    if (target.includes("/api/media")) {
+        target = "/api/media" + target.split("/api/media")[1];
+    }
+    if (target.startsWith("/api/media")) {
+        const parsed = new URL(target, window.location.origin);
+        const key = parsed.searchParams.get("key");
+        if (key) {
+            const res = await apiRequest("POST", "/api/media/decrypt", { key });
+            const data = res?.data || res?.Data || res;
+            if (data && data.token) {
+                return `/api/media/stream/${data.token}`;
             }
         }
+    }
+    return fetchUrl;
+}
 
+async function openDocument(url, fileName, mediaId, btnElement) {
+    let originalHtml = null;
+    try {
+        if (btnElement) {
+            originalHtml = setDocCardLoading(btnElement, true, "open");
+        }
+        showToast("Decrypting & opening document...", "info");
+
+        const fetchUrl = await getDecryptedStreamUrl(url, mediaId);
         const response = await fetch(fetchUrl);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
+        if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}`);
+        }
+
+        const buffer = await response.arrayBuffer();
+        const detectedMime = response.headers.get("content-type");
+        let finalMime = (detectedMime && detectedMime !== "application/octet-stream") 
+            ? detectedMime 
+            : getMimeTypeFromFileName(fileName);
+
+        if (fileName && fileName.toLowerCase().endsWith(".pdf")) {
+            finalMime = "application/pdf";
+        }
+
+        const typedBlob = new Blob([buffer], { type: finalMime });
+        const blobUrl = URL.createObjectURL(typedBlob);
+
+        const newTab = window.open(blobUrl, "_blank");
+        if (!newTab) {
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.target = "_blank";
+            a.rel = "noopener";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 120000);
+    } catch (err) {
+        showToast("Failed to open document", "error");
+        console.error("[openDocument] Error:", err);
+    } finally {
+        if (btnElement && originalHtml) {
+            setDocCardLoading(btnElement, false);
+            btnElement.innerHTML = originalHtml;
+        }
+    }
+}
+
+async function forceDownload(url, fileName, mediaId, btnElement) {
+    let originalHtml = null;
+    try {
+        if (btnElement) {
+            originalHtml = setDocCardLoading(btnElement, true, "save");
+        }
+        showToast("Downloading...", "info");
+
+        const fetchUrl = await getDecryptedStreamUrl(url, mediaId);
+        const response = await fetch(fetchUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}`);
+        }
+
+        const buffer = await response.arrayBuffer();
+        const detectedMime = response.headers.get("content-type");
+        let finalMime = (detectedMime && detectedMime !== "application/octet-stream") 
+            ? detectedMime 
+            : getMimeTypeFromFileName(fileName);
+
+        if (fileName && fileName.toLowerCase().endsWith(".pdf")) {
+            finalMime = "application/pdf";
+        }
+
+        const typedBlob = new Blob([buffer], { type: finalMime });
+        const blobUrl = URL.createObjectURL(typedBlob);
         const a = document.createElement("a");
         a.href = blobUrl;
-        a.download = fileName;
+        a.download = fileName || "document";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     } catch (err) {
         showToast("Download failed", "error");
-        console.error(err);
+        console.error("[forceDownload] Error:", err);
+    } finally {
+        if (btnElement && originalHtml) {
+            setDocCardLoading(btnElement, false);
+            btnElement.innerHTML = originalHtml;
+        }
     }
 }
 
@@ -495,7 +617,10 @@ function formatLastMessage(message) {
     if (message.type === "image") return "📷 Image";
     if (message.type === "video") return "🎥 Video";
     if (message.type === "audio") return "🎤 Voice message";
-    if (message.type === "document") return `📁 ${message.fileName || "Document"}`;
+    if (message.type === "document") {
+        const name = message.fileName || "Document";
+        return `📄 ${name.length > 30 ? name.slice(0, 30) + "..." : name}`;
+    }
     if (message.type === "gif") return "🎬 GIF";
     if (message.type === "sticker") return "🖼️ Sticker";
     if (message.type === "call") {

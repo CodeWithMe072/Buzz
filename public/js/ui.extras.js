@@ -140,7 +140,6 @@ function initShowMedia() {
     
     const showMediaBtn = document.getElementById("chatOption-ShowMedia");
     if (!showMediaBtn) {
-        console.warn("[initShowMedia] Element #chatOption-ShowMedia not found in DOM.");
         return;
     }
 
@@ -466,3 +465,4 @@ function initMuteState() {
 }
 window.initMuteState = initMuteState;
 window.unlockScreen = unlockScreen;
+window.fakePasswordApi = fakePasswordApi;

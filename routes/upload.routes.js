@@ -1384,15 +1384,16 @@ router.post(["/api/media/decrypt", "/media/decrypt"], protect, async (req, res) 
                 }
             }
         } else if (key) {
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             message = await Message.findOne({
                 $or: [{ from: req.user._id }, { to: req.user._id }],
-                content: { $regex: key }
+                content: { $regex: escapedKey }
             });
             if (message) {
                 fileKey = key;
             } else {
                 // Check if it's a status key
-                const status = await Status.findOne({ mediaUrl: { $regex: key } });
+                const status = await Status.findOne({ mediaUrl: { $regex: escapedKey } });
                 if (status) {
                     const isOwn = status.userId.toString() === req.user._id.toString();
                     let allowed = isOwn;

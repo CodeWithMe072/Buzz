@@ -101,9 +101,254 @@
             </div>
         </aside>
 
+        <!-- Profile Page Options Sidebar -->
+        <aside class="profile-page-sidebar hidden" id="profile-page-sidebar" style="display: none;">
+            <div class="profile-modal-sidebar" style="width: 100%; height: 100%; border: none;">
+                <div class="profile-modal-avatar-wrap">
+                    <div class="profile-modal-avatar-ring"></div>
+                    <div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter">U</div>
+                </div>
+                <h3 class="profile-modal-username" id="profile-modal-username">Username</h3>
+                <p class="profile-modal-email" id="profile-modal-email">email@example.com</p>
+
+                <div class="profile-modal-nav">
+                    <button class="profile-nav-btn" data-section="account">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Account Settings
+                    </button>
+                    <button class="profile-nav-btn" data-section="search">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        Discover
+                    </button>
+                    <button class="profile-nav-btn" data-section="pending">
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                            </svg>
+                            <span class="tab-badge" id="requests-badge-profile" style="display:none">0</span>
+                        </div>
+                        Requests
+                    </button>
+                    <button class="profile-nav-btn" data-section="contacts">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                        </svg>
+                        Contacts
+                    </button>
+                    <button class="profile-nav-btn" data-section="moments">
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                            <span class="tab-badge" id="modal-moments-badge" style="display:none"></span>
+                        </div>
+                        Moments
+                    </button>
+                    <button class="profile-nav-btn" data-section="whitelist">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Moments Whitelist
+                    </button>
+                    <button class="profile-nav-btn" data-section="logs">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                            <circle cx="12" cy="13" r="4" />
+                        </svg>
+                        Security Logs
+                    </button>
+                </div>
+                <button class="profile-modal-logout-btn" id="profile-modal-logout-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    Log Out
+                </button>
+            </div>
+        </aside>
+
         <!-- Chat Window Placeholder -->
         <main class="chat-window" id="chat-window">
             <!-- Dynamic message window or empty state will load here -->
         </main>
+
+        <!-- Contact Info Right Sidebar (WhatsApp Web Style) -->
+        <aside class="contact-info-sidebar hidden" id="contact-info-sidebar">
+            <div class="contact-info-header">
+                <button type="button" class="icon-btn" id="contact-info-close-btn" title="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+                <span class="contact-info-title">Contact info</span>
+            </div>
+
+            <div class="contact-info-body">
+                <div class="contact-info-card hero-card">
+                    <div class="contact-info-avatar-wrap">
+                        <div class="contact-info-avatar-ring"></div>
+                        <div class="contact-info-avatar-letter" id="contact-sidebar-avatar">U</div>
+                    </div>
+                    <h2 class="contact-info-name" id="contact-sidebar-name">User</h2>
+                    <p class="contact-info-sub" id="contact-sidebar-sub">Active now</p>
+
+                    <div class="contact-info-actions">
+                        <button type="button" class="contact-action-btn" id="contact-action-voice">
+                            <div class="contact-action-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.18 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.57a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+                                </svg>
+                            </div>
+                            <span>Voice</span>
+                        </button>
+                        <button type="button" class="contact-action-btn" id="contact-action-video">
+                            <div class="contact-action-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="23 7 16 12 23 17 23 7"/>
+                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                                </svg>
+                            </div>
+                            <span>Video</span>
+                        </button>
+                        <button type="button" class="contact-action-btn" id="contact-action-search">
+                            <div class="contact-action-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
+                            </div>
+                            <span>Search</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="contact-info-card media-card">
+                    <div class="contact-info-card-header" id="contact-media-header">
+                        <span class="contact-card-title">Media, links and docs</span>
+                        <span class="contact-card-count" id="contact-media-count">0 &rsaquo;</span>
+                    </div>
+                    <div class="contact-media-preview-grid" id="contact-media-grid">
+                        <div class="contact-media-empty">No media shared yet</div>
+                    </div>
+                </div>
+
+                <div class="contact-info-card settings-card">
+                    <div class="contact-info-row" id="contact-starred-row">
+                        <div class="contact-row-left">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                            </svg>
+                            <span>Starred messages</span>
+                        </div>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </div>
+
+                    <div class="contact-info-row" id="contact-mute-row">
+                        <div class="contact-row-left">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                            </svg>
+                            <span>Notification settings</span>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="contact-mute-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="contact-info-row" id="contact-disappearing-row">
+                        <div class="contact-row-left">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <div style="display: flex; flex-direction: column;">
+                                <span>Disappearing messages</span>
+                                <small style="color: var(--text-secondary); font-size: 11px;">Off</small>
+                            </div>
+                        </div>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </div>
+
+                    <div class="contact-info-row">
+                        <div class="contact-row-left">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                            </svg>
+                            <div style="display: flex; flex-direction: column;">
+                                <span>Encryption</span>
+                                <small style="color: var(--text-secondary); font-size: 11px;">Messages are end-to-end encrypted</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="contact-info-card danger-card">
+                    <div class="contact-info-row danger-row" id="contact-block-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                        </svg>
+                        <span style="color: #ef4444;">Block Contact</span>
+                    </div>
+
+                    <div class="contact-info-row danger-row" id="contact-clear-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                        <span style="color: #ef4444;">Clear Chat</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Media Gallery Panel (replaces contact-info-body) ── -->
+            <div class="media-gallery-panel hidden" id="media-gallery-panel">
+                <div class="media-gallery-header">
+                    <button type="button" class="icon-btn" id="media-gallery-back-btn" title="Back">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="19" y1="12" x2="5" y2="12"></line>
+                            <polyline points="12 19 5 12 12 5"></polyline>
+                        </svg>
+                    </button>
+                    <span class="media-gallery-title">Media, docs and links</span>
+                </div>
+                <div class="media-gallery-tabs">
+                    <button class="media-gallery-tab active" data-tab="media">Media</button>
+                    <button class="media-gallery-tab" data-tab="docs">Docs</button>
+                    <button class="media-gallery-tab" data-tab="links">Links</button>
+                </div>
+                <div class="media-gallery-content" id="media-gallery-content">
+                    <div class="media-gallery-loading">Loading...</div>
+                </div>
+            </div>
+            <!-- ── End Media Gallery Panel ── -->
+        </aside>
     </div>
 </div>

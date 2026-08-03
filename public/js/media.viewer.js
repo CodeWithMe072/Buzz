@@ -921,12 +921,8 @@ class MediaViewer {
                 if (msg) {
                     this.close();
                     State.replyingTo = msg.id || msg._id || msg.tempId;
-                    const preview = typeof formatLastMessage === "function" ? formatLastMessage(msg) : "Media";
-                    const replyTextEl = document.getElementById("reply-text");
-                    const replyPreviewEl = document.getElementById("reply-preview");
-                    if (replyTextEl && replyPreviewEl) {
-                        replyTextEl.textContent = preview;
-                        replyPreviewEl.style.display = "flex";
+                    if (typeof window.updateReplyPreviewBar === "function") {
+                        window.updateReplyPreviewBar(msg);
                     }
                     const inputEl = document.getElementById("message-input");
                     if (inputEl) inputEl.focus();

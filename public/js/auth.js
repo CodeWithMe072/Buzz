@@ -357,7 +357,7 @@ function openLogLightbox(url, timestamp) {
   setTimeout(() => lightbox.classList.add("active"), 10);
 }
 
-function renderPeopleTab(tab) {
+async function renderPeopleTab(tab) {
   const container = document.getElementById("people-tab-content");
   if (!container) return;
   container.innerHTML = "";
@@ -499,7 +499,7 @@ function renderPeopleTab(tab) {
       momentsBadge.classList.remove("dot");
       momentsBadge.textContent = "";
     }
-    renderMomentsTab(container);
+    await renderMomentsTab(container);
 
   } else if (tab === "account") {
     const user = State.currentUser || {};
@@ -1172,6 +1172,9 @@ async function renderMomentsTab(container) {
   });
 
   renderFriendGallery(activeFriendId, momentsObj, galleryTitle, galleryGrid);
+  if (window.innerWidth <= 768) {
+    ensureMobileProfileHeader("moments");
+  }
 }
 
 async function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
@@ -1258,20 +1261,6 @@ function openPeoplePanel() {
 // PROFILE MODAL (ACCOUNT HUB) HANDLERS
 // =============================================================================
 function initProfileModal() {
-  const closeBtn = document.getElementById("profile-modal-close-btn");
-  if (closeBtn) {
-    closeBtn.onclick = closeProfileModal;
-  }
-
-  const modalOverlay = document.getElementById("profile-modal");
-  if (modalOverlay) {
-    modalOverlay.onclick = (e) => {
-      if (e.target === modalOverlay) {
-        closeProfileModal();
-      }
-    };
-  }
-
   document.querySelectorAll(".profile-nav-btn").forEach(btn => {
     btn.onclick = () => {
       switchProfileModalSection(btn.dataset.section);
@@ -1287,53 +1276,135 @@ function initProfileModal() {
   }
 }
 
-async function openProfileModal(defaultSection = "search") {
-  let modal = document.getElementById("profile-modal");
-  if (!modal) {
+async function openProfileModal(defaultSection = "account", isUserClick = false) {
+  document.body.classList.add("profile-page-active");
+  const avatarBtn = document.getElementById("nav-avatar-btn");
+  const chatBtn = document.getElementById("nav-chat-btn");
+  const statusBtn = document.getElementById("nav-status-btn");
+
+  const chatSidebar = document.getElementById("chat-list-sidebar");
+  const statusSidebar = document.getElementById("status-sidebar");
+  const profileSidebar = document.getElementById("profile-page-sidebar");
+  const chatWindowEl = document.getElementById("chat-window");
+
+  if (avatarBtn) avatarBtn.classList.add("active");
+  if (chatBtn) chatBtn.classList.remove("active");
+  if (statusBtn) statusBtn.classList.remove("active");
+
+  if (chatSidebar) {
+    chatSidebar.style.display = "none";
+    chatSidebar.classList.add("hidden");
+  }
+  if (statusSidebar) {
+    statusSidebar.style.display = "none";
+    statusSidebar.classList.add("hidden");
+  }
+  if (profileSidebar) {
+    profileSidebar.style.display = "flex";
+    profileSidebar.classList.remove("hidden");
+  }
+
+  // Update profile avatar, name, email in profile sidebar
+  const user = State.currentUser || {};
+  const letterEl = document.getElementById("profile-modal-avatar-letter");
+  const nameEl = document.getElementById("profile-modal-username");
+  const emailEl = document.getElementById("profile-modal-email");
+  if (letterEl) letterEl.textContent = user.username?.charAt(0).toUpperCase() || "U";
+  if (nameEl) nameEl.textContent = sanitizeInput(user.username || "User");
+  if (emailEl) emailEl.textContent = sanitizeInput(user.email || "");
+
+  // Load account component into chat-window if not already loaded
+  let container = document.getElementById("people-tab-content");
+  if (!container && chatWindowEl) {
     if (window.showLoader) window.showLoader();
     try {
       const html = await ComponentLoader.load("account");
-      const wrapper = document.createElement("div");
-      wrapper.innerHTML = html;
-      modal = wrapper.firstElementChild;
-      document.body.appendChild(modal);
-
+      chatWindowEl.innerHTML = html;
       const { init } = await import("/js/screens/account.js");
       await init();
     } catch (err) {
-      console.error("Failed to load profile modal:", err);
+      console.error("Failed to load profile settings page:", err);
       return;
     } finally {
       if (window.hideLoader) window.hideLoader();
     }
   }
 
-  const user = State.currentUser || {};
-  document.getElementById("profile-modal-avatar-letter").textContent = user.username?.charAt(0).toUpperCase() || "U";
-  document.getElementById("profile-modal-username").textContent = sanitizeInput(user.username || "User");
-  document.getElementById("profile-modal-email").textContent = sanitizeInput(user.email || "");
-
+  initProfileModal();
   updateRequestsBadge();
-  switchProfileModalSection(defaultSection);
 
-  modal.style.display = "flex";
-  setTimeout(() => modal.classList.add("active"), 10);
+  if (window.innerWidth <= 768 && isUserClick) {
+    document.body.classList.remove("mobile-profile-value-active");
+    document.querySelectorAll(".profile-nav-btn").forEach(btn => btn.classList.remove("active"));
+  } else {
+    switchProfileModalSection(defaultSection || "account");
+  }
 }
 
 function closeProfileModal() {
-  const modal = document.getElementById("profile-modal");
-  if (!modal) return;
-  modal.classList.remove("active");
-  setTimeout(() => {
-    modal.style.display = "none";
-  }, 300);
+  document.body.classList.remove("profile-page-active");
+  document.body.classList.remove("mobile-profile-value-active");
+  const chatBtn = document.getElementById("nav-chat-btn");
+  if (chatBtn && typeof chatBtn.click === "function") {
+    chatBtn.click();
+  }
 }
 
-function switchProfileModalSection(sectionName) {
+async function switchProfileModalSection(sectionName) {
   document.querySelectorAll(".profile-nav-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.section === sectionName);
   });
-  renderPeopleTab(sectionName);
+  await renderPeopleTab(sectionName);
+
+  if (window.innerWidth <= 768) {
+    document.body.classList.add("mobile-profile-value-active");
+    ensureMobileProfileHeader(sectionName);
+  }
+}
+
+function ensureMobileProfileHeader(sectionName) {
+  if (window.innerWidth > 768) return;
+  const container = document.getElementById("people-tab-content");
+  if (!container) return;
+
+  const existingHeader = container.querySelector(".profile-mobile-header");
+  if (existingHeader) existingHeader.remove();
+
+  // Hide duplicate inline title wrap if present
+  const inlineTitleWrap = container.querySelector(".profile-section-title-wrap");
+  if (inlineTitleWrap) {
+    inlineTitleWrap.style.display = "none";
+  }
+
+  const titleMap = {
+    account: "Account Settings",
+    search: "Discover People",
+    pending: "Requests",
+    contacts: "Contacts",
+    moments: "Moments",
+    whitelist: "Moments Whitelist",
+    logs: "Security Logs"
+  };
+
+  const sectionTitle = titleMap[sectionName] || "Settings";
+
+  const header = document.createElement("div");
+  header.className = "profile-mobile-header";
+  header.innerHTML = `
+    <button type="button" class="profile-mobile-back-btn" id="profile-mobile-back-btn" title="Back to Profile Options">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+    </button>
+    <h2 class="profile-section-title" style="font-size: 20px; font-weight: 800; margin: 0;">${sectionTitle}</h2>
+  `;
+
+  header.querySelector("#profile-mobile-back-btn").onclick = () => {
+    document.body.classList.remove("mobile-profile-value-active");
+  };
+
+  container.insertBefore(header, container.firstChild);
 }
 
 function renderModalWhitelist(whitelistList) {

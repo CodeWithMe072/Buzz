@@ -223,6 +223,8 @@ function openChat(chatId) {
 
   document.getElementById("chat-empty-state").style.display = "none";
   document.getElementById("active-chat").style.display = "flex";
+  if (typeof closeContactInfoSidebar === "function") closeContactInfoSidebar();
+  if (typeof initContactInfoSidebar === "function") initContactInfoSidebar();
   const messageInput = document.getElementById("message-input");
   messageInput.value = "";
   messageInput.focus();
@@ -693,23 +695,146 @@ function createMessageElement(message) {
     }
   }
 
+function getMessageSenderName(replyMsg) {
+  if (!replyMsg) return "User";
+  const myId = State.currentUser?.id || State.user?.id || State.currentUser?._id;
+  const replySenderId = replyMsg.sender || replyMsg.userId || replyMsg.from;
+
+  if (myId && replySenderId && String(myId) === String(replySenderId)) {
+    return "You";
+  }
+
+  if (replyMsg.senderName) return replyMsg.senderName;
+  if (replyMsg.username) return replyMsg.username;
+
+  // Check active conversation
+  const conv = State.conversations?.find(c => c.id === State.activeChat);
+  if (conv) {
+    if (conv.username) return conv.username;
+    if (conv.user?.username) return conv.user.username;
+  }
+
+  const headerUsernameEl = document.getElementById("chat-username");
+  if (headerUsernameEl && headerUsernameEl.textContent) {
+    return headerUsernameEl.textContent.trim();
+  }
+
+  return "User";
+}
+
+async function updateReplyPreviewBar(message) {
+  const replyPreviewEl = document.getElementById("reply-preview");
+  const replyTextEl = document.getElementById("reply-text");
+  if (!replyPreviewEl || !replyTextEl || !message) return;
+
+  const senderName = getMessageSenderName(message);
+
+  let contentHTML = "";
+  if (message.type === "text") {
+    let text = message.content || "";
+    if (text.startsWith('{"isStatusReply":true')) {
+      try {
+        const parsed = JSON.parse(text);
+        text = `💬 Status reply: ${parsed.replyText || ""}`;
+      } catch (e) {}
+    }
+    contentHTML = `<span style="font-size:13px; color:rgba(255,255,255,0.85); font-weight:400;">${sanitizeInput(text)}</span>`;
+  } else if (message.type === "document") {
+    const docName = message.fileName || "Document";
+    const ext = (docName || "").split(".").pop().toUpperCase();
+    const extTag = ext && ext.length <= 4 ? ext : "DOC";
+    const fileInfo = typeof getFileIcon === "function" ? getFileIcon(docName) : { color: "#3b82f6" };
+    const badgeColor = fileInfo.color || "#3b82f6";
+
+    contentHTML = `
+      <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+        <span style="display:inline-flex; align-items:center; justify-content:center; background:${badgeColor}; color:#fff; font-size:9px; font-weight:800; padding:2px 5px; border-radius:3px; flex-shrink:0; text-transform:uppercase; font-family:sans-serif; line-height:1;">${extTag}</span>
+        <span style="font-size:13px; font-weight:500; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px;">${sanitizeInput(docName)}</span>
+      </div>`;
+  } else if (message.type === "image" || message.type === "video") {
+    let mediaUrl = message.thumb || message.cover || message.content;
+    if (typeof getDecryptedStreamUrl === "function" && mediaUrl) {
+      mediaUrl = await getDecryptedStreamUrl(mediaUrl, message.id);
+    }
+    const mediaLabel = message.type === "image" ? "Photo" : "Video";
+    contentHTML = `
+      <div style="display:flex; align-items:center; gap:8px; margin-top:3px;">
+        <div style="width:36px; height:36px; border-radius:5px; overflow:hidden; background:#000; flex-shrink:0; border:1px solid rgba(255,255,255,0.15);">
+          ${message.type === "video" 
+            ? `<video src="${mediaUrl}" style="width:100%; height:100%; object-fit:cover; display:block;"></video>` 
+            : `<img src="${mediaUrl}" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'" />`}
+        </div>
+        <span style="font-size:13px; font-weight:500; color:var(--text-primary);">${mediaLabel}</span>
+      </div>`;
+  } else if (message.type === "audio") {
+    contentHTML = `<span style="font-size:13px; color:var(--text-primary);">🎤 Voice message</span>`;
+  } else {
+    contentHTML = `<span style="font-size:13px; color:var(--text-primary);">📷 ${message.type}</span>`;
+  }
+
+  replyTextEl.innerHTML = `
+    <div style="display:flex; flex-direction:column; gap:2px;">
+      <span style="font-size:12px; font-weight:700; color:#c084fc;">${sanitizeInput(senderName)}</span>
+      ${contentHTML}
+    </div>`;
+
+  replyPreviewEl.style.display = "flex";
+}
+window.updateReplyPreviewBar = updateReplyPreviewBar;
+
   // Reply preview
   let replyHTML = "";
   if (message.replyTo) {
-    const replyMsg = State.messages[State.activeChat].find(
+    const replyMsg = State.messages[State.activeChat]?.find(
       m => m.id === message.replyTo || m.tempId === message.replyTo
     );
 
+    if (replyMsg) {
+      const senderName = getMessageSenderName(replyMsg);
+      
+      let replyContentHTML = "";
+      if (replyMsg.type === "text") {
+        const text = replyMsg.content.length > 50 ? replyMsg.content.slice(0, 50) + "..." : replyMsg.content;
+        replyContentHTML = `<div class="reply-text">${sanitizeInput(text)}</div>`;
+      } else if (replyMsg.type === "document") {
+        const docName = replyMsg.fileName || "Document";
+        const ext = (docName || "").split(".").pop().toUpperCase();
+        const extTag = ext && ext.length <= 4 ? ext : "DOC";
+        const fileInfo = typeof getFileIcon === "function" ? getFileIcon(docName) : { color: "#3b82f6" };
+        const badgeColor = fileInfo.color || "#3b82f6";
+        const shortName = docName.length > 25 ? docName.slice(0, 25) + "..." : docName;
 
+        replyContentHTML = `
+          <div class="reply-media-row" style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+            <span style="display:inline-flex; align-items:center; justify-content:center; background:${badgeColor}; color:#fff; font-size:9px; font-weight:800; padding:2px 4px; border-radius:3px; flex-shrink:0; text-transform:uppercase; font-family:sans-serif; line-height:1;">${extTag}</span>
+            <span class="reply-text" style="font-weight: 500;">${sanitizeInput(shortName)}</span>
+          </div>`;
+      } else if (replyMsg.type === "image" || replyMsg.type === "video") {
+        const thumbUrl = replyMsg.thumb || replyMsg.cover || replyMsg.content;
+        const mediaLabel = replyMsg.type === "image" ? "Photo" : "Video";
+        replyContentHTML = `
+          <div class="reply-media-row" style="display:flex; align-items:center; gap:8px; margin-top:2px;">
+            <div class="reply-media-thumb" style="width:36px; height:36px; border-radius:4px; overflow:hidden; background:rgba(0,0,0,0.3); flex-shrink:0;">
+              ${replyMsg.type === "video" 
+                ? `<video src="${thumbUrl}" style="width:100%; height:100%; object-fit:cover; display:block;"></video>` 
+                : `<img src="${thumbUrl}" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'" />`}
+            </div>
+            <span class="reply-text">${mediaLabel}</span>
+          </div>`;
+      } else if (replyMsg.type === "audio") {
+        replyContentHTML = `<div class="reply-text">🎤 Voice message</div>`;
+      } else {
+        replyContentHTML = `<div class="reply-text">📷 ${replyMsg.type}</div>`;
+      }
 
-    const replyText = replyMsg
-      ? (replyMsg.type === "text"
-        ? (replyMsg.content.length > 50
-          ? replyMsg.content.slice(0, 50) + "..."
-          : replyMsg.content)
-        : "📷 " + replyMsg.type)
-      : "Original message";
-    replyHTML = `<div class="message-reply-preview"><div class="reply-text">${sanitizeInput(replyText)}</div></div>`;
+      replyHTML = `
+        <div class="message-reply-preview">
+          <div class="reply-username" style="font-size:12px; font-weight:700; color:#c084fc; margin-bottom:2px;">${sanitizeInput(senderName)}</div>
+          ${replyContentHTML}
+        </div>`;
+    } else {
+      replyHTML = `<div class="message-reply-preview"><div class="reply-text">Original message</div></div>`;
+    }
   }
 
   // Footer: time + status icon
@@ -1002,19 +1127,25 @@ function createMessageElement(message) {
     const { icon, color } = getFileIcon(message.fileName || "");
     const isUploading = message.uploadStatus === "uploading";
     const isFailed = message.uploadStatus === "failed";
+    const safeName = sanitizeInput(message.fileName || "Document");
+    const hasContent = Boolean(message.content);
     bubbleEl.innerHTML = `
       ${replyHTML}
       <div class="message-document">
-        <div class="doc-icon-wrap"><i class="ti ${icon}" style="color:${color};font-size:28px;"></i></div>
-        <div class="doc-info">
-          <span class="doc-filename">${sanitizeInput(message.fileName || "Document")}</span>
-          <span class="doc-meta">${message.fileSize ? formatFileSize(message.fileSize) : ""}</span>
+        <div class="doc-header-row">
+          <div class="doc-icon-wrap" style="background:${color}18; border-color:${color}35;">
+            <i class="ti ${icon}" style="color:${color};font-size:26px;"></i>
+          </div>
+          <div class="doc-info">
+            <span class="doc-filename" title="${safeName}">${safeName}</span>
+            <span class="doc-meta">${message.fileSize ? formatFileSize(message.fileSize) : (isUploading ? "Uploading..." : "Document")}</span>
+          </div>
         </div>
-        ${isUploading
-        ? `<div class="media-overlay"><div class="loader"></div></div>`
-        : (isFailed
-          ? `<div class="media-overlay"><button type="button" class="media-retry">↻</button></div>`
-          : `<div class="doc-actions">${message.content ? `<a href="${message.content}" target="_blank" rel="noopener" class="doc-btn doc-open">Open</a><button class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName || "document"}','${message.id || message._id || message.tempId}')">Save</button>` : ""}</div>`)}
+        ${isUploading ? `<div class="media-overlay"><div class="loader"></div></div>` : ""}
+        ${isFailed ? `<div class="media-overlay"><button type="button" class="media-retry">↻</button></div>` : ""}
+        <div class="doc-actions" style="${(isUploading || isFailed || !hasContent) ? "display:none;" : "display:flex;"}">
+          ${hasContent ? `<button type="button" class="doc-btn doc-open" onclick="openDocument('${message.content}','${message.fileName || "document"}','${message.id || message._id || message.tempId}', this)"><i class="ti ti-external-link"></i><span>Open</span></button><button type="button" class="doc-btn doc-save" onclick="forceDownload('${message.content}','${message.fileName || "document"}','${message.id || message._id || message.tempId}', this)"><i class="ti ti-download"></i><span>Save</span></button>` : ""}
+        </div>
       </div>
       ${footerHTML}`;
   }
@@ -1256,10 +1387,11 @@ function showMessageOptions(message, msgEl, event) {
   popup.querySelector(".reply-opt").addEventListener("click", (e) => {
     e.stopPropagation();
     State.replyingTo = message.id || message._id || message.tempId;
-    const preview = formatLastMessage(message);
-    document.getElementById("reply-text").textContent = preview;
-    document.getElementById("reply-preview").style.display = "flex";
-    document.getElementById("message-input").focus();
+    if (typeof updateReplyPreviewBar === "function") {
+      updateReplyPreviewBar(message);
+    }
+    const inputEl = document.getElementById("message-input");
+    if (inputEl) inputEl.focus();
     popup.remove();
   });
 
@@ -2237,12 +2369,8 @@ window.showMobileEmojiBarForMessage = function (message, msgEl) {
       e.stopPropagation();
       const msgId = message.id || message._id || message.tempId;
       State.replyingTo = msgId;
-      const preview = typeof formatLastMessage === "function" ? formatLastMessage(message) : "Media";
-      const replyTextEl = document.getElementById("reply-text");
-      const replyPreviewEl = document.getElementById("reply-preview");
-      if (replyTextEl && replyPreviewEl) {
-        replyTextEl.textContent = preview;
-        replyPreviewEl.style.display = "flex";
+      if (typeof updateReplyPreviewBar === "function") {
+        updateReplyPreviewBar(message);
       }
       const inputEl = document.getElementById("message-input");
       if (inputEl) inputEl.focus();
@@ -2597,9 +2725,13 @@ function initAppNavigation() {
   }
 
   chatBtn.onclick = async () => {
+    document.body.classList.remove("profile-page-active");
+    document.body.classList.remove("mobile-profile-value-active");
     chatBtn.classList.add("active");
     statusBtn.classList.remove("active");
+    if (avatarBtn) avatarBtn.classList.remove("active");
 
+    const profileSidebar = document.getElementById("profile-page-sidebar");
     if (chatSidebar) {
       chatSidebar.style.display = "flex";
       chatSidebar.classList.remove("hidden");
@@ -2608,8 +2740,12 @@ function initAppNavigation() {
       statusSidebar.style.display = "none";
       statusSidebar.classList.add("hidden");
     }
+    if (profileSidebar) {
+      profileSidebar.style.display = "none";
+      profileSidebar.classList.add("hidden");
+    }
 
-    // Restore Chat window if it was replaced by status empty state
+    // Restore Chat window if it was replaced by status empty state or profile settings
     const chatWindowEl = document.getElementById("chat-window");
     if (chatWindowEl && !document.getElementById("active-chat")) {
       try {
@@ -2629,9 +2765,13 @@ function initAppNavigation() {
   };
 
   statusBtn.onclick = async () => {
+    document.body.classList.remove("profile-page-active");
+    document.body.classList.remove("mobile-profile-value-active");
     statusBtn.classList.add("active");
     chatBtn.classList.remove("active");
+    if (avatarBtn) avatarBtn.classList.remove("active");
 
+    const profileSidebar = document.getElementById("profile-page-sidebar");
     if (chatSidebar) {
       chatSidebar.style.display = "none";
       chatSidebar.classList.add("hidden");
@@ -2639,6 +2779,10 @@ function initAppNavigation() {
     if (statusSidebar) {
       statusSidebar.style.display = "flex";
       statusSidebar.classList.remove("hidden");
+    }
+    if (profileSidebar) {
+      profileSidebar.style.display = "none";
+      profileSidebar.classList.add("hidden");
     }
 
     // Show status empty state panel on right side
@@ -2667,11 +2811,10 @@ function initAppNavigation() {
     }
   };
 
-
   if (avatarBtn) {
     avatarBtn.onclick = () => {
       if (typeof openProfileModal === "function") {
-        openProfileModal("account");
+        openProfileModal("account", true);
       }
     };
   }
@@ -3064,4 +3207,698 @@ document.addEventListener("click", (e) => {
 window.fetchAndCacheStatusData = fetchAndCacheStatusData;
 window.renderStatusSidebar = renderStatusSidebar;
 window.updateStatusUnseenIndicator = updateStatusUnseenIndicator;
+
+// =============================================================================
+// CONTACT INFO RIGHT SIDEBAR (WhatsApp Web Style)
+// =============================================================================
+function initContactInfoSidebar() {
+  const chatHeaderInfo = document.querySelector(".chat-header-info");
+  const chatInfoBtn = document.getElementById("chat-info-btn");
+  const contactSidebar = document.getElementById("contact-info-sidebar");
+  const closeBtn = document.getElementById("contact-info-close-btn");
+
+  if (!contactSidebar) return;
+
+  const toggleSidebar = (e) => {
+    if (e) e.stopPropagation();
+    if (contactSidebar.classList.contains("hidden")) {
+      openContactInfoSidebar();
+    } else {
+      closeContactInfoSidebar();
+    }
+  };
+
+  if (chatHeaderInfo) {
+    chatHeaderInfo.style.cursor = "pointer";
+    chatHeaderInfo.onclick = toggleSidebar;
+  }
+  if (chatInfoBtn) {
+    chatInfoBtn.onclick = toggleSidebar;
+  }
+  if (closeBtn) {
+    closeBtn.onclick = closeContactInfoSidebar;
+  }
+}
+
+function openContactInfoSidebar() {
+  const contactSidebar = document.getElementById("contact-info-sidebar");
+  if (!contactSidebar || !State.activeChat) return;
+
+  const activeConv = State.conversations.find(c => c.id === State.activeChat) || {};
+  const headerUsernameEl = document.getElementById("chat-username");
+  const headerStatusEl = document.getElementById("online-status");
+
+  const username = activeConv.username || activeConv.user?.username || (headerUsernameEl ? headerUsernameEl.textContent : "") || "User";
+  const avatarLetter = activeConv.avatar || activeConv.user?.username?.charAt(0) || username.charAt(0) || "U";
+  const statusText = activeConv.online ? "Active now" : (headerStatusEl ? headerStatusEl.textContent : "Offline");
+
+  // Populate user data
+  const avatarEl = document.getElementById("contact-sidebar-avatar");
+  const nameEl = document.getElementById("contact-sidebar-name");
+  const subEl = document.getElementById("contact-sidebar-sub");
+
+  if (avatarEl) avatarEl.textContent = avatarLetter.toUpperCase();
+  if (nameEl) nameEl.textContent = sanitizeInput(username);
+  if (subEl) subEl.textContent = statusText;
+
+  // Bind quick actions
+  const voiceBtn = document.getElementById("contact-action-voice");
+  const videoBtn = document.getElementById("contact-action-video");
+  const searchBtn = document.getElementById("contact-action-search");
+
+  if (voiceBtn) {
+    voiceBtn.onclick = () => {
+      const audioCallBtn = document.getElementById("audio-call-btn");
+      if (audioCallBtn) audioCallBtn.click();
+    };
+  }
+  if (videoBtn) {
+    videoBtn.onclick = () => {
+      const videoCallBtn = document.getElementById("video-call-btn");
+      if (videoCallBtn) videoCallBtn.click();
+    };
+  }
+  if (searchBtn) {
+    searchBtn.onclick = () => {
+      const searchInput = document.getElementById("message-search-input");
+      if (searchInput) searchInput.focus();
+    };
+  }
+
+  // Bind Media Header click to open media gallery panel
+  const mediaHeader = document.getElementById("contact-media-header");
+  if (mediaHeader) {
+    mediaHeader.onclick = () => {
+      openMediaGalleryPanel();
+    };
+  }
+
+  // Populate media preview grid
+  populateContactMediaGrid(State.activeChat);
+
+  // Bind Danger actions
+  const blockBtn = document.getElementById("contact-block-btn");
+  const clearBtn = document.getElementById("contact-clear-btn");
+
+  if (blockBtn) {
+    blockBtn.onclick = () => {
+      if (typeof showToast === "function") showToast(`Block settings for ${username} coming soon`, "info");
+    };
+  }
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      if (typeof showToast === "function") showToast("Clear chat coming soon", "info");
+    };
+  }
+
+  contactSidebar.classList.remove("hidden");
+}
+
+function closeContactInfoSidebar() {
+  const contactSidebar = document.getElementById("contact-info-sidebar");
+  if (contactSidebar) {
+    contactSidebar.classList.add("hidden");
+  }
+  // Also reset gallery panel if it was open
+  const galleryPanel = document.getElementById("media-gallery-panel");
+  if (galleryPanel && !galleryPanel.classList.contains("hidden")) {
+    galleryPanel.classList.add("hidden");
+    const contactBody = document.querySelector(".contact-info-body");
+    const contactHeader = document.querySelector(".contact-info-header");
+    if (contactBody) contactBody.style.display = "";
+    if (contactHeader) contactHeader.style.display = "";
+  }
+}
+
+async function populateContactMediaGrid(chatId) {
+  const gridEl = document.getElementById("contact-media-grid");
+  const countEl = document.getElementById("contact-media-count");
+  if (!gridEl) return;
+
+  // Hide grid initially
+  gridEl.style.display = "none";
+  gridEl.innerHTML = "";
+
+  // ── 1. PREVIEW GRID — only from what's currently loaded in the chat (frontend cache)
+  const cachedMsgs = (State.messages && State.messages[chatId]) || [];
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+  // Get image/video messages visible in this chat window
+  const cachedMedia = cachedMsgs.filter(m => m.type === "image" || m.type === "video");
+  const previewItems = cachedMedia.slice(-4).reverse(); // show 4 most recent
+
+  if (previewItems.length > 0) {
+    gridEl.style.display = "";
+    gridEl.innerHTML = "";
+
+    for (const m of previewItems) {
+      const thumb = document.createElement("div");
+      thumb.className = "contact-media-thumb";
+
+      let thumbUrl = m.thumbnail || m.thumb || m.cover || "";
+
+      if (!thumbUrl && m.content) {
+        if (typeof getDecryptedStreamUrl === "function") {
+          try { thumbUrl = await getDecryptedStreamUrl(m.content, m.id || m.tempId); } catch (e) { thumbUrl = ""; }
+        }
+      }
+
+      if (thumbUrl) {
+        thumb.innerHTML = `<img src="${thumbUrl}" alt="media" onerror="this.parentNode.innerHTML='<div class=\\'contact-media-fallback\\'><svg width=\\'20\\' height=\\'20\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\'><rect x=\\'3\\' y=\\'3\\' width=\\'18\\' height=\\'18\\' rx=\\'2\\' ry=\\'2\\'/><circle cx=\\'8.5\\' cy=\\'8.5\\' r=\\'1.5\\'/><polyline points=\\'21 15 16 10 5 21\\'/></svg></div>'" />`;
+      } else {
+        thumb.innerHTML = `
+          <div class="contact-media-fallback">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </div>`;
+      }
+
+      thumb.onclick = () => openMediaGalleryPanel();
+      gridEl.appendChild(thumb);
+    }
+  }
+  // If no media in frontend cache → grid stays hidden
+
+      // ── 2. COUNT BADGE — from the database (API) — reflects all stored media
+  try {
+    if (typeof fetchMedia === "function") {
+      const data = await fetchMedia(chatId, null, 200);
+      const allItems = data.Data?.data || [];
+
+      // Fetch links count from database via API
+      let linkCount = 0;
+      if (typeof fetchLinks === "function") {
+        try {
+          const linkData = await fetchLinks(chatId, 200);
+          linkCount = linkData.Data?.data?.length || 0;
+        } catch (e) {
+          console.warn("fetchLinks count failed, falling back to cache:", e);
+        }
+      }
+
+      // Fallback: If database fetch didn't return links count, use cache
+      if (linkCount === 0) {
+        for (const m of cachedMsgs) {
+          if (m.type === "text" && m.content) {
+            const urls = m.content.match(urlRegex);
+            if (urls) linkCount += urls.length;
+          }
+        }
+      }
+
+      const totalCount = allItems.length + linkCount;
+
+      if (countEl) {
+        countEl.innerHTML = totalCount > 0 ? `${totalCount} &rsaquo;` : `&rsaquo;`;
+        countEl.style.cursor = "pointer";
+        countEl.onclick = (e) => { e.stopPropagation(); openMediaGalleryPanel(); };
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch media count:", err);
+  }
+
+  // ── 3. Wire the header row to open gallery on click
+  const headerEl = document.getElementById("contact-media-header");
+  if (headerEl) {
+    headerEl.style.cursor = "pointer";
+    headerEl.onclick = () => openMediaGalleryPanel();
+  }
+}
+
+
+// =========================================================================
+// MEDIA GALLERY PANEL — Full Media/Docs/Links view inside contact sidebar
+// =========================================================================
+let _mediaGalleryCache = { media: [], docs: [], links: [] };
+let _mediaGalleryLoaded = false;
+
+async function promptPasswordForMediaGallery(onSuccess) {
+  // Load password overlay if not exists
+  let passwordOverlay = document.getElementById("passwordOverlay");
+  if (!passwordOverlay) {
+    try {
+      const html = await ComponentLoader.load("password-overlay");
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = html;
+      passwordOverlay = wrapper.firstElementChild;
+      document.body.appendChild(passwordOverlay);
+      
+      const passwordInput = document.getElementById("passwordInput");
+      if (passwordInput) {
+        passwordInput.addEventListener("keydown", e => {
+          if (e.key === "Enter") {
+            if (typeof window.unlockScreen === "function") {
+              window.unlockScreen();
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Failed to load password overlay for media view:", err);
+      return;
+    }
+  }
+
+  const passwordInput = document.getElementById("passwordInput");
+  const errorMsg = document.getElementById("errorMsg");
+  const submitBtn = document.getElementById("submitBtn");
+
+  if (passwordInput) {
+    passwordInput.value = "";
+    passwordInput.disabled = false;
+  }
+  if (errorMsg) errorMsg.textContent = "";
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.classList.remove("loading");
+    submitBtn.textContent = "Submit";
+  }
+
+  let remainingAttempts = 5;
+  passwordOverlay.classList.add("active");
+  if (passwordInput) passwordInput.focus();
+
+  const originalUnlock = window.unlockScreen;
+  window.unlockScreen = async function () {
+    const btn = document.getElementById("submitBtn");
+    const input = document.getElementById("passwordInput");
+    const error = document.getElementById("errorMsg");
+
+    if (!btn || btn.disabled) return;
+    if (error) error.textContent = "";
+    btn.disabled = true;
+    btn.classList.add("loading");
+    btn.textContent = "Verifying";
+
+    try {
+      const verifyFn = window.fakePasswordApi || (async (pw) => {
+        const response = await loginuser({ identifier: State.currentUser.username, password: pw, type: "password" });
+        return !!response.Data?.status;
+      });
+
+      const success = await verifyFn(input.value);
+      if (success) {
+        btn.disabled = false;
+        btn.classList.remove("loading");
+        btn.textContent = "Submit";
+        passwordOverlay.classList.remove("active");
+        window.unlockScreen = originalUnlock;
+        
+        if (onSuccess) onSuccess();
+        return;
+      }
+
+      remainingAttempts--;
+      if (remainingAttempts <= 0) {
+        if (error) error.textContent = "You have exceeded the maximum number of attempts. Access has been blocked.";
+        btn.textContent = "Blocked";
+        btn.classList.remove("loading");
+        btn.disabled = true;
+        if (input) input.disabled = true;
+        setTimeout(() => { 
+          passwordOverlay.classList.remove("active");
+          window.unlockScreen = originalUnlock; 
+        }, 3000);
+        return;
+      }
+      
+      const getAttemptMsg = (attemptsLeft) => {
+        if (attemptsLeft === 4) return "Invalid password. You have 4 attempts remaining.";
+        if (attemptsLeft === 3) return "Warning: Only 3 attempts remaining.";
+        if (attemptsLeft === 2) return "Alert: Only 2 attempts remaining.";
+        if (attemptsLeft === 1) return "Final warning: Last attempt remaining.";
+        return `Invalid password. Attempts remaining: ${attemptsLeft}`;
+      };
+
+      if (error) error.textContent = getAttemptMsg(remainingAttempts);
+      btn.disabled = false;
+      btn.classList.remove("loading");
+      btn.textContent = "Submit";
+    } catch (err) {
+      if (error) error.textContent = "Server error. Please try again later.";
+      btn.disabled = false;
+      btn.classList.remove("loading");
+      btn.textContent = "Submit";
+    }
+  };
+}
+
+function openMediaGalleryPanel() {
+  promptPasswordForMediaGallery(() => {
+    const contactBody = document.querySelector(".contact-info-body");
+    const contactHeader = document.querySelector(".contact-info-header");
+    const galleryPanel = document.getElementById("media-gallery-panel");
+    if (!galleryPanel) return;
+
+    if (contactBody) contactBody.style.display = "none";
+    if (contactHeader) contactHeader.style.display = "none";
+    galleryPanel.classList.remove("hidden");
+
+    const backBtn = document.getElementById("media-gallery-back-btn");
+    if (backBtn) {
+      backBtn.onclick = () => closeMediaGalleryPanel();
+    }
+
+    const tabs = galleryPanel.querySelectorAll(".media-gallery-tab");
+    tabs.forEach(tab => {
+      tab.onclick = () => {
+        tabs.forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        renderMediaGalleryTab(tab.dataset.tab);
+      };
+    });
+
+    const viewAllBtn = document.getElementById("media-gallery-view-all");
+    if (viewAllBtn) {
+      viewAllBtn.onclick = () => {
+        closeContactInfoSidebar();
+        if (typeof fetchAndShowAllMedia === "function") {
+          fetchAndShowAllMedia();
+        }
+      };
+    }
+
+    // Reset to media tab
+    tabs.forEach(t => t.classList.remove("active"));
+    const mediaTab = galleryPanel.querySelector('[data-tab="media"]');
+    if (mediaTab) mediaTab.classList.add("active");
+
+    _mediaGalleryLoaded = false;
+    loadMediaGalleryData().then(() => {
+      renderMediaGalleryTab("media");
+    });
+  });
+}
+
+function closeMediaGalleryPanel() {
+  const contactBody = document.querySelector(".contact-info-body");
+  const contactHeader = document.querySelector(".contact-info-header");
+  const galleryPanel = document.getElementById("media-gallery-panel");
+  if (!galleryPanel) return;
+
+  galleryPanel.classList.add("hidden");
+  if (contactBody) contactBody.style.display = "";
+  if (contactHeader) contactHeader.style.display = "";
+}
+
+async function loadMediaGalleryData() {
+  const contentEl = document.getElementById("media-gallery-content");
+  if (!contentEl) return;
+
+  contentEl.innerHTML = `<div class="media-gallery-loading">Loading...</div>`;
+  _mediaGalleryCache = { media: [], docs: [], links: [] };
+
+  try {
+    if (typeof fetchMedia !== "function" || !State.activeChat) {
+      contentEl.innerHTML = `<div class="media-gallery-empty">No media available</div>`;
+      return;
+    }
+
+    // ── 1. Fetch media + docs from database
+    const data = await fetchMedia(State.activeChat, null, 200);
+    const allMessages = data.Data?.data || [];
+
+    for (const m of allMessages) {
+      if (m.type === "image" || m.type === "video" || m.type === "audio") {
+        _mediaGalleryCache.media.push(m);
+      } else if (m.type === "document" || m.type === "file") {
+        _mediaGalleryCache.docs.push(m);
+      }
+    }
+
+    // ── 2. Fetch links from database via dedicated endpoint
+    if (typeof fetchLinks === "function") {
+      try {
+        const linkData = await fetchLinks(State.activeChat, 200);
+        const dbLinks = linkData.Data?.data || [];
+        for (const l of dbLinks) {
+          _mediaGalleryCache.links.push(l);
+        }
+      } catch (e) { console.warn("fetchLinks failed:", e); }
+    }
+
+    // ── 3. Merge any extra items from in-memory cached messages
+    // (covers messages loaded but not yet committed to DB in some edge cases)
+    const cachedMsgs = (State.messages && State.messages[State.activeChat]) || [];
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    for (const m of cachedMsgs) {
+      if ((m.type === "document" || m.type === "file") && !_mediaGalleryCache.docs.find(d => d.id === (m.id || m.tempId))) {
+        _mediaGalleryCache.docs.push(m);
+      }
+      if (m.type === "text" && m.content) {
+        const urls = m.content.match(urlRegex);
+        if (urls) {
+          for (const url of urls) {
+            // Avoid duplicates already fetched from DB
+            if (!_mediaGalleryCache.links.find(l => l.url === url)) {
+              _mediaGalleryCache.links.push({ url, createdAt: m.createdAt, from: m.from || m.sender || null });
+            }
+          }
+        }
+      }
+    }
+
+    _mediaGalleryLoaded = true;
+  } catch (err) {
+    console.error("Failed to load media gallery data:", err);
+    contentEl.innerHTML = `<div class="media-gallery-empty">Failed to load media</div>`;
+  }
+}
+
+async function renderMediaGalleryTab(tab) {
+  const contentEl = document.getElementById("media-gallery-content");
+  if (!contentEl) return;
+
+  if (!_mediaGalleryLoaded) {
+    contentEl.innerHTML = `<div class="media-gallery-loading">Loading...</div>`;
+    return;
+  }
+
+  if (tab === "media") {
+    await renderGalleryMediaTab(contentEl);
+  } else if (tab === "docs") {
+    renderGalleryDocsTab(contentEl);
+  } else if (tab === "links") {
+    renderGalleryLinksTab(contentEl);
+  }
+}
+
+async function renderGalleryMediaTab(contentEl) {
+  const items = _mediaGalleryCache.media;
+  if (items.length === 0) {
+    contentEl.innerHTML = `<div class="media-gallery-empty">No media shared yet</div>`;
+    return;
+  }
+
+  const groups = {};
+  const now = new Date();
+  for (const m of items) {
+    const d = new Date(m.createdAt);
+    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    let label;
+    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) {
+      label = "THIS MONTH";
+    } else {
+      label = d.toLocaleString("en-US", { month: "long", year: "numeric" }).toUpperCase();
+    }
+    if (!groups[monthKey]) groups[monthKey] = { label, items: [] };
+    groups[monthKey].items.push(m);
+  }
+
+  contentEl.innerHTML = "";
+  const sortedKeys = Object.keys(groups).sort().reverse();
+
+  for (const key of sortedKeys) {
+    const group = groups[key];
+    const groupDiv = document.createElement("div");
+    groupDiv.className = "media-gallery-month-group";
+
+    const labelDiv = document.createElement("div");
+    labelDiv.className = "media-gallery-month-label";
+    labelDiv.textContent = group.label;
+    groupDiv.appendChild(labelDiv);
+
+    const gridDiv = document.createElement("div");
+    gridDiv.className = "media-gallery-grid";
+
+    for (const m of group.items) {
+      const itemDiv = document.createElement("div");
+      itemDiv.className = "media-gallery-item";
+
+      // Use pre-built thumbnail if available (API returns /api/thumbnail/:id)
+      let thumbUrl = m.thumbnail || m.thumb || m.cover || "";
+      
+      if (!thumbUrl && m.content) {
+        // Fallback: decrypt stream URL for direct display
+        if (typeof getDecryptedStreamUrl === "function") {
+          try { thumbUrl = await getDecryptedStreamUrl(m.content, m.id); } catch (e) { /* */ }
+        } else {
+          thumbUrl = m.content;
+        }
+      }
+
+      if (m.type === "video") {
+        if (thumbUrl && thumbUrl.includes("/api/thumbnail")) {
+          itemDiv.innerHTML = `<img src="${thumbUrl}" alt="" onerror="this.style.display='none'" />
+            <div class="video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>`;
+        } else {
+          itemDiv.innerHTML = `<video src="${thumbUrl}" preload="metadata"></video>
+            <div class="video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>`;
+        }
+      } else if (m.type === "audio") {
+        const dur = m.duration ? ` ${Math.floor(m.duration / 60)}:${String(Math.floor(m.duration % 60)).padStart(2, "0")}` : "Audio";
+        itemDiv.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;color:rgba(255,255,255,0.7);">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#25d366" stroke-width="1.8">
+              <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+            </svg>
+            <span style="font-size:10px;color:rgba(255,255,255,0.5);">${dur}</span>
+          </div>`;
+      } else {
+        itemDiv.innerHTML = `<img src="${thumbUrl}" alt="" onerror="this.style.display='none'" />`;
+      }
+
+      itemDiv.onclick = () => {
+        const viewerItems = items.map((msg, idx) => ({
+          index: idx, id: msg.id ?? msg.tempId, type: msg.type,
+          src: msg.content, thumb: msg.thumb || null, cover: msg.cover || null,
+          createdAt: msg.createdAt, originalMsg: msg
+        }));
+        const clickIdx = items.indexOf(m);
+        if (typeof MediaViewer !== "undefined") {
+          const v = new MediaViewer(State.activeChat, viewerItems);
+          v.open(clickIdx >= 0 ? clickIdx : 0);
+        }
+      };
+
+      gridDiv.appendChild(itemDiv);
+    }
+
+    groupDiv.appendChild(gridDiv);
+    contentEl.appendChild(groupDiv);
+  }
+}
+
+function renderGalleryDocsTab(contentEl) {
+  const items = _mediaGalleryCache.docs;
+  if (items.length === 0) {
+    contentEl.innerHTML = `<div class="media-gallery-empty">No documents shared yet</div>`;
+    return;
+  }
+
+  // Map extension → CSS class for colour coding
+  const EXT_CLASS = {
+    pdf: "pdf", doc: "doc", docx: "doc",
+    xls: "xls", xlsx: "xls", csv: "csv",
+    txt: "txt", zip: "zip", rar: "zip",
+    ppt: "doc", pptx: "doc"
+  };
+
+  contentEl.innerHTML = "";
+  for (const m of items) {
+    // fileName now comes from the API; fall back to parsing content URL
+    const rawName = m.fileName || m.filename || m.caption || "";
+    const filename = rawName || (m.content ? decodeURIComponent(m.content.split("/").pop().split("?")[0]) : "Document");
+    const ext = filename.includes(".") ? filename.split(".").pop().toLowerCase() : "file";
+    const extClass = EXT_CLASS[ext] || "default";
+    const label = ext.toUpperCase().slice(0, 4) || "FILE";
+    const date = m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }) : "";
+    const size = m.size && m.size !== "0 B" ? ` · ${m.size}` : "";
+
+    const docDiv = document.createElement("div");
+    docDiv.className = "media-gallery-doc-item";
+    docDiv.innerHTML = `
+      <div class="media-gallery-doc-icon ${extClass}">${label}</div>
+      <div class="media-gallery-doc-info">
+        <div class="media-gallery-doc-name" title="${filename}">${filename}</div>
+        <div class="media-gallery-doc-date">${date}${size}</div>
+      </div>`;
+
+    docDiv.onclick = () => {
+      const url = m.content || "";
+      if (url) window.open(url, "_blank");
+    };
+
+    contentEl.appendChild(docDiv);
+  }
+}
+
+function renderGalleryLinksTab(contentEl) {
+  const items = _mediaGalleryCache.links;
+  if (items.length === 0) {
+    contentEl.innerHTML = `<div class="media-gallery-empty">No links shared yet</div>`;
+    return;
+  }
+
+  // Get context: current user ID and active conversation partner name
+  const myId = State.currentUser?._id || State.currentUser?.id || "";
+  const conv = State.conversations?.find(c => c.id === State.activeChat);
+  const otherName = conv?.name || conv?.username || "Contact";
+  const myName = State.currentUser?.name || State.currentUser?.username || "You";
+
+  contentEl.innerHTML = "";
+
+  for (const item of items) {
+    // Parse domain from URL
+    let domain = item.url;
+    try { domain = new URL(item.url).hostname.replace(/^www\./, ""); } catch (e) { /* */ }
+
+    // Format date/time
+    const d = item.createdAt ? new Date(item.createdAt) : null;
+    const timeStr = d ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : "";
+    const dateStr = d ? formatLinkDate(d) : "";
+
+    // Determine sender
+    const isMe = !item.from || String(item.from) === String(myId);
+    const senderName = isMe ? myName : otherName;
+    const directionLabel = isMe ? `You ▸ ${otherName}` : `${otherName} ▸ You`;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "gallery-link-card" + (isMe ? " gallery-link-card--me" : "");
+    wrapper.innerHTML = `
+      <div class="gallery-link-meta">
+        <span class="gallery-link-sender">${directionLabel}</span>
+        <span class="gallery-link-date">${dateStr}</span>
+      </div>
+      <div class="gallery-link-bubble" style="${isMe ? "background:var(--sent-bubble,#005c4b);" : "background:var(--received-bubble,#1f2c33);"}">
+        <div class="gallery-link-preview">
+          <div class="gallery-link-preview-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="2">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          </div>
+          <div class="gallery-link-preview-text">
+            <div class="gallery-link-preview-title">${domain}</div>
+            <div class="gallery-link-preview-url">${item.url}</div>
+            <div class="gallery-link-preview-domain">${domain}</div>
+          </div>
+        </div>
+        <a class="gallery-link-url" href="${item.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${item.url}</a>
+        <div class="gallery-link-time">${timeStr}</div>
+      </div>`;
+
+    wrapper.onclick = () => window.open(item.url, "_blank");
+    contentEl.appendChild(wrapper);
+  }
+}
+
+function formatLinkDate(d) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = (today - msgDay) / 86400000;
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  if (diff < 7) return d.toLocaleDateString("en-US", { weekday: "long" });
+  return d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+}
+
+window.initContactInfoSidebar = initContactInfoSidebar;
+window.openContactInfoSidebar = openContactInfoSidebar;
+window.closeContactInfoSidebar = closeContactInfoSidebar;
+window.openMediaGalleryPanel = openMediaGalleryPanel;
+window.closeMediaGalleryPanel = closeMediaGalleryPanel;
 
