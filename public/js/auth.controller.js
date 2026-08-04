@@ -7,6 +7,191 @@
 const TOKEN_KEY = "chat_token";
 const USER_KEY = "chat_user";
 
+// ─── Virtual Storage Implementation (IndexedDB as source of truth) ─────
+const virtualStorage = {};
+let isVirtualStorageLoaded = false;
+let syncTimeout = null;
+
+// Get native Storage methods from prototype
+const originalSetItem = Storage.prototype.setItem;
+const originalGetItem = Storage.prototype.getItem;
+const originalRemoveItem = Storage.prototype.removeItem;
+const originalClear = Storage.prototype.clear;
+const originalKey = Storage.prototype.key;
+
+// Expose the load promise so main.js can wait for it
+window.localStorageIndexedDBSyncPromise = new Promise((resolve) => {
+  const request = indexedDB.open("user_data_db", 1);
+  
+  request.onupgradeneeded = (e) => {
+    const db = e.target.result;
+    if (!db.objectStoreNames.contains("data")) {
+      db.createObjectStore("data", { keyPath: "key" });
+    }
+  };
+
+  request.onsuccess = (e) => {
+    const db = e.target.result;
+    const transaction = db.transaction("data", "readonly");
+    const store = transaction.objectStore("data");
+    const getAllRequest = store.getAll();
+
+    getAllRequest.onsuccess = () => {
+      const records = getAllRequest.result || [];
+      for (const record of records) {
+        virtualStorage[record.key] = record.value;
+      }
+      
+      // Migration check: if real localStorage has keys, migrate them and clear real localStorage
+      let hasMigrated = false;
+      const keysToMigrate = ["chat_token", "chat_user", "SSC_USER", "buzz-app-theme", "app_version", "playTune", "buzz_data_usage", "buzz_data_usage_history"];
+      for (const key of keysToMigrate) {
+        const val = originalGetItem.call(window.localStorage, key);
+        if (val !== null && !virtualStorage.hasOwnProperty(key)) {
+          virtualStorage[key] = val;
+          hasMigrated = true;
+        }
+      }
+      
+      // Clear the real localStorage immediately and keep it empty
+      try {
+        originalClear.call(window.localStorage);
+        originalClear.call(localStorage);
+      } catch (err) {}
+
+      if (hasMigrated) {
+        performLocalStorageIndexedDBSync()
+          .then(() => {
+            isVirtualStorageLoaded = true;
+            resolve();
+          })
+          .catch(() => {
+            isVirtualStorageLoaded = true;
+            resolve();
+          });
+      } else {
+        isVirtualStorageLoaded = true;
+        resolve();
+      }
+    };
+
+    getAllRequest.onerror = () => {
+      isVirtualStorageLoaded = true;
+      resolve();
+    };
+  };
+
+  request.onerror = () => {
+    isVirtualStorageLoaded = true;
+    resolve();
+  };
+});
+
+// Asynchronously sync the entire virtual storage to IndexedDB
+async function performLocalStorageIndexedDBSync() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("user_data_db", 1);
+
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains("data")) {
+        db.createObjectStore("data", { keyPath: "key" });
+      }
+    };
+
+    request.onsuccess = (e) => {
+      const db = e.target.result;
+      const transaction = db.transaction("data", "readwrite");
+      const store = transaction.objectStore("data");
+
+      const clearRequest = store.clear();
+      
+      clearRequest.onsuccess = () => {
+        for (const [key, value] of Object.entries(virtualStorage)) {
+          if (value !== undefined && value !== null) {
+            store.put({ key, value });
+          }
+        }
+      };
+
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+
+      transaction.onerror = (err) => {
+        db.close();
+        reject(err.target.error);
+      };
+    };
+
+    request.onerror = (e) => {
+      reject(e.target.error);
+    };
+  });
+}
+
+function debouncedSync() {
+  if (syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(() => {
+    performLocalStorageIndexedDBSync().catch(console.error);
+  }, 100);
+}
+
+// Redefine methods directly on window.localStorage to bypass prototype context / proxy quirks completely
+Object.defineProperty(window.localStorage, "setItem", {
+  value: function(key, value) {
+    virtualStorage[key] = String(value);
+    debouncedSync();
+  },
+  writable: true,
+  configurable: true
+});
+
+Object.defineProperty(window.localStorage, "getItem", {
+  value: function(key) {
+    return virtualStorage.hasOwnProperty(key) ? virtualStorage[key] : null;
+  },
+  writable: true,
+  configurable: true
+});
+
+Object.defineProperty(window.localStorage, "removeItem", {
+  value: function(key) {
+    delete virtualStorage[key];
+    debouncedSync();
+  },
+  writable: true,
+  configurable: true
+});
+
+Object.defineProperty(window.localStorage, "clear", {
+  value: function() {
+    for (const k of Object.keys(virtualStorage)) {
+      delete virtualStorage[k];
+    }
+    debouncedSync();
+  },
+  writable: true,
+  configurable: true
+});
+
+Object.defineProperty(window.localStorage, "key", {
+  value: function(index) {
+    const keys = Object.keys(virtualStorage);
+    return index >= 0 && index < keys.length ? keys[index] : null;
+  },
+  writable: true,
+  configurable: true
+});
+
+Object.defineProperty(window.localStorage, "length", {
+  get: function() {
+    return Object.keys(virtualStorage).length;
+  },
+  configurable: true
+});
+
 const TokenStore = {
   save(token, user) {
     localStorage.setItem(TOKEN_KEY, token);
@@ -38,6 +223,10 @@ async function refreshAccessToken() {
       }
 
       TokenStore.setToken(data.token);
+
+      if (typeof socket !== "undefined" && socket && socket.auth) {
+        socket.auth.token = data.token;
+      }
 
       return data.token;
     })

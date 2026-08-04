@@ -3,6 +3,11 @@
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
+    // Wait for virtual storage to load from IndexedDB
+    if (window.localStorageIndexedDBSyncPromise) {
+        await window.localStorageIndexedDBSyncPromise;
+    }
+
     // Register Service Worker for media caching
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/sw.js')

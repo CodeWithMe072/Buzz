@@ -175,6 +175,24 @@ function initSocket() {
   // ── Connection error (token expired/invalid) ──────────────
   socket.on("connect_error", (err) => {
     console.error("[Socket] connect_error:", err.message);
+    if (err.message.includes("TOKEN_EXPIRED")) {
+      if (typeof refreshAccessToken === "function") {
+        refreshAccessToken()
+          .then((newToken) => {
+            if (newToken && socket) {
+              socket.auth.token = newToken;
+              socket.connect();
+            } else {
+              showToast("Session expired. Please log in again.", "error");
+            }
+          })
+          .catch((refreshErr) => {
+            console.error("[Socket] Failed to refresh token on connect error:", refreshErr);
+            showToast("Session expired. Please log in again.", "error");
+          });
+        return;
+      }
+    }
     if (err.message.includes("UNAUTHORIZED") || err.message.includes("TOKEN_EXPIRED")) {
       showToast("Session expired. Please log in again.", "error");
       // setTimeout(logout, 1500);
