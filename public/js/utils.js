@@ -532,6 +532,236 @@ function makeElementResizable(elm, handle) {
     }
 }
 
+function initLiveCameraPiP(modal) {
+    if (modal.dataset.pipWired) return;
+    modal.dataset.pipWired = "true";
+
+    const header = document.getElementById("live-video-preview-header");
+    const resizeHandle = document.getElementById("live-video-preview-resize-handle");
+    const minimizeBtn = document.getElementById("live-video-preview-minimize-btn");
+    const minimizeHeaderBtn = document.getElementById("live-video-preview-minimize-header-btn");
+
+    let isMinimized = false;
+    let currentCorner = localStorage.getItem("pip_corner") || "top-right";
+    let expandedWidth = parseInt(localStorage.getItem("pip_width"), 10) || 320;
+    let expandedHeight = Math.round(expandedWidth * 0.75);
+
+    // Initial position setup helper
+    const updatePosition = () => {
+        const width = isMinimized ? 56 : expandedWidth;
+        const height = isMinimized ? 56 : expandedHeight;
+        const margin = 8;
+
+        if (currentCorner === "top-left") {
+            modal.style.left = margin + "px";
+            modal.style.top = margin + "px";
+        } else if (currentCorner === "top-right") {
+            modal.style.left = (window.innerWidth - width - margin) + "px";
+            modal.style.top = margin + "px";
+        } else if (currentCorner === "bottom-left") {
+            modal.style.left = margin + "px";
+            modal.style.top = (window.innerHeight - height - margin) + "px";
+        } else { // bottom-right
+            modal.style.left = (window.innerWidth - width - margin) + "px";
+            modal.style.top = (window.innerHeight - height - margin) + "px";
+        }
+        modal.style.right = "auto";
+        modal.style.bottom = "auto";
+
+        if (!isMinimized) {
+            modal.style.width = width + "px";
+            modal.style.height = height + "px";
+        }
+    };
+
+    // Responsive Mobile check
+    const checkResponsive = () => {
+        const isMobile = window.innerWidth <= 640;
+        if (isMobile && !isMinimized) {
+            toggleMinimize(true);
+        } else {
+            updatePosition();
+        }
+    };
+
+    window.addEventListener("resize", () => {
+        // Ensure bounds are within viewport
+        expandedWidth = Math.min(expandedWidth, window.innerWidth - 16);
+        expandedHeight = Math.round(expandedWidth * 0.75);
+        updatePosition();
+    });
+
+    const toggleMinimize = (minimize) => {
+        isMinimized = minimize;
+        if (isMinimized) {
+            modal.classList.add("pip-minimized");
+            modal.style.width = "56px";
+            modal.style.height = "56px";
+        } else {
+            modal.classList.remove("pip-minimized");
+            modal.style.width = expandedWidth + "px";
+            modal.style.height = expandedHeight + "px";
+        }
+        updatePosition();
+    };
+
+    // Minimize buttons listeners
+    if (minimizeBtn) minimizeBtn.onclick = (e) => { e.stopPropagation(); toggleMinimize(true); };
+    if (minimizeHeaderBtn) minimizeHeaderBtn.onclick = (e) => { e.stopPropagation(); toggleMinimize(!isMinimized); };
+    
+    // Bubble expand listener
+    modal.addEventListener("click", () => {
+        if (isMinimized) {
+            toggleMinimize(false);
+        }
+    });
+
+    // --- Unified Pointer Dragging logic ---
+    let dragStartX = 0, dragStartY = 0;
+    let initialLeft = 0, initialTop = 0;
+    let isDragging = false;
+
+    const onPointerDown = (e) => {
+        // Allow drag from header if expanded, or from anywhere if minimized
+        const isHeader = header && header.contains(e.target);
+        if (!isMinimized && !isHeader) return;
+        
+        // Prevent action on interactive header buttons
+        if (e.target.closest("button") || e.target.id === "live-video-preview-close-x" || e.target.closest(".pip-overlay-btn")) return;
+
+        e.preventDefault();
+        isDragging = true;
+        modal.classList.add("dragging");
+
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        initialLeft = modal.offsetLeft;
+        initialTop = modal.offsetTop;
+
+        document.addEventListener("pointermove", onPointerMove);
+        document.addEventListener("pointerup", onPointerUp);
+    };
+
+    const onPointerMove = (e) => {
+        if (!isDragging) return;
+        const deltaX = e.clientX - dragStartX;
+        const deltaY = e.clientY - dragStartY;
+
+        let newLeft = initialLeft + deltaX;
+        let newTop = initialTop + deltaY;
+        const width = isMinimized ? 56 : expandedWidth;
+        const height = isMinimized ? 56 : expandedHeight;
+
+        // Constraint clamp
+        newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - width));
+        newTop = Math.max(0, Math.min(newTop, window.innerHeight - height));
+
+        modal.style.left = newLeft + "px";
+        modal.style.top = newTop + "px";
+    };
+
+    const onPointerUp = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        modal.classList.remove("dragging");
+
+        document.removeEventListener("pointermove", onPointerMove);
+        document.removeEventListener("pointerup", onPointerUp);
+
+        // Find nearest corner to snap
+        const width = isMinimized ? 56 : expandedWidth;
+        const height = isMinimized ? 56 : expandedHeight;
+        
+        const midX = modal.offsetLeft + width / 2;
+        const midY = modal.offsetTop + height / 2;
+        
+        const screenCenterX = window.innerWidth / 2;
+        const screenCenterY = window.innerHeight / 2;
+
+        if (midX < screenCenterX && midY < screenCenterY) {
+            currentCorner = "top-left";
+        } else if (midX >= screenCenterX && midY < screenCenterY) {
+            currentCorner = "top-right";
+        } else if (midX < screenCenterX && midY >= screenCenterY) {
+            currentCorner = "bottom-left";
+        } else {
+            currentCorner = "bottom-right";
+        }
+
+        localStorage.setItem("pip_corner", currentCorner);
+        updatePosition();
+    };
+
+    // Wire drag triggers
+    modal.addEventListener("pointerdown", onPointerDown);
+
+    // --- Unified Pointer Resizing logic ---
+    if (resizeHandle) {
+        let resizeStartX = 0;
+        let resizeStartWidth = 0;
+        let isResizing = false;
+
+        const onResizeDown = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            isResizing = true;
+            resizeStartX = e.clientX;
+            resizeStartWidth = expandedWidth;
+
+            document.addEventListener("pointermove", onResizeMove);
+            document.addEventListener("pointerup", onResizeUp);
+        };
+
+        const onResizeMove = (e) => {
+            if (!isResizing) return;
+            const deltaX = e.clientX - resizeStartX;
+            
+            // Anchoring direction adjustments: if docked to right, resizing adjusts opposite
+            let newWidth = resizeStartWidth;
+            if (currentCorner === "top-right" || currentCorner === "bottom-right") {
+                newWidth = resizeStartWidth - deltaX;
+            } else {
+                newWidth = resizeStartWidth + deltaX;
+            }
+
+            // Clamping constraints
+            const minW = 180;
+            const maxW = Math.min(480, window.innerWidth - 16);
+            newWidth = Math.max(minW, Math.min(newWidth, maxW));
+
+            expandedWidth = newWidth;
+            expandedHeight = Math.round(newWidth * 0.75); // 4:3 lock
+
+            modal.style.width = expandedWidth + "px";
+            modal.style.height = expandedHeight + "px";
+            updatePosition();
+        };
+
+        const onResizeUp = () => {
+            if (!isResizing) return;
+            isResizing = false;
+            document.removeEventListener("pointermove", onResizeMove);
+            document.removeEventListener("pointerup", onResizeUp);
+
+            localStorage.setItem("pip_width", expandedWidth);
+        };
+
+        resizeHandle.addEventListener("pointerdown", onResizeDown);
+    }
+
+    // Expose status updater hook
+    window.updateLiveCameraPiPStatus = (state) => {
+        const dot = document.getElementById("live-video-preview-status-dot");
+        if (dot) {
+            dot.className = "status-dot " + state;
+        }
+    };
+
+    // Initial responsive setup
+    checkResponsive();
+}
+
 function showLiveVideoPreview(friendName, onClose) {
     const modal = document.getElementById("live-video-preview-modal");
     const titleEl = document.getElementById("live-video-preview-title");
@@ -542,42 +772,20 @@ function showLiveVideoPreview(friendName, onClose) {
 
     if (!modal) return;
 
-    // Reset default floating widget position and size based on mobile viewport
-    const isMobile = window.innerWidth <= 768;
-    if (isMobile) {
-        modal.style.width = Math.min(260, window.innerWidth - 20) + "px";
-        modal.style.height = "200px";
-        modal.style.right = "10px";
-        modal.style.top = "70px";
-    } else {
-        modal.style.width = "280px";
-        modal.style.height = "220px";
-        modal.style.right = "20px";
-        modal.style.top = "80px";
-    }
-    modal.style.left = "auto";
-    modal.style.bottom = "auto";
-
-    if (titleEl) titleEl.textContent = `${friendName}'s Live Camera Preview`;
+    if (titleEl) titleEl.textContent = `${friendName}'s Camera`;
     if (frameImg) {
         frameImg.src = "";
         frameImg.style.display = "none";
     }
     if (placeholder) placeholder.style.display = "flex";
 
-    // Setup drag and resize handling if not already done
-    if (!modal.dataset.draggableWired) {
-        const header = document.getElementById("live-video-preview-header");
-        makeElementDraggable(modal, header);
-        
-        const resizeHandle = document.getElementById("live-video-preview-resize-handle");
-        if (resizeHandle) {
-            makeElementResizable(modal, resizeHandle);
-        }
-        modal.dataset.draggableWired = "true";
-    }
+    // Setup draggable/resizable PiP controls
+    initLiveCameraPiP(modal);
 
     modal.style.display = "flex";
+    if (window.updateLiveCameraPiPStatus) {
+        window.updateLiveCameraPiPStatus("reconnecting");
+    }
 
     const closeHandler = () => {
         modal.style.display = "none";
@@ -585,6 +793,16 @@ function showLiveVideoPreview(friendName, onClose) {
             frameImg.src = "";
             frameImg.style.display = "none";
         }
+        
+        // Stop any active recording on close
+        if (window._recordBtnInterval) {
+            clearInterval(window._recordBtnInterval);
+            window._recordBtnInterval = null;
+            if (typeof socket !== "undefined" && socket.connected) {
+                socket.emit("moment:record_stop", { to: State.activeChat });
+            }
+        }
+        
         if (onClose) onClose();
     };
 
@@ -596,6 +814,79 @@ function showLiveVideoPreview(friendName, onClose) {
         toggleCamBtn.onclick = () => {
             if (typeof window.toggleRemoteVideoCamera === "function") {
                 window.toggleRemoteVideoCamera();
+            }
+        };
+    }
+
+    const recordBtn = document.getElementById("live-video-preview-record-btn");
+    if (recordBtn) {
+        recordBtn.style.display = "none"; // Hide initially until video plays
+        recordBtn.disabled = false;
+        recordBtn.style.opacity = "1";
+        
+        const recordDot = document.getElementById("live-video-preview-record-dot");
+        const recordText = document.getElementById("live-video-preview-record-text");
+        if (recordDot) {
+            recordDot.style.background = "#ef4444";
+            recordDot.style.animation = "none";
+        }
+        if (recordText) {
+            recordText.textContent = "Record";
+        }
+        
+        let isRecording = false;
+        let recordInterval = null;
+        let seconds = 0;
+        
+        if (window._recordBtnInterval) {
+            clearInterval(window._recordBtnInterval);
+            window._recordBtnInterval = null;
+        }
+        
+        recordBtn.onclick = () => {
+            if (!isRecording) {
+                isRecording = true;
+                seconds = 0;
+                if (recordDot) {
+                    recordDot.style.background = "#ef4444";
+                    recordDot.style.animation = "voiceBtnPulse 1.5s infinite";
+                }
+                if (recordText) {
+                    recordText.textContent = "Recording (00:00)";
+                }
+                
+                if (typeof socket !== "undefined" && socket.connected) {
+                    socket.emit("moment:record_start", { to: State.activeChat });
+                }
+                
+                recordInterval = setInterval(() => {
+                    seconds++;
+                    const min = String(Math.floor(seconds / 60)).padStart(2, "0");
+                    const sec = String(seconds % 60).padStart(2, "0");
+                    if (recordText) {
+                        recordText.textContent = `Recording (${min}:${sec})`;
+                    }
+                }, 1000);
+                window._recordBtnInterval = recordInterval;
+            } else {
+                isRecording = false;
+                if (recordInterval) {
+                    clearInterval(recordInterval);
+                    window._recordBtnInterval = null;
+                }
+                if (recordDot) {
+                    recordDot.style.background = "#a9a9b2";
+                    recordDot.style.animation = "none";
+                }
+                if (recordText) {
+                    recordText.textContent = "Saving...";
+                }
+                recordBtn.disabled = true;
+                recordBtn.style.opacity = "0.6";
+                
+                if (typeof socket !== "undefined" && socket.connected) {
+                    socket.emit("moment:record_stop", { to: State.activeChat });
+                }
             }
         };
     }
@@ -1250,4 +1541,171 @@ window.initCustomVideoPlayer = function (video) {
 
     window.DataUsageTracker = tracker;
 })();
+
+function showDeviceErrorModal(message, type = 'camera') {
+  const existing = document.getElementById("camera-error-modal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "camera-error-modal";
+  modal.className = "modal-overlay";
+  modal.style.cssText = "z-index: 3000; display: flex; align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);";
+
+  const iconSVG = type === 'mic' 
+    ? `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+         <line x1="1" y1="1" x2="23" y2="23"/>
+         <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/>
+         <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/>
+         <line x1="12" y1="19" x2="12" y2="23"/>
+         <line x1="8" y1="23" x2="16" y2="23"/>
+       </svg>`
+    : `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+         <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+         <line x1="1" y1="1" x2="23" y2="23"/>
+       </svg>`;
+
+  modal.innerHTML = `
+    <style>
+      @keyframes cameraErrorModalFade {
+        from { opacity: 0; transform: translateY(10px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+    </style>
+    <div style="
+      background: #1c1c1e;
+      border: 1px solid #2c2c2e;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 380px;
+      width: 90%;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      animation: cameraErrorModalFade 0.2s ease-out forwards;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    ">
+      <div style="
+        width: 56px;
+        height: 56px;
+        background: rgba(239, 68, 68, 0.15);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 16px;
+      ">
+        ${iconSVG}
+      </div>
+      <h3 style="color: #fff; margin: 0 0 8px; font-size: 18px; font-weight: 600; line-height: 1.3;">Request Failed</h3>
+      <p style="color: #a9a9b2; margin: 0 0 20px; font-size: 14px; line-height: 1.5;">${message}</p>
+      <button id="camera-error-ok-btn" style="
+        background: var(--accent-blue, #0095f6);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 11px 24px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+        width: 100%;
+        outline: none;
+      " onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">OK</button>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.querySelector("#camera-error-ok-btn").onclick = () => {
+    modal.remove();
+  };
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+}
+window.showDeviceErrorModal = showDeviceErrorModal;
+window.showCameraErrorModal = (msg) => showDeviceErrorModal(msg, 'camera');
+
+window.startCameraRequestTimeout = function (friendId, type, resetCallback) {
+    if (!window.activeCameraRequests) {
+        window.activeCameraRequests = {};
+    }
+    
+    const key = `${friendId}_${type}`;
+    if (window.activeCameraRequests[key]) {
+        clearTimeout(window.activeCameraRequests[key].timeoutId);
+    }
+    
+    const timeoutId = setTimeout(() => {
+        delete window.activeCameraRequests[key];
+        
+        if (typeof resetCallback === "function") {
+            resetCallback();
+        }
+        
+        if (type === "video") {
+            const modal = document.getElementById("live-video-preview-modal");
+            if (modal && modal.style.display === "flex") {
+                modal.style.display = "none";
+                const videoEl = document.getElementById("live-video-preview-element");
+                if (videoEl) {
+                    videoEl.srcObject = null;
+                    videoEl.style.display = "none";
+                }
+                if (typeof window.stopReceivingVideoStream === "function") {
+                    window.stopReceivingVideoStream();
+                }
+                socket.emit("moment:stream_stop", { to: friendId });
+            }
+        }
+        
+        const conv = State.conversations.find(c => c.id === friendId);
+        const name = conv ? conv.username : "Friend";
+        showCameraErrorModal(
+            `${name} is busy somewhere, please try again after a few minutes.`
+        );
+    }, 15000);
+    
+    window.activeCameraRequests[key] = {
+        timeoutId,
+        type,
+        resetCallback
+    };
+};
+
+window.startVoiceRequestTimeout = function (friendId, resetCallback) {
+    if (!window.activeVoiceRequests) {
+        window.activeVoiceRequests = {};
+    }
+    
+    const key = `${friendId}_voice`;
+    if (window.activeVoiceRequests[key]) {
+        clearTimeout(window.activeVoiceRequests[key].timeoutId);
+    }
+    
+    const timeoutId = setTimeout(() => {
+        delete window.activeVoiceRequests[key];
+        
+        if (typeof resetCallback === "function") {
+            resetCallback();
+        }
+        
+        if (typeof window.stopListeningToVoice === "function") {
+            window.stopListeningToVoice();
+        }
+        
+        const conv = State.conversations.find(c => c.id === friendId);
+        const name = conv ? conv.username : "Friend";
+        showDeviceErrorModal(
+            `${name} is busy somewhere, please try again after a few minutes.`,
+            'mic'
+        );
+    }, 15000);
+    
+    window.activeVoiceRequests[key] = {
+        timeoutId,
+        resetCallback
+    };
+};
+
+
 

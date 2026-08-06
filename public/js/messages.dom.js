@@ -42,6 +42,10 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
         }).catch(console.error);
     }
 
+    if (typeof updateGroupMessageDOM === "function" && updateGroupMessageDOM(tempId, updates, chatId)) {
+        return;
+    }
+
     const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
     if (!msgEl) return;
 
@@ -185,6 +189,12 @@ function updateMessageByTempId(tempId = null, updates, chatId = null) {
 // UPDATE MEDIA DOM — sender side: swap blob preview → real CDN URL
 // =============================================================================
 function updateMediaDOM(tempId, { content, cover, thumb, type, uploadStatus, fileName, fileSize }) {
+    const chatId = State.messageIndex[tempId];
+    console.log("[updateMediaDOM] tempId:", tempId, "chatId:", chatId, "typeof updateGroupMessageDOM:", typeof updateGroupMessageDOM);
+    if (chatId && typeof updateGroupMessageDOM === "function" && updateGroupMessageDOM(tempId, { content, cover, thumb, type, uploadStatus, fileName, fileSize }, chatId)) {
+        return;
+    }
+
     const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
     if (!msgEl) return;
 

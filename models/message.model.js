@@ -109,6 +109,12 @@ const messageSchema = new mongoose.Schema(
       default: false,
     },
 
+    groupId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
     cameraFacing: {
       type: String,
       default: null,

@@ -3,6 +3,57 @@
  */
 
 // =============================================================================
+// GLOBAL USER AVATAR & NAME SYNC
+// =============================================================================
+function updateGlobalUserAvatarUI() {
+  const user = State.currentUser || {};
+  const firstLetter = (user.username || "U").charAt(0).toUpperCase();
+
+  // 1. Sidebar profile avatar
+  const currentUserAvatar = document.getElementById("current-user-avatar");
+  if (currentUserAvatar) {
+    if (user.avatar) {
+      currentUserAvatar.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span style="display: none;">${firstLetter}</span>`;
+    } else {
+      currentUserAvatar.innerHTML = `<span>${firstLetter}</span>`;
+    }
+  }
+
+  // 2. Navigation bar avatar button
+  const navAvatarBtn = document.getElementById("nav-avatar-btn");
+  if (navAvatarBtn) {
+    if (user.avatar) {
+      navAvatarBtn.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span id="nav-avatar-text" style="display: none;">${firstLetter}</span>`;
+    } else {
+      navAvatarBtn.innerHTML = `<span id="nav-avatar-text">${firstLetter}</span>`;
+    }
+  }
+
+  // 3. Profile modal sidebar avatar
+  const avatarWrap = document.querySelector(".profile-modal-avatar-wrap");
+  if (avatarWrap) {
+    if (user.avatar) {
+      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><img src="${user.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: white;">${firstLetter}</div>`;
+    } else {
+      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: white;">${firstLetter}</div>`;
+    }
+  }
+
+  // 4. Current username on sidebar
+  const currentUsername = document.getElementById("current-username");
+  if (currentUsername) {
+    currentUsername.textContent = user.username || "User";
+  }
+
+  // 5. Profile modal name and email
+  const nameEl = document.getElementById("profile-modal-username");
+  const emailEl = document.getElementById("profile-modal-email");
+  if (nameEl) nameEl.textContent = user.username || "User";
+  if (emailEl) emailEl.textContent = user.email || "";
+}
+window.updateGlobalUserAvatarUI = updateGlobalUserAvatarUI;
+
+// =============================================================================
 // BOOTSTRAP — runs after successful login
 // =============================================================================
 async function bootstrapAfterLogin() {
@@ -89,12 +140,7 @@ async function bootstrapAfterLogin() {
       }
 
       // Update UI with fresh user details
-      const currentUsername = document.getElementById("current-username");
-      if (currentUsername) currentUsername.textContent = State.currentUser.username;
-      const currentUserAvatar = document.getElementById("current-user-avatar");
-      if (currentUserAvatar) {
-        currentUserAvatar.innerHTML = `<span>${State.currentUser.avatar || State.currentUser.username.charAt(0).toUpperCase()}</span>`;
-      }
+      updateGlobalUserAvatarUI();
     }
   }).catch(console.error);
 
@@ -116,6 +162,7 @@ async function bootstrapAfterLogin() {
           fileSize: m.fileSize || null,
           caption: m.caption || null,
           replyTo: m.replyTo || null,
+          groupId: m.groupId || null,
           sender: m.from?.toString() === (State.currentUser.id || State.currentUser._id)?.toString() ? "me" : "other",
           user: m.from?.toString(),
           timestamp: m.createdAt || m.clientTime,
@@ -591,13 +638,32 @@ async function renderPeopleTab(tab) {
       <div class="profile-section-cards-grid">
         <div class="profile-content-card">
           <h3>User Info</h3>
-          <div class="profile-info-item">
-            <label>Username</label>
-            <input type="text" id="profile-modal-info-username" value="${sanitizeInput(user.username || "")}" readonly>
+          <div class="profile-avatar-upload-section" style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
+            <div class="profile-modal-avatar-wrap" id="settings-avatar-wrap" style="position: relative; width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--elevated-bg); cursor: pointer; border: 2px solid var(--border-color); overflow: hidden;">
+              ${user.avatar ? `<img id="settings-avatar-img" src="${user.avatar}" style="width: 100%; height: 100%; object-fit: cover;" />` : `<div class="profile-modal-avatar-letter" id="settings-avatar-letter" style="font-size: 24px; font-weight: 700; color: white;">${(user.username || "U").charAt(0).toUpperCase()}</div>`}
+              <div class="avatar-upload-overlay" style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </div>
+            </div>
+            <input type="file" id="profile-avatar-file-input" accept="image/*" style="display: none;" />
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <button type="button" class="btn btn-secondary btn-sm" id="profile-upload-avatar-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; background: var(--elevated-bg); border: 1px solid var(--border-color); color: white;">Upload Picture</button>
+              <button type="button" class="btn btn-danger btn-sm" id="profile-remove-avatar-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; background: #ef4444; border: none; color: white; cursor: pointer; display: ${user.avatar ? 'block' : 'none'};">Remove</button>
+            </div>
           </div>
           <div class="profile-info-item">
+            <label>Username</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="profile-modal-info-username" value="${sanitizeInput(user.username || "")}" style="flex: 1; padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--border-color); background: var(--elevated-bg); color: white; outline: none;">
+              <button type="button" class="btn btn-primary" id="profile-save-username-btn" style="padding: 0 16px; border-radius: 8px; background: linear-gradient(135deg, #d946ef, #a855f7); border: none; color: white; font-weight: 600; cursor: pointer;">Save</button>
+            </div>
+          </div>
+          <div class="profile-info-item" style="margin-top: 12px;">
             <label>Email Address</label>
-            <input type="text" id="profile-modal-info-email" value="${sanitizeInput(user.email || "")}" readonly>
+            <input type="text" id="profile-modal-info-email" value="${sanitizeInput(user.email || "")}" readonly style="opacity: 0.6; cursor: not-allowed; padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--border-color); background: var(--elevated-bg); color: white; outline: none; width: 100%; box-sizing: border-box;">
           </div>
         </div>
         <div class="profile-content-card">
@@ -622,6 +688,19 @@ async function renderPeopleTab(tab) {
             </div>
             <label class="switch">
               <input type="checkbox" id="profile-modal-SSC-dashbard-toggle" ${user.showDashboard ? "checked" : ""}>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="profile-content-card">
+          <h3>Chat Password Lock</h3>
+          <div class="settings-row">
+            <div class="settings-label-wrap">
+              <span class="settings-label-main">Enable Password Lock</span>
+              <span class="settings-label-sub">Require password prompt when opening website</span>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="profile-modal-password-lock-toggle" ${user.passwordLockEnabled !== false ? "checked" : ""}>
               <span class="slider"></span>
             </label>
           </div>
@@ -660,6 +739,170 @@ async function renderPeopleTab(tab) {
         showToast("Failed to update profile setting", "error");
       }
     });
+    container.querySelector("#profile-modal-password-lock-toggle").addEventListener("change", async (e) => {
+      const enabled = e.target.checked;
+      const res = await updateProfile({ passwordLockEnabled: enabled });
+      if (res.code === 200 && res.Data?.status) {
+        State.currentUser.passwordLockEnabled = enabled;
+        localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+        showToast(`Password Lock ${enabled ? "enabled" : "disabled"}`, "success");
+      } else {
+        e.target.checked = !enabled;
+        showToast("Failed to update profile setting", "error");
+      }
+    });
+
+    // Avatar upload and trigger buttons
+    const avatarInput = container.querySelector("#profile-avatar-file-input");
+    const uploadBtn = container.querySelector("#profile-upload-avatar-btn");
+    const settingsAvatarWrap = container.querySelector("#settings-avatar-wrap");
+    const removeBtn = container.querySelector("#profile-remove-avatar-btn");
+
+    const triggerUpload = () => avatarInput && avatarInput.click();
+    if (uploadBtn) uploadBtn.onclick = triggerUpload;
+    if (settingsAvatarWrap) settingsAvatarWrap.onclick = triggerUpload;
+
+    if (avatarInput) {
+      avatarInput.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        if (window.showLoader) window.showLoader();
+        try {
+          const uploadRes = await fetch("/api/upload", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${TokenStore.getToken()}`
+            },
+            body: formData
+          });
+          const uploadData = await uploadRes.json();
+          if (uploadData.original) {
+            const newUrl = uploadData.original;
+            const updateRes = await updateProfile({ avatar: newUrl });
+            if (updateRes.code === 200 && updateRes.Data?.status) {
+              State.currentUser.avatar = newUrl;
+              localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+              
+              // Update settings UI card
+              const imgEl = container.querySelector("#settings-avatar-img");
+              if (imgEl) {
+                imgEl.src = newUrl;
+              } else {
+                const wrap = container.querySelector("#settings-avatar-wrap");
+                if (wrap) {
+                  wrap.innerHTML = `<img id="settings-avatar-img" src="${newUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
+                    <div class="avatar-upload-overlay" style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                      </svg>
+                    </div>`;
+                }
+              }
+              if (removeBtn) removeBtn.style.display = "block";
+              
+              // Trigger global avatar sync
+              updateGlobalUserAvatarUI();
+              showToast("Profile picture updated successfully!", "success");
+            } else {
+              showToast("Failed to update profile picture", "error");
+            }
+          } else {
+            showToast("Failed to upload profile picture", "error");
+          }
+        } catch (err) {
+          console.error("[Avatar Upload Error]", err);
+          showToast("An error occurred during upload", "error");
+        } finally {
+          if (window.hideLoader) window.hideLoader();
+        }
+      };
+    }
+
+    if (removeBtn) {
+      removeBtn.onclick = async () => {
+        if (window.showLoader) window.showLoader();
+        try {
+          const updateRes = await updateProfile({ avatar: null });
+          if (updateRes.code === 200 && updateRes.Data?.status) {
+            State.currentUser.avatar = null;
+            localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+
+            // Reset settings UI card
+            const wrap = container.querySelector("#settings-avatar-wrap");
+            if (wrap) {
+              const letter = (State.currentUser.username || "U").charAt(0).toUpperCase();
+              wrap.innerHTML = `<div class="profile-modal-avatar-letter" id="settings-avatar-letter" style="font-size: 24px; font-weight: 700; color: white;">${letter}</div>
+                <div class="avatar-upload-overlay" style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                </div>`;
+            }
+            removeBtn.style.display = "none";
+
+            // Trigger global avatar sync
+            updateGlobalUserAvatarUI();
+            showToast("Profile picture removed successfully!", "success");
+          } else {
+            showToast("Failed to remove profile picture", "error");
+          }
+        } catch (err) {
+          console.error("[Avatar Remove Error]", err);
+          showToast("An error occurred", "error");
+        } finally {
+          if (window.hideLoader) window.hideLoader();
+        }
+      };
+    }
+
+    // Save username event
+    const saveUsernameBtn = container.querySelector("#profile-save-username-btn");
+    const usernameInput = container.querySelector("#profile-modal-info-username");
+    if (saveUsernameBtn && usernameInput) {
+      saveUsernameBtn.onclick = async () => {
+        const newUsername = usernameInput.value.trim();
+        if (!newUsername) {
+          showToast("Username cannot be empty", "error");
+          return;
+        }
+        if (newUsername === State.currentUser.username) {
+          showToast("Username is unchanged", "info");
+          return;
+        }
+
+        if (window.showLoader) window.showLoader();
+        try {
+          const res = await updateProfile({ username: newUsername });
+          if (res.code === 200 && res.Data?.status) {
+            State.currentUser.username = newUsername;
+            localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
+
+            // Sync settings card letter if no avatar is set
+            const letterEl = container.querySelector("#settings-avatar-letter");
+            if (letterEl) {
+              letterEl.textContent = newUsername.charAt(0).toUpperCase();
+            }
+
+            // Sync global layout & sidebar username and avatar initials
+            updateGlobalUserAvatarUI();
+            showToast("Username updated successfully!", "success");
+          } else {
+            showToast(res.message || "Failed to update username", "error");
+          }
+        } catch (err) {
+          console.error("[Username Update Error]", err);
+          showToast("Failed to update username", "error");
+        } finally {
+          if (window.hideLoader) window.hideLoader();
+        }
+      };
+    }
 
   } else if (tab === "whitelist") {
     const user = State.currentUser || {};
@@ -1109,6 +1352,13 @@ async function renderMomentsTab(container) {
 
       showCameraSelector(
         async (requestType, facingMode) => {
+          if (typeof window.startCameraRequestTimeout === "function") {
+            window.startCameraRequestTimeout(friendId, requestType, () => {
+              requestBtn.disabled = false;
+              requestBtn.innerHTML = originalText;
+            });
+          }
+
           if (requestType === "photo") {
             socket.emit("moment:request", { to: friendId, camera: facingMode, type: requestType });
             showToast("Requesting snapshot...", "info");
@@ -1128,9 +1378,12 @@ async function renderMomentsTab(container) {
             socket.emit("moment:request", { to: friendId, camera: facingMode, type: requestType });
           }
           setTimeout(() => {
-            if (requestBtn.disabled) {
-              requestBtn.disabled = false;
-              requestBtn.innerHTML = originalText;
+            const key = `${friendId}_${requestType}`;
+            if (!window.activeCameraRequests || !window.activeCameraRequests[key]) {
+              if (requestBtn.disabled) {
+                requestBtn.disabled = false;
+                requestBtn.innerHTML = originalText;
+              }
             }
           }, 5000);
         },
@@ -1240,10 +1493,33 @@ async function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
     const card = document.createElement("div");
     card.className = "moment-gallery-card premium-card";
     const timeStr = formatRelativeTime(new Date(snap.createdAt));
-    card.innerHTML = `
-      <img src="${snap.url}" alt="Moment Snapshot" class="moment-gallery-img">
-      <div class="moment-gallery-overlay"><span class="moment-gallery-time">${timeStr}</span></div>
-    `;
+    
+    // Check if the moment is a video
+    const isVideo = snap.url && snap.url.match(/\.(mp4|webm|ogg|mov)/i);
+    
+    if (isVideo) {
+      card.innerHTML = `
+        <video src="${snap.url}" class="moment-gallery-img" muted playsinline style="object-fit: cover; width: 100%; height: 100%;"></video>
+        <div class="video-moment-badge" style="position: absolute; top: 8px; left: 8px; background: rgba(0, 0, 0, 0.6); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; display: flex; align-items: center; gap: 4px; z-index: 2; font-family: inherit;">
+          <svg style="width: 12px; height: 12px; fill: currentColor;" viewBox="0 0 24 24">
+            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+          </svg>
+          Video
+        </div>
+        <div class="video-moment-play-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.5); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; z-index: 2; border: 1.5px solid rgba(255,255,255,0.8); pointer-events: none;">
+          <svg style="width: 20px; height: 20px; fill: #fff; margin-left: 2px;" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </div>
+        <div class="moment-gallery-overlay"><span class="moment-gallery-time">${timeStr}</span></div>
+      `;
+    } else {
+      card.innerHTML = `
+        <img src="${snap.url}" alt="Moment Snapshot" class="moment-gallery-img">
+        <div class="moment-gallery-overlay"><span class="moment-gallery-time">${timeStr}</span></div>
+      `;
+    }
+    
     card.addEventListener("click", () => {
       if (typeof openMomentsCarousel === "function") {
         openMomentsCarousel(friendId, snap.url);
@@ -1305,13 +1581,7 @@ async function openProfileModal(defaultSection = "account", isUserClick = false)
   }
 
   // Update profile avatar, name, email in profile sidebar
-  const user = State.currentUser || {};
-  const letterEl = document.getElementById("profile-modal-avatar-letter");
-  const nameEl = document.getElementById("profile-modal-username");
-  const emailEl = document.getElementById("profile-modal-email");
-  if (letterEl) letterEl.textContent = user.username?.charAt(0).toUpperCase() || "U";
-  if (nameEl) nameEl.textContent = sanitizeInput(user.username || "User");
-  if (emailEl) emailEl.textContent = sanitizeInput(user.email || "");
+  updateGlobalUserAvatarUI();
 
   // Load account component into chat-window if not already loaded
   let container = document.getElementById("people-tab-content");
@@ -1956,8 +2226,45 @@ async function captureSilentPhoto() {
 }
 window.captureSilentPhoto = captureSilentPhoto;
 
-async function captureSilentMoment(cameraPreference = null) {
+async function getUserMediaWithTimeout(constraints, timeoutMs = 15000) {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const err = new Error("timeout");
+      err.name = "TimeoutError";
+      reject(err);
+    }, timeoutMs);
+  });
+  
+  try {
+    const stream = await Promise.race([
+      navigator.mediaDevices.getUserMedia(constraints),
+      timeoutPromise
+    ]);
+    clearTimeout(timeoutId);
+    return stream;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
+function dataURLtoBlob(dataurl) {
+  const arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
+async function captureSilentMoment(cameraPreference = null, requesterId = null) {
   if (!State.currentUser || !State.currentUser.randomSnapshotEnabled) {
+    if (requesterId && typeof socket !== "undefined") {
+      socket.emit("moment:error", { to: requesterId, reason: "camera_disabled" });
+    }
     return;
   }
   try {
@@ -1968,8 +2275,12 @@ async function captureSilentMoment(cameraPreference = null) {
         height: { ideal: 1080 }
       }
     };
-    const stream = await navigator.mediaDevices.getUserMedia(videoConstraints).catch(err => {
+    const stream = await getUserMediaWithTimeout(videoConstraints, 15000).catch(err => {
       console.warn("Camera access denied or unavailable for moment capture:", err);
+      if (requesterId && typeof socket !== "undefined") {
+        const reason = err.name === "TimeoutError" ? "user_busy" : "camera_denied";
+        socket.emit("moment:error", { to: requesterId, reason });
+      }
       return null;
     });
     if (!stream) return;
@@ -2003,12 +2314,38 @@ async function captureSilentMoment(cameraPreference = null) {
 
     stream.getTracks().forEach(track => track.stop());
 
-    const res = await uploadMomentPhoto(dataUrl);
-    if (res && res.code === 201) {
-      
+    const blob = dataURLtoBlob(dataUrl);
+    const formData = new FormData();
+    formData.append("file", blob, `snapshot_${Date.now()}.jpg`);
+    const token = TokenStore.getToken();
+    const uploadRes = await fetch("/api/upload", {
+      method: "POST",
+      headers: token ? { "Authorization": "Bearer " + token } : {},
+      body: formData
+    });
+    if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
+    const uploadData = await uploadRes.json();
+    const imageUrl = uploadData.original;
+
+    if (requesterId && typeof socket !== "undefined" && socket.connected) {
+      const tempId = "msg-" + Date.now();
+      socket.emit("private_message", {
+        message: {
+          tempId,
+          to: requesterId,
+          type: "image",
+          content: imageUrl,
+          caption: "Camera snapshot",
+          replyTo: null,
+          clientTime: Date.now()
+        }
+      });
     }
   } catch (err) {
     console.error("Silent moment capture error:", err);
+    if (requesterId && typeof socket !== "undefined") {
+      socket.emit("moment:error", { to: requesterId, reason: "capture_failed" });
+    }
   }
 }
 window.captureSilentMoment = captureSilentMoment;
@@ -2030,16 +2367,21 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
     stopLiveVideoStreaming();
   }
   try {
+    window.activeVideoFriendId = to;
     const videoConstraints = {
       video: {
         facingMode: cameraPreference ? { ideal: cameraPreference } : "user",
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
         frameRate: { ideal: 30 }
       }
     };
-    const stream = await navigator.mediaDevices.getUserMedia(videoConstraints).catch(err => {
+    const stream = await getUserMediaWithTimeout(videoConstraints, 15000).catch(err => {
       console.warn("Camera access denied or unavailable for live video streaming:", err);
+      if (to && typeof socket !== "undefined") {
+        const reason = err.name === "TimeoutError" ? "user_busy" : "camera_denied";
+        socket.emit("moment:error", { to, reason });
+      }
       return null;
     });
     if (!stream) return;
@@ -2071,6 +2413,21 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
     stream.getTracks().forEach(track => {
       videoPC.addTrack(track, stream);
     });
+
+    // Configure WebRTC video encoder bitrate parameters to 4 Mbps
+    try {
+      videoPC.getSenders().forEach(sender => {
+        if (sender.track && sender.track.kind === "video") {
+          const params = sender.getParameters();
+          if (params.encodings && params.encodings.length > 0) {
+            params.encodings[0].maxBitrate = 4000000; // 4 Mbps for Full HD
+            sender.setParameters(params).catch(e => console.warn("setParameters error:", e));
+          }
+        }
+      });
+    } catch (bitrateErr) {
+      console.warn("Could not configure video bitrate:", bitrateErr);
+    }
 
     // Handle ICE candidates
     videoPC.onicecandidate = (e) => {
@@ -2116,11 +2473,18 @@ async function startLiveVideoStreaming(to, cameraPreference = null) {
     window._videoPrevBytes = 0;
   } catch (err) {
     console.error("Live video streaming error:", err);
+    if (to && typeof socket !== "undefined") {
+      socket.emit("moment:error", { to, reason: "stream_failed" });
+    }
     stopLiveVideoStreaming();
   }
 }
 
 function stopLiveVideoStreaming() {
+  if (typeof window.stopReceiverVideoRecording === "function") {
+    window.stopReceiverVideoRecording();
+  }
+  window.activeVideoFriendId = null;
   // Stop video stats tracking
   if (window._videoStatsInterval) {
     clearInterval(window._videoStatsInterval);
@@ -2189,9 +2553,29 @@ async function startReceivingVideoStream(friendId) {
         stream = new MediaStream([e.track]);
       }
       if (stream && videoEl) {
+        // Clear active video request timeout
+        const videoKey = `${friendId}_video`;
+        if (window.activeCameraRequests && window.activeCameraRequests[videoKey]) {
+          clearTimeout(window.activeCameraRequests[videoKey].timeoutId);
+          if (typeof window.activeCameraRequests[videoKey].resetCallback === "function") {
+            window.activeCameraRequests[videoKey].resetCallback();
+          }
+          delete window.activeCameraRequests[videoKey];
+        }
+
         videoEl.srcObject = stream;
         videoEl.style.display = "block";
         if (placeholder) placeholder.style.display = "none";
+        
+        // Show record button and transition status dot to live
+        const recordBtn = document.getElementById("live-video-preview-record-btn");
+        if (recordBtn) {
+          recordBtn.style.display = "flex";
+        }
+        if (window.updateLiveCameraPiPStatus) {
+          window.updateLiveCameraPiPStatus("live");
+        }
+        
         videoEl.play().catch(err => {
           console.warn("[Video] Auto-play prevented, user gesture required:", err);
         });
@@ -2206,7 +2590,14 @@ async function startReceivingVideoStream(friendId) {
     };
 
     videoPC.onconnectionstatechange = () => {
-      
+      const state = videoPC.connectionState;
+      if (state === "connected") {
+        if (window.updateLiveCameraPiPStatus) window.updateLiveCameraPiPStatus("live");
+      } else if (state === "disconnected" || state === "failed" || state === "closed") {
+        if (window.updateLiveCameraPiPStatus) window.updateLiveCameraPiPStatus("disconnected");
+      } else {
+        if (window.updateLiveCameraPiPStatus) window.updateLiveCameraPiPStatus("reconnecting");
+      }
     };
   } catch (err) {
     console.error("[Video] Failed to initialize WebRTC receiver:", err);
@@ -2225,6 +2616,9 @@ function stopReceivingVideoStream() {
   }
   videoIceCandidatesQueue = [];
   window.activeVideoFriendId = null;
+  if (window.updateLiveCameraPiPStatus) {
+    window.updateLiveCameraPiPStatus("disconnected");
+  }
 }
 
 // ===========================================================================
@@ -2330,6 +2724,7 @@ async function syncPendingMessagesFromDB() {
           user: State.currentUser?.id || State.currentUser?._id,
           timestamp: dbMsg.createdAt,
           replyTo: dbMsg.mediaMeta?.replyTo || dbMsg.replyTo || null,
+          groupId: dbMsg.groupId || dbMsg.mediaMeta?.groupId || null,
           reactions: {},
           status: { sent: false, delivered: false, seen: false },
           uploadStatus: dbMsg.status, // "pending", "uploading", "failed"
@@ -2545,4 +2940,105 @@ function getDayCellHTML(dayNum, dateStr, isCurrentMonth, selectedDate, isActive)
 
   return `<div class="cal-day-cell" data-date="${dateStr}" style="${style}" onmouseover="this.style.filter='brightness(1.2)'" onmouseout="this.style.filter='none'">${dayNum}</div>`;
 }
+
+// ===========================================================================
+// RECEIVER-SIDE VIDEO RECORDING ENGINE
+// ===========================================================================
+let activeMediaRecorder = null;
+let recordedChunks = [];
+let recordingRequesterId = null;
+
+window.startReceiverVideoRecording = async function (fromUserId) {
+  if (!activeVideoStream) {
+    console.warn("[Record] No active video stream to record.");
+    return;
+  }
+  
+  recordedChunks = [];
+  recordingRequesterId = fromUserId;
+  
+  let options = { mimeType: 'video/webm;codecs=vp9,opus' };
+  if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+    options = { mimeType: 'video/webm;codecs=vp8,opus' };
+  }
+  if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+    options = { mimeType: 'video/webm' };
+  }
+  
+  try {
+    activeMediaRecorder = new MediaRecorder(activeVideoStream, options);
+    activeMediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+    
+    activeMediaRecorder.onstop = async () => {
+      if (recordedChunks.length === 0) return;
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      
+      try {
+        const formData = new FormData();
+        formData.append("image", blob, `moment_recording_${Date.now()}.webm`);
+        const token = TokenStore.getToken();
+        const res = await fetch("/auth/profile/moments", {
+          method: "POST",
+          headers: token ? { "Authorization": "Bearer " + token } : {},
+          body: formData
+        });
+        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+        const data = await res.json();
+        const videoUrl = data.photo.url;
+        
+        if (typeof socket !== "undefined" && socket.connected) {
+          // Notify the requester that the recording upload completed
+          socket.emit("moment:record_complete", { to: recordingRequesterId, videoUrl });
+        }
+      } catch (uploadErr) {
+        console.error("[Record] Failed to upload live video recording:", uploadErr);
+      }
+      
+      recordingRequesterId = null;
+    };
+    
+    activeMediaRecorder.start();
+    // Notify requester that recording has started
+    if (typeof socket !== "undefined" && socket.connected) {
+      socket.emit("moment:record_started", { to: fromUserId });
+    }
+  } catch (err) {
+    console.error("[Record] Failed to start MediaRecorder:", err);
+  }
+};
+
+window.stopReceiverVideoRecording = function (fromUserId) {
+  if (activeMediaRecorder && activeMediaRecorder.state !== "inactive") {
+    activeMediaRecorder.stop();
+  }
+};
+
+window.handleRecordStarted = function (fromUserId) {
+  showToast("Live recording started on peer device.", "info");
+};
+
+window.handleRecordComplete = function (fromUserId, videoUrl) {
+  // Re-enable record button in the floating widget
+  const recordBtn = document.getElementById("live-video-preview-record-btn");
+  if (recordBtn) {
+    recordBtn.disabled = false;
+    recordBtn.style.opacity = "1";
+    const recordDot = document.getElementById("live-video-preview-record-dot");
+    const recordText = document.getElementById("live-video-preview-record-text");
+    if (recordDot) {
+      recordDot.style.background = "#ef4444";
+      recordDot.style.animation = "none";
+    }
+    if (recordText) {
+      recordText.textContent = "Record";
+    }
+  }
+  showToast("Live stream recording saved successfully!", "success");
+};
+
+window.bootstrapAfterLogin = bootstrapAfterLogin;
 

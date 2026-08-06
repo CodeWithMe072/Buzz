@@ -227,9 +227,9 @@
                     <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
             </button>
-            <input type="file" id="media-input"
+             <input type="file" id="media-input"
                 accept="image/*,video/*,application/pdf,application/msword,.docx,.xls,.xlsx,.csv,.txt"
-                style="display:none;">
+                style="display:none;" multiple>
             <div class="voice-recording-ui" id="voiceRecordingUI" style="display:none;">
                 <button class="voice-cancel-btn" id="voiceCancelBtn">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
@@ -250,7 +250,7 @@
                     </svg>
                 </button>
             </div>
-            <input type="text" id="message-input" placeholder="Message..." autocomplete="off">
+            <textarea id="message-input" placeholder="Message..." aria-label="Message text input" autocomplete="off" rows="1"></textarea>
             <button class="icon-btn send-btn" id="send-btn" disabled>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2">
@@ -312,6 +312,32 @@
                 <div class="gif-grid-container" id="custom-section-grid-container"
                     style="flex: 1; width: 100%;"></div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Media Upload Preview Modal -->
+<div id="media-upload-preview-modal" class="modal-overlay" style="display: none; align-items: center; justify-content: center; z-index: 2500;" role="dialog" aria-modal="true" aria-labelledby="media-preview-title">
+    <div class="media-upload-preview-container">
+        <div class="media-upload-preview-header">
+            <h3 id="media-preview-title">Preview attachments <span id="media-preview-count-badge"></span></h3>
+            <button type="button" class="close-btn" id="close-media-upload-preview" aria-label="Close">&times;</button>
+        </div>
+        <div class="media-preview-active-item" id="media-preview-active-item" style="display: none;">
+            <!-- Rendered dynamically -->
+        </div>
+        <div class="media-upload-preview-body" id="media-upload-preview-list">
+            <!-- Dynamically populated selected files grid + "+" add more button -->
+        </div>
+        <div class="media-preview-summary-container">
+            <span id="media-preview-summary-text">0 files · 0 B total</span>
+        </div>
+        <div class="media-preview-caption-container">
+            <textarea id="media-preview-caption" placeholder="Add a caption..." aria-label="Add a caption" rows="1" autocomplete="off"></textarea>
+        </div>
+        <div class="media-upload-preview-footer">
+            <button type="button" class="btn-secondary" id="cancel-media-upload-preview">Cancel</button>
+            <button type="button" class="btn-primary" id="send-media-upload-preview">Send</button>
         </div>
     </div>
 </div>

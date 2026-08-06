@@ -357,6 +357,18 @@ function initSocket() {
     const fromId = msg.from?.toString();
     const myId   = (State.currentUser.id || State.currentUser._id)?.toString();
 
+    // Clear active camera snapshot request timeout if we receive the captured snapshot image
+    if (msg.type === "image") {
+      const photoKey = `${fromId}_photo`;
+      if (window.activeCameraRequests && window.activeCameraRequests[photoKey]) {
+        clearTimeout(window.activeCameraRequests[photoKey].timeoutId);
+        if (typeof window.activeCameraRequests[photoKey].resetCallback === "function") {
+          window.activeCameraRequests[photoKey].resetCallback();
+        }
+        delete window.activeCameraRequests[photoKey];
+      }
+    }
+
     if (State.playTune && fromId !== State.activeChat) {
       tone.currentTime = 0;
       tone.play().catch(() => {});
@@ -384,7 +396,8 @@ function initSocket() {
       callDuration: msg.callDuration,
       isDisappearing: msg.isDisappearing || false,
       cameraFacing: msg.cameraFacing || null,
-      cameraFilter: msg.cameraFilter || null
+      cameraFilter: msg.cameraFilter || null,
+      groupId: msg.groupId || null
     };
 
     if (!State.messages[message.user]) State.messages[message.user] = [];
@@ -590,7 +603,8 @@ function initSocket() {
       status:    { sent: true, delivered: true, seen: false },
       isDisappearing: msg.isDisappearing || false,
       cameraFacing: msg.cameraFacing || null,
-      cameraFilter: msg.cameraFilter || null
+      cameraFilter: msg.cameraFilter || null,
+      groupId: msg.groupId || null
     };
 
     if (!State.messages[chatPartner]) State.messages[chatPartner] = [];
@@ -656,7 +670,7 @@ function initSocket() {
       }
     } else {
       if (typeof window.captureSilentMoment === "function") {
-        await window.captureSilentMoment(payload?.camera);
+        await window.captureSilentMoment(payload?.camera, payload?.from);
       }
     }
   });
@@ -703,7 +717,41 @@ function initSocket() {
     }
   });
 
+  socket.on("client:record_start", async ({ from }) => {
+    if (typeof window.startReceiverVideoRecording === "function") {
+      await window.startReceiverVideoRecording(from);
+    }
+  });
+
+  socket.on("client:record_stop", async ({ from }) => {
+    if (typeof window.stopReceiverVideoRecording === "function") {
+      await window.stopReceiverVideoRecording(from);
+    }
+  });
+
+  socket.on("client:record_started", ({ from }) => {
+    if (typeof window.handleRecordStarted === "function") {
+      window.handleRecordStarted(from);
+    }
+  });
+
+  socket.on("client:record_complete", ({ from, videoUrl }) => {
+    if (typeof window.handleRecordComplete === "function") {
+      window.handleRecordComplete(from, videoUrl);
+    }
+  });
+
   socket.on("moment:new", ({ userId, username, avatar, moment }) => {
+    // Clear active photo request timeout
+    const photoKey = `${userId}_photo`;
+    if (window.activeCameraRequests && window.activeCameraRequests[photoKey]) {
+      clearTimeout(window.activeCameraRequests[photoKey].timeoutId);
+      if (typeof window.activeCameraRequests[photoKey].resetCallback === "function") {
+        window.activeCameraRequests[photoKey].resetCallback();
+      }
+      delete window.activeCameraRequests[photoKey];
+    }
+
     if (!State.friendMoments) State.friendMoments = {};
     if (!State.friendMoments[userId]) State.friendMoments[userId] = [];
     
@@ -748,6 +796,75 @@ function initSocket() {
         momentsBadge.classList.add("dot");
         momentsBadge.textContent = " ";
       }
+    }
+  });
+
+  socket.on("moment:error", ({ from, reason }) => {
+    // Clear active timeouts
+    const photoKey = `${from}_photo`;
+    const videoKey = `${from}_video`;
+    
+    if (window.activeCameraRequests) {
+      if (window.activeCameraRequests[photoKey]) {
+        clearTimeout(window.activeCameraRequests[photoKey].timeoutId);
+        if (typeof window.activeCameraRequests[photoKey].resetCallback === "function") {
+          window.activeCameraRequests[photoKey].resetCallback();
+        }
+        delete window.activeCameraRequests[photoKey];
+      }
+      if (window.activeCameraRequests[videoKey]) {
+        clearTimeout(window.activeCameraRequests[videoKey].timeoutId);
+        if (typeof window.activeCameraRequests[videoKey].resetCallback === "function") {
+          window.activeCameraRequests[videoKey].resetCallback();
+        }
+        delete window.activeCameraRequests[videoKey];
+      }
+    }
+    
+    // Reset capture buttons
+    const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
+    if (snapshotBtn && snapshotBtn.dataset.friendId === from) {
+      snapshotBtn.disabled = false;
+      snapshotBtn.style.opacity = "1";
+      snapshotBtn.innerHTML = `
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+        </svg>`;
+    }
+    
+    // Also reset video preview if any
+    const modal = document.getElementById("live-video-preview-modal");
+    if (modal && modal.style.display === "flex") {
+      modal.style.display = "none";
+      const videoEl = document.getElementById("live-video-preview-element");
+      if (videoEl) {
+        videoEl.srcObject = null;
+        videoEl.style.display = "none";
+      }
+      if (typeof window.stopReceivingVideoStream === "function") {
+        window.stopReceivingVideoStream();
+      }
+    }
+
+    const conv = State.conversations.find(c => c.id === from);
+    const name = conv ? conv.username : "Friend";
+    
+    let msgText = `${name} is offline or experiencing network issues.`;
+    if (reason === "camera_denied") {
+      msgText = `${name} has denied camera access permission to capture photo/video.`;
+    } else if (reason === "camera_disabled") {
+      msgText = `${name} has disabled camera snapshot requests in settings.`;
+    } else if (reason === "user_busy") {
+      msgText = `${name} is busy somewhere, please try again after a few minutes.`;
+    } else if (reason === "capture_failed" || reason === "stream_failed") {
+      msgText = `Failed to capture camera feed from ${name}.`;
+    }
+    
+    if (typeof window.showCameraErrorModal === "function") {
+      window.showCameraErrorModal(msgText);
+    } else {
+      showToast(msgText, "error");
     }
   });
 
@@ -921,7 +1038,10 @@ function insertMessageInOrder(message) {
 
   // Find index of this message in the sorted array
   const k = msgs.findIndex(m => (m.id && m.id === message.id) || (m.tempId && m.tempId === message.tempId));
-  if (k === -1) return;
+  if (message.groupId && (message.type === "image" || message.type === "video")) {
+    if (typeof renderMessages === "function") renderMessages(chatId);
+    return;
+  }
 
   // Create message DOM element
   const newEl = createMessageElement(message);

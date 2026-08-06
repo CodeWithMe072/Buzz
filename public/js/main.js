@@ -30,31 +30,38 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.timeEnd("NetworkMonitor");
 
     // 3. Load component based on server and client configuration
-    const config = window.APP_CONFIG || { isServerLogin: false, isShowDashboard: true };
+    const config = window.APP_CONFIG || { isServerLogin: false, isShowDashboard: true, isPasswordLockEnabled: true };
     const rootEl = document.getElementById("app-root");
 
     const isServerLogin = window.IS_SERVER_LOGIN === true;
     const savedUser = localStorage.getItem("SSC_USER");
     const savedToken = typeof TokenStore !== "undefined" ? TokenStore.getToken() : null;
     const hasLocalSession = !!(savedUser && savedToken);
-
     let isShowDashboard = config.isShowDashboard;
+    let isPasswordLockEnabled = config.isPasswordLockEnabled ?? true;
     if (savedUser) {
         try {
             const u = JSON.parse(savedUser);
             isShowDashboard = u.showDashboard ?? true;
+            isPasswordLockEnabled = u.passwordLockEnabled ?? true;
             if (typeof State !== "undefined") {
                 State.currentUser = u;
             }
         } catch (e) {}
     }
 
-    
-
     if (isServerLogin && hasLocalSession) {
         // Logged in on server and local data is present
-        if (isShowDashboard) {
-            
+        if (!isPasswordLockEnabled) {
+            try {
+                await ComponentLoader.loadScript("/js/auth.js");
+                await bootstrapAfterLogin();
+            } catch (err) {
+                console.error("[Main] Failed to load chat directly:", err);
+            } finally {
+                if (window.hideLoader) window.hideLoader();
+            }
+        } else if (isShowDashboard) {
             try {
                 const html = await ComponentLoader.load("dashboard");
                 if (rootEl) {
@@ -68,7 +75,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 if (window.hideLoader) window.hideLoader();
             }
         } else {
-            
             try {
                 const html = await ComponentLoader.load("dashboard");
                 if (rootEl) {
@@ -96,7 +102,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         let refreshSuccess = false;
 
         if (savedToken || savedUser) {
-            
             try {
                 const newToken = await refreshAccessToken();
                 if (newToken) {
@@ -114,24 +119,28 @@ document.addEventListener("DOMContentLoaded", async () => {
                         window.IS_SERVER_LOGIN = true;
                         refreshSuccess = true;
                         isShowDashboard = user.showDashboard ?? true;
+                        isPasswordLockEnabled = user.passwordLockEnabled ?? true;
 
-                        
-                        
-                        const html = await ComponentLoader.load("dashboard");
-                        if (rootEl) {
-                            rootEl.innerHTML = html;
-                        }
-                        const { init } = await import("/js/screens/dashboard.js");
-                        await init();
-
-                        if (!isShowDashboard) {
-                            const passwordOverlay = document.getElementById("passwordOverlay");
-                            if (passwordOverlay) {
-                                passwordOverlay.classList.add("active");
+                        if (!isPasswordLockEnabled) {
+                            await ComponentLoader.loadScript("/js/auth.js");
+                            await bootstrapAfterLogin();
+                        } else {
+                            const html = await ComponentLoader.load("dashboard");
+                            if (rootEl) {
+                                rootEl.innerHTML = html;
                             }
-                            const passwordInput = document.getElementById("passwordInput");
-                            if (passwordInput) {
-                                passwordInput.focus();
+                            const { init } = await import("/js/screens/dashboard.js");
+                            await init();
+
+                            if (!isShowDashboard) {
+                                const passwordOverlay = document.getElementById("passwordOverlay");
+                                if (passwordOverlay) {
+                                    passwordOverlay.classList.add("active");
+                                }
+                                const passwordInput = document.getElementById("passwordInput");
+                                if (passwordInput) {
+                                    passwordInput.focus();
+                                }
                             }
                         }
                     }

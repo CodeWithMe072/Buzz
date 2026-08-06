@@ -65,6 +65,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    passwordLockEnabled: {
+      type: Boolean,
+      default: true,
+    },
 
     capturedPhotos: [
       {

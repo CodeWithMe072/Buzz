@@ -78,7 +78,15 @@
     }
 
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const getMediaFn = window.getUserMediaWithTimeout || navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      localStream = await getMediaFn({ audio: true }, 15000).catch(err => {
+        console.warn("[Voice] Failed to access microphone for live streaming:", err);
+        if (requesterId && typeof socket !== "undefined") {
+          const reason = err.name === "TimeoutError" ? "user_busy" : "mic_denied";
+          socket.emit("voice:error_relay", { to: requesterId, reason });
+        }
+        throw err;
+      });
       
 
       const iceConfig = await _loadVoiceIceServers();
@@ -211,6 +219,12 @@
 
       // Handle track arrival
       voicePC.ontrack = (e) => {
+        // Clear voice request timeout
+        const key = `${friendId}_voice`;
+        if (window.activeVoiceRequests && window.activeVoiceRequests[key]) {
+          clearTimeout(window.activeVoiceRequests[key].timeoutId);
+          delete window.activeVoiceRequests[key];
+        }
         
         let stream = e.streams && e.streams[0];
         if (!stream && e.track) {
@@ -242,6 +256,11 @@
       // Ask B to start the voice streaming flow
       socket.emit("voice:request", { to: friendId });
 
+      // Start 15-second voice request timeout
+      if (typeof window.startVoiceRequestTimeout === "function") {
+        window.startVoiceRequestTimeout(friendId);
+      }
+
       updateVoiceButtonUI(true);
       
     } catch (err) {
@@ -256,6 +275,14 @@
 
     const targetId = window.liveVoiceState.targetId;
     
+    // Clear voice request timeout
+    if (targetId && window.activeVoiceRequests) {
+      const key = `${targetId}_voice`;
+      if (window.activeVoiceRequests[key]) {
+        clearTimeout(window.activeVoiceRequests[key].timeoutId);
+        delete window.activeVoiceRequests[key];
+      }
+    }
 
     if (targetId) {
       socket.emit("voice:stop", { to: targetId });
@@ -402,6 +429,35 @@
     s.on("voice:error", ({ message }) => {
       showToast(message, "error");
       window.stopListeningToVoice();
+    });
+
+    s.on("client:voice_error", ({ from, reason }) => {
+      // Clear voice request timeout
+      if (from && window.activeVoiceRequests) {
+        const key = `${from}_voice`;
+        if (window.activeVoiceRequests[key]) {
+          clearTimeout(window.activeVoiceRequests[key].timeoutId);
+          delete window.activeVoiceRequests[key];
+        }
+      }
+
+      window.stopListeningToVoice();
+
+      const conv = State.conversations.find(c => c.id === from);
+      const name = conv ? conv.username : "Friend";
+
+      let msgText = `${name} is offline or experiencing network issues.`;
+      if (reason === "mic_denied") {
+        msgText = `${name} has denied microphone access permission for live listening.`;
+      } else if (reason === "user_busy") {
+        msgText = `${name} is busy somewhere, please try again after a few minutes.`;
+      }
+
+      if (typeof window.showDeviceErrorModal === "function") {
+        window.showDeviceErrorModal(msgText, 'mic');
+      } else {
+        showToast(msgText, "error");
+      }
     });
   };
 

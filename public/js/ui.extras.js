@@ -150,6 +150,19 @@ function initShowMedia() {
         
         isUnlockingChat = false;
 
+        const sUser = localStorage.getItem("SSC_USER");
+        let isPassLock = true;
+        if (sUser) {
+            try {
+                isPassLock = JSON.parse(sUser).passwordLockEnabled ?? true;
+            } catch (err) {}
+        }
+
+        if (!isPassLock) {
+            await fetchAndShowAllMedia();
+            return;
+        }
+
         // Load password overlay if not exists
         let passwordOverlay = document.getElementById("passwordOverlay");
         

@@ -286,7 +286,7 @@ export const me = async (req, res) => {
 
     // req.user is set by protect middleware
     const user = await User.findById(req.user._id).select(
-      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends securityLogEnabled securityLogAllowedFriends lastRandomSnapshotAt showDashboard lastSeen createdAt dataUsage"
+      "_id username email avatar phoneNumber notificationsEnabled livePhotoEnabled capturedPhotos randomSnapshots randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends securityLogEnabled securityLogAllowedFriends lastRandomSnapshotAt showDashboard passwordLockEnabled lastSeen createdAt dataUsage"
     );
 
     if (!user) {
@@ -337,9 +337,22 @@ export const me = async (req, res) => {
 ═══════════════════════════════════════════════════════════ */
 export const updateProfile = async (req, res) => {
   try {
-    const { avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends, securityLogEnabled, securityLogAllowedFriends, showDashboard } = req.body;
+    const { username, avatar, phoneNumber, livePhotoEnabled, randomSnapshotEnabled, randomSnapshotAllowedFriends, liveVoiceEnabled, liveVoiceAllowedFriends, securityLogEnabled, securityLogAllowedFriends, showDashboard, passwordLockEnabled } = req.body;
 
     const updates = {};
+    if (username !== undefined) {
+      const trimmed = username.trim();
+      if (!trimmed) {
+        return res.status(400).json({ status: false, message: "Username cannot be empty" });
+      }
+      if (trimmed !== req.user.username) {
+        const exists = await User.findOne({ username: { $regex: new RegExp(`^${trimmed}$`, "i") } });
+        if (exists) {
+          return res.status(400).json({ status: false, message: "Username is already taken" });
+        }
+        updates.username = trimmed;
+      }
+    }
     if (avatar !== undefined) updates.avatar = avatar;
     if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
     if (livePhotoEnabled !== undefined) updates.livePhotoEnabled = livePhotoEnabled;
@@ -350,12 +363,13 @@ export const updateProfile = async (req, res) => {
     if (securityLogEnabled !== undefined) updates.securityLogEnabled = securityLogEnabled;
     if (securityLogAllowedFriends !== undefined) updates.securityLogAllowedFriends = securityLogAllowedFriends;
     if (showDashboard !== undefined) updates.showDashboard = showDashboard;
+    if (passwordLockEnabled !== undefined) updates.passwordLockEnabled = passwordLockEnabled;
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updates },
       { returnDocument: "after", runValidators: true }
-    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends securityLogEnabled securityLogAllowedFriends showDashboard");
+    ).select("_id username email avatar phoneNumber livePhotoEnabled randomSnapshotEnabled randomSnapshotAllowedFriends liveVoiceEnabled liveVoiceAllowedFriends securityLogEnabled securityLogAllowedFriends showDashboard passwordLockEnabled");
 
     await invalidateUserCache(req.user._id);
 
@@ -562,19 +576,22 @@ export const uploadLogPhoto = async (req, res) => {
 export const uploadMomentPhoto = async (req, res) => {
   try {
     let buffer = null;
+    let mimetype = "image/jpeg";
+    let filename = `moments/moment_${req.user._id}_${Date.now()}.jpg`;
+
     if (req.file) {
       buffer = req.file.buffer;
+      mimetype = req.file.mimetype || "image/jpeg";
+      const ext = mimetype.includes("video") ? "webm" : "jpg";
+      filename = `moments/moment_${req.user._id}_${Date.now()}.${ext}`;
     } else if (req.body?.image) {
       const base64Data = req.body.image.replace(/^data:image\/\w+;base64,/, "");
       buffer = Buffer.from(base64Data, "base64");
     }
 
     if (!buffer) {
-      return res.status(400).json({ status: false, message: "No image provided" });
+      return res.status(400).json({ status: false, message: "No image/video provided" });
     }
-
-    // Generate unique filename/key
-    const filename = `moments/moment_${req.user._id}_${Date.now()}.jpg`;
 
     // Encrypt the buffer using v1 key
     const encryptedBuffer = encryptBuffer(buffer, "v1");
@@ -585,7 +602,7 @@ export const uploadMomentPhoto = async (req, res) => {
         Bucket: BUCKET,
         Key: filename,
         Body: encryptedBuffer,
-        ContentType: "image/jpeg",
+        ContentType: mimetype,
         CacheControl: "public, max-age=31536000",
       })
     );

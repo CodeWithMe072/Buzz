@@ -130,7 +130,11 @@ app.get("/", (req, res) => {
   if (!user) {
     isServerLogin = false;
   }
-  res.render("index", { isShowDashboard: user?.showDashboard ?? true, isServerLogin });
+  res.render("index", {
+    isShowDashboard: user?.showDashboard ?? true,
+    isPasswordLockEnabled: user?.passwordLockEnabled ?? true,
+    isServerLogin
+  });
 });
 
 // Redirect any other page hit back to "/" so the SPA handles it

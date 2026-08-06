@@ -143,7 +143,8 @@ export default function initSocket(io) {
           isDisappearing = false,
           cameraFacing = null,
           cameraFilter = null,
-          muted = false
+          muted = false,
+          groupId = null
         } = payload.message || {};
 
         if (!tempId || !to || !type) return;
@@ -192,6 +193,7 @@ export default function initSocket(io) {
           cameraFilter,
           duration,
           muted,
+          groupId,
           timestamp: now,
           status: { delivered: isOnline },
         });
@@ -199,7 +201,7 @@ export default function initSocket(io) {
         // Sync to sender's other devices
         socket.to(userId).emit("private_message_sync", {
           tempId, to, type, content, fileName, fileSize,
-          caption, cover, thumb, isDisappearing, cameraFacing, cameraFilter, duration, muted, timestamp: now,
+          caption, cover, thumb, isDisappearing, cameraFacing, cameraFilter, duration, muted, groupId, timestamp: now,
         });
 
         // Ack to sender immediately
@@ -228,6 +230,7 @@ export default function initSocket(io) {
           cameraFacing,
           cameraFilter,
           muted,
+          groupId,
           status: { sent: true, delivered: isOnline, seen: false },
           deliveredAt: isOnline ? new Date() : null,
         })
@@ -420,6 +423,76 @@ export default function initSocket(io) {
       io.to(to).emit("moment:stream_stop", { from: userId });
     });
 
+    socket.on("moment:error", async ({ to, reason }) => {
+      try {
+        if (!to) return;
+        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+        if (receiverSockets.length) {
+          receiverSockets.forEach((sid) => {
+            io.to(sid).emit("moment:error", { from: userId, reason });
+          });
+        }
+      } catch (err) {
+        console.error("[Socket] moment:error error:", err);
+      }
+    });
+
+    socket.on("moment:record_start", async ({ to }) => {
+      try {
+        if (!to) return;
+        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+        if (receiverSockets.length) {
+          receiverSockets.forEach((sid) => {
+            io.to(sid).emit("client:record_start", { from: userId });
+          });
+        }
+      } catch (err) {
+        console.error("[Socket] moment:record_start error:", err);
+      }
+    });
+
+    socket.on("moment:record_stop", async ({ to }) => {
+      try {
+        if (!to) return;
+        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+        if (receiverSockets.length) {
+          receiverSockets.forEach((sid) => {
+            io.to(sid).emit("client:record_stop", { from: userId });
+          });
+        }
+      } catch (err) {
+        console.error("[Socket] moment:record_stop error:", err);
+      }
+    });
+
+    socket.on("moment:record_started", async ({ to }) => {
+      try {
+        if (!to) return;
+        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+        if (receiverSockets.length) {
+          receiverSockets.forEach((sid) => {
+            io.to(sid).emit("client:record_started", { from: userId });
+          });
+        }
+      } catch (err) {
+        console.error("[Socket] moment:record_started error:", err);
+      }
+    });
+
+    socket.on("moment:record_complete", async ({ to, videoUrl }) => {
+      try {
+        if (!to) return;
+        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+        if (receiverSockets.length) {
+          receiverSockets.forEach((sid) => {
+            io.to(sid).emit("client:record_complete", { from: userId, videoUrl });
+          });
+        }
+      } catch (err) {
+        console.error("[Socket] moment:record_complete error:", err);
+      }
+    });
+
     /* ─────────────────────────────────────────────────────────
        LIVE VOICE STREAMING
     ───────────────────────────────────────────────────────── */
@@ -467,6 +540,20 @@ export default function initSocket(io) {
         io.to(to).emit("client:voice_stop", { stoppedBy: userId });
       } catch (err) {
         console.error("[Socket] voice:stop error:", err);
+      }
+    });
+
+    socket.on("voice:error_relay", async ({ to, reason }) => {
+      try {
+        if (!to) return;
+        const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+        if (receiverSockets.length) {
+          receiverSockets.forEach((sid) => {
+            io.to(sid).emit("client:voice_error", { from: userId, reason });
+          });
+        }
+      } catch (err) {
+        console.error("[Socket] voice:error_relay error:", err);
       }
     });
 
