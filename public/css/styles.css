@@ -10682,3 +10682,292 @@ input:checked+.slider:before {
     opacity: 1;
 }
 
+/* ============================================================
+   ACCOUNT SETTINGS — REDESIGNED RIGHT PANEL
+   ============================================================ */
+
+/* Section label (small-caps muted heading above each group) */
+.acc-section-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    opacity: 0.55;
+    margin: 28px 0 10px 2px;
+    display: block;
+}
+.acc-section-label:first-child {
+    margin-top: 0;
+}
+
+/* Wrapper that stacks sections vertically */
+.acc-sections-wrap {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---- PROFILE SECTION ---- */
+
+/* Email read-only row */
+.profile-email-readonly-wrap {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.profile-email-readonly-wrap label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+.profile-email-readonly-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1.5px solid rgba(255, 255, 255, 0.06);
+    font-size: 13.5px;
+    color: rgba(255, 255, 255, 0.5);
+    gap: 10px;
+}
+.profile-email-readonly-display .email-verified-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: 5px;
+    padding: 2px 7px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Username input with inline saved indicator */
+.profile-username-field-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 12px;
+}
+.profile-username-field-wrap label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+.profile-username-input-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.profile-username-input-row input {
+    flex: 1;
+    padding: 8px 44px 8px 12px;
+    border-radius: 8px;
+    border: 1.5px solid var(--border-color);
+    background: var(--elevated-bg);
+    color: white;
+    outline: none;
+    font-size: 13.5px;
+    transition: border-color 0.2s;
+}
+.profile-username-input-row input:focus {
+    border-color: rgba(168, 85, 247, 0.5);
+}
+#username-saved-indicator {
+    position: absolute;
+    right: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #22c55e;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+#username-saved-indicator.visible {
+    opacity: 1;
+}
+
+/* ---- SECURITY & PRIVACY SECTION ---- */
+
+/* Unified toggle row — used for all three settings toggles */
+.settings-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 13px 16px;
+    border-radius: 10px;
+    transition: background 0.18s;
+    position: relative;
+}
+.settings-toggle-row:not(:last-child) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.settings-toggle-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* Security-tier accent: 2px amber left border */
+.settings-toggle-row.tier-security {
+    border-left: 2.5px solid #f59e0b;
+    padding-left: 14px;
+    border-radius: 0 10px 10px 0;
+    background: rgba(245, 158, 11, 0.03);
+}
+.settings-toggle-row.tier-security:hover {
+    background: rgba(245, 158, 11, 0.06);
+}
+.settings-toggle-row.tier-security:not(:last-child) {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Icon cell */
+.settings-toggle-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+.settings-toggle-icon.icon-security {
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+}
+.settings-toggle-icon.icon-preference {
+    background: rgba(168, 85, 247, 0.12);
+    color: #a855f7;
+}
+
+/* Label + description column */
+.settings-toggle-text {
+    flex: 1;
+    min-width: 0;
+}
+.settings-toggle-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1.3;
+}
+.settings-toggle-desc {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    opacity: 0.7;
+    margin-top: 3px;
+    line-height: 1.4;
+}
+
+/* ---- DATA & USAGE SECTION ---- */
+
+/* LIVE badge inline (next to section label) */
+.acc-live-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: 5px;
+    padding: 2px 7px;
+    margin-left: 8px;
+    vertical-align: middle;
+    letter-spacing: 0.8px;
+}
+.acc-live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    display: inline-block;
+    animation: livePulse 2s ease-in-out infinite;
+}
+@keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Today overview header row */
+.acc-today-header {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 4px;
+}
+.acc-today-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+}
+.acc-today-caption {
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    margin-top: 2px;
+    margin-bottom: 12px;
+}
+
+/* Accordion header */
+.acc-accordion-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 10px;
+    transition: background 0.18s;
+}
+.acc-accordion-header:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+.acc-accordion-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+}
+.acc-accordion-title i {
+    font-size: 15px;
+}
+.acc-accordion-chevron {
+    font-size: 14px;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    transition: transform 0.25s ease;
+}
+.acc-accordion.open .acc-accordion-chevron {
+    transform: rotate(180deg);
+}
+.acc-accordion-body {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease, padding 0.25s ease;
+}
+.acc-accordion.open .acc-accordion-body {
+    max-height: 800px;
+}
+.acc-accordion-body-inner {
+    padding: 0 18px 16px 18px;
+}
+
+/* Divider between accordion sections */
+.acc-card-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin: 0 18px;
+}
+

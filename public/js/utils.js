@@ -1374,31 +1374,42 @@ window.initCustomVideoPlayer = function (video) {
             var container = document.getElementById('dev-feature-consumers');
             if (!container) return;
             var featureConfig = [
-                { key: 'silentPhoto', label: 'Silent Photo Capture', icon: 'ti-camera', color: '#ef4444' },
-                { key: 'snapshotMoment', label: 'Snapshot Moments', icon: 'ti-photo-spark', color: '#f59e0b' },
-                { key: 'liveVoice', label: 'Live Voice Listening', icon: 'ti-microphone', color: '#8b5cf6' },
-                { key: 'liveVideo', label: 'Live Video Preview', icon: 'ti-video', color: '#06b6d4' },
-                { key: 'chatVideo', label: 'Chat Video Watching', icon: 'ti-player-play', color: '#10b981' }
+                { key: 'silentPhoto',    label: 'Silent Photo Capture',    icon: 'ti-camera',       color: '#ef4444' },
+                { key: 'snapshotMoment', label: 'Snapshot Moments',        icon: 'ti-photo-spark',  color: '#f59e0b' },
+                { key: 'liveVoice',      label: 'Live Voice Listening',     icon: 'ti-microphone',   color: '#8b5cf6' },
+                { key: 'liveVideo',      label: 'Live Video Preview',       icon: 'ti-video',        color: '#06b6d4' },
+                { key: 'chatVideo',      label: 'Chat Video Watching',      icon: 'ti-player-play',  color: '#10b981' }
             ];
-            var html = '';
+
+            // Find max bytes among nonzero features only
+            var maxBytes = 0;
             for (var i = 0; i < featureConfig.length; i++) {
-                var fc = featureConfig[i];
+                var fb = tracker.features[featureConfig[i].key] || { bytes: 0 };
+                if (fb.bytes > maxBytes) maxBytes = fb.bytes;
+            }
+
+            // Build rows with resolved data, then sort descending by bytes
+            var rows = featureConfig.map(function(fc) {
                 var f = tracker.features[fc.key] || { bytes: 0, count: 0 };
-                var barPercent = 0;
-                var maxBytes = 0;
-                for (var j = 0; j < featureConfig.length; j++) {
-                    var fb = tracker.features[featureConfig[j].key] || { bytes: 0 };
-                    if (fb.bytes > maxBytes) maxBytes = fb.bytes;
-                }
-                if (maxBytes > 0) barPercent = Math.round((f.bytes / maxBytes) * 100);
+                // Explicitly 0% for zero-byte entries so they never render a sliver
+                var barPercent = (maxBytes > 0 && f.bytes > 0)
+                    ? Math.round((f.bytes / maxBytes) * 100)
+                    : 0;
+                return { fc: fc, f: f, barPercent: barPercent };
+            });
+            rows.sort(function(a, b) { return b.f.bytes - a.f.bytes; });
+
+            var html = '';
+            for (var j = 0; j < rows.length; j++) {
+                var r = rows[j];
                 html += '<div class="dev-feature-row">' +
-                    '<div class="dev-feature-icon" style="color:' + fc.color + ';"><i class="ti ' + fc.icon + '"></i></div>' +
+                    '<div class="dev-feature-icon" style="color:' + r.fc.color + ';"><i class="ti ' + r.fc.icon + '"></i></div>' +
                     '<div class="dev-feature-info">' +
                         '<div class="dev-feature-header">' +
-                            '<span class="dev-feature-name">' + fc.label + '</span>' +
-                            '<span class="dev-feature-bytes">' + tracker._formatBytes(f.bytes) + ' <small style="opacity:0.5;">(' + f.count + 'x)</small></span>' +
+                            '<span class="dev-feature-name">' + r.fc.label + '</span>' +
+                            '<span class="dev-feature-bytes">' + tracker._formatBytes(r.f.bytes) + ' <small style="opacity:0.5;">(' + r.f.count + 'x)</small></span>' +
                         '</div>' +
-                        '<div class="dev-feature-bar-bg"><div class="dev-feature-bar" style="width:' + barPercent + '%; background:' + fc.color + ';"></div></div>' +
+                        '<div class="dev-feature-bar-bg"><div class="dev-feature-bar" style="width:' + r.barPercent + '%; background:' + r.fc.color + ';"></div></div>' +
                     '</div>' +
                 '</div>';
             }

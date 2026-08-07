@@ -550,252 +550,329 @@ async function renderPeopleTab(tab) {
 
   } else if (tab === "account") {
     const user = State.currentUser || {};
-    const devDiagnosticsCard = `
-        <div class="profile-content-card dev-diagnostics-card" style="margin-top: 24px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-            <h3 style="margin-bottom: 0;"><i class="ti ti-chart-bar" style="margin-right: 6px; color: #a855f7;"></i>Data Usage</h3>
-            <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #22c55e; font-weight: 600;">
-              <span id="dev-live-indicator" style="width: 7px; height: 7px; border-radius: 50%; background: #22c55e; display: inline-block;"></span>
-              LIVE
-            </span>
+
+    // ── Helper: build a single toggle row ──────────────────────────────────
+    const toggleRow = (opts) => {
+      const tierClass = opts.tier === "security" ? "tier-security" : "";
+      const iconClass = opts.tier === "security" ? "icon-security" : "icon-preference";
+      return `
+        <div class="settings-toggle-row ${tierClass}">
+          <div class="settings-toggle-icon ${iconClass}">
+            <i class="ti ${opts.icon}"></i>
           </div>
-          <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 14px 0; opacity: 0.7;">
-            <i class="ti ti-activity" style="font-size: 11px;"></i> Today's session · resets daily · saved across reloads
-          </p>
-          <div class="dev-stats-grid">
-            <div class="dev-stat-item">
-              <div class="dev-stat-icon" style="background: rgba(59,130,246,0.15); color: #3b82f6;">
-                <i class="ti ti-download"></i>
-              </div>
-              <div class="dev-stat-info">
-                <span class="dev-stat-value" id="dev-data-transferred">0 B</span>
-                <span class="dev-stat-label">Downloaded (Wire)</span>
-              </div>
-            </div>
-            <div class="dev-stat-item">
-              <div class="dev-stat-icon" style="background: rgba(34,197,94,0.15); color: #22c55e;">
-                <i class="ti ti-database"></i>
-              </div>
-              <div class="dev-stat-info">
-                <span class="dev-stat-value" id="dev-data-cached">0 B</span>
-                <span class="dev-stat-label">Cached (Local)</span>
-              </div>
-            </div>
-            <div class="dev-stat-item">
-              <div class="dev-stat-icon" style="background: rgba(249,115,22,0.15); color: #f97316;">
-                <i class="ti ti-upload"></i>
-              </div>
-              <div class="dev-stat-info">
-                <span class="dev-stat-value" id="dev-data-uploaded">0 B</span>
-                <span class="dev-stat-label">Uploaded (Sent)</span>
-              </div>
-            </div>
-            <div class="dev-stat-item dev-stat-total">
-              <div class="dev-stat-icon" style="background: rgba(168,85,247,0.15); color: #a855f7;">
-                <i class="ti ti-world"></i>
-              </div>
-              <div class="dev-stat-info">
-                <span class="dev-stat-value" id="dev-data-total">0 B</span>
-                <span class="dev-stat-label">Total Network</span>
-              </div>
-            </div>
+          <div class="settings-toggle-text">
+            <div class="settings-toggle-title">${opts.title}</div>
+            <div class="settings-toggle-desc">${opts.desc}</div>
           </div>
-          <div class="dev-stat-meta" style="margin-top: 14px; display: flex; gap: 16px; font-size: 11px; color: var(--text-secondary); opacity: 0.6;">
-            <span><i class="ti ti-file" style="font-size: 11px;"></i> Resources: <strong id="dev-data-resources">0</strong></span>
-            <span><i class="ti ti-cache" style="font-size: 11px;"></i> Cached Hits: <strong id="dev-data-cached-count">0</strong></span>
-          </div>
-        </div>
-        <div class="profile-content-card dev-diagnostics-card" style="margin-top: 16px;">
-          <h3 style="font-size: 14px;"><i class="ti ti-calendar-stats" style="margin-right: 6px; color: #3b82f6;"></i>Daily History (Last 7 Days)</h3>
-          <div style="overflow-x: auto;">
-            <table class="dev-history-table">
-              <thead>
-                <tr>
-                  <th>Day</th>
-                  <th>Downloaded</th>
-                  <th>Uploaded</th>
-                  <th>Total</th>
-                </tr>
-              </thead>
-              <tbody id="dev-data-history-body">
-                <tr><td colspan="4" style="text-align:center; opacity:0.5; padding:8px;">Loading...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="profile-content-card dev-diagnostics-card" style="margin-top: 16px;">
-          <h3 style="font-size: 14px;"><i class="ti ti-flame" style="margin-right: 6px; color: #ef4444;"></i>Major Data Consumers</h3>
-          <p style="font-size: 11px; color: var(--text-secondary); margin: -4px 0 14px 0; opacity: 0.7;">
-            Feature-level breakdown of today's data usage
-          </p>
-          <div id="dev-feature-consumers"></div>
-        </div>
-    `;
+          <label class="switch">
+            <input type="checkbox" id="${opts.id}" ${opts.checked ? "checked" : ""}>
+            <span class="slider"></span>
+          </label>
+        </div>`;
+    };
+
+    // ── Accordion open state from localStorage ─────────────────────────────
+    const historyOpen  = localStorage.getItem("buzz_acc_history_open")  === "1";
+    const featuresOpen = localStorage.getItem("buzz_acc_features_open") === "1";
+
+    // ── Avatar HTML helper ─────────────────────────────────────────────────
+    const avatarInner = user.avatar
+      ? `<img id="settings-avatar-img" src="${user.avatar}" style="width:100%;height:100%;object-fit:cover;" />`
+      : `<div class="profile-modal-avatar-letter" id="settings-avatar-letter" style="font-size:24px;font-weight:700;color:white;">${(user.username || "U").charAt(0).toUpperCase()}</div>`;
+
     container.innerHTML = `
-      <div class="profile-section-title-wrap" style="margin-bottom: 24px;">
+      <div class="profile-section-title-wrap" style="margin-bottom:20px;">
         <h2 class="profile-section-title">Account Settings</h2>
       </div>
-      <div class="profile-section-cards-grid">
+
+      <div class="acc-sections-wrap">
+
+        <!-- ══ SECTION 1: PROFILE ══════════════════════════════════════════ -->
+        <span class="acc-section-label">Profile</span>
+
         <div class="profile-content-card">
-          <h3>User Info</h3>
-          <div class="profile-avatar-upload-section" style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px;">
-            <div class="profile-modal-avatar-wrap" id="settings-avatar-wrap" style="position: relative; width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--elevated-bg); cursor: pointer; border: 2px solid var(--border-color); overflow: hidden;">
-              ${user.avatar ? `<img id="settings-avatar-img" src="${user.avatar}" style="width: 100%; height: 100%; object-fit: cover;" />` : `<div class="profile-modal-avatar-letter" id="settings-avatar-letter" style="font-size: 24px; font-weight: 700; color: white;">${(user.username || "U").charAt(0).toUpperCase()}</div>`}
-              <div class="avatar-upload-overlay" style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+
+          <!-- Avatar row -->
+          <div class="profile-avatar-upload-section" style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+            <div class="profile-modal-avatar-wrap" id="settings-avatar-wrap"
+                 style="position:relative;width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--elevated-bg);cursor:pointer;border:2px solid var(--border-color);overflow:hidden;">
+              ${avatarInner}
+              <div class="avatar-upload-overlay"
+                   style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;"
+                   onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
                   <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                   <circle cx="12" cy="13" r="4"/>
                 </svg>
               </div>
             </div>
-            <input type="file" id="profile-avatar-file-input" accept="image/*" style="display: none;" />
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <button type="button" class="btn btn-secondary btn-sm" id="profile-upload-avatar-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; background: var(--elevated-bg); border: 1px solid var(--border-color); color: white;">Upload Picture</button>
-              <button type="button" class="btn btn-danger btn-sm" id="profile-remove-avatar-btn" style="padding: 6px 12px; font-size: 12px; border-radius: 6px; background: #ef4444; border: none; color: white; cursor: pointer; display: ${user.avatar ? 'block' : 'none'};">Remove</button>
+            <input type="file" id="profile-avatar-file-input" accept="image/*" style="display:none;" />
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <button type="button" id="profile-upload-avatar-btn"
+                      style="padding:6px 14px;font-size:12px;border-radius:6px;cursor:pointer;background:var(--elevated-bg);border:1px solid var(--border-color);color:white;font-weight:500;">
+                Upload Picture
+              </button>
+              <button type="button" id="profile-remove-avatar-btn"
+                      style="padding:6px 14px;font-size:12px;border-radius:6px;background:#ef4444;border:none;color:white;cursor:pointer;font-weight:500;display:${user.avatar ? "block" : "none"};">
+                Remove
+              </button>
             </div>
           </div>
-          <div class="profile-info-item">
-            <label>Username</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="text" id="profile-modal-info-username" value="${sanitizeInput(user.username || "")}" style="flex: 1; padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--border-color); background: var(--elevated-bg); color: white; outline: none;">
-              <button type="button" class="btn btn-primary" id="profile-save-username-btn" style="padding: 0 16px; border-radius: 8px; background: linear-gradient(135deg, #d946ef, #a855f7); border: none; color: white; font-weight: 600; cursor: pointer;">Save</button>
+
+          <!-- Username — auto-save on blur -->
+          <div class="profile-username-field-wrap">
+            <label for="profile-modal-info-username">Username</label>
+            <div class="profile-username-input-row">
+              <input type="text" id="profile-modal-info-username"
+                     value="${sanitizeInput(user.username || "")}"
+                     autocomplete="off" spellcheck="false" />
+              <span id="username-saved-indicator">
+                <i class="ti ti-check"></i> Saved
+              </span>
             </div>
           </div>
-          <div class="profile-info-item" style="margin-top: 12px;">
+
+          <!-- Email — read-only with Verified badge -->
+          <div class="profile-email-readonly-wrap">
             <label>Email Address</label>
-            <input type="text" id="profile-modal-info-email" value="${sanitizeInput(user.email || "")}" readonly style="opacity: 0.6; cursor: not-allowed; padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--border-color); background: var(--elevated-bg); color: white; outline: none; width: 100%; box-sizing: border-box;">
-          </div>
-        </div>
-        <div class="profile-content-card">
-          <h3>Security Capture</h3>
-          <div class="settings-row">
-            <div class="settings-label-wrap">
-              <span class="settings-label-main">Live Photo Capture</span>
-              <span class="settings-label-sub">Silently log camera photo on password prompts</span>
+            <div class="profile-email-readonly-display">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${sanitizeInput(user.email || "")}</span>
+              <span class="email-verified-badge">✓ Verified</span>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="profile-modal-live-photo-toggle" ${user.livePhotoEnabled ? "checked" : ""}>
-              <span class="slider"></span>
-            </label>
           </div>
-        </div>
-        <div class="profile-content-card">
-          <h3>Show SSC Dashboard</h3>
-          <div class="settings-row">
-            <div class="settings-label-wrap">
-              <span class="settings-label-main">Show SSC Dashboard</span>
-              <span class="settings-label-sub">Hide and show ssc panel in website loding</span>
+
+        </div><!-- /profile card -->
+
+
+        <!-- ══ SECTION 2: SECURITY & PRIVACY ══════════════════════════════ -->
+        <span class="acc-section-label">Security &amp; Privacy</span>
+
+        <div class="profile-content-card" style="padding:0;overflow:hidden;">
+          ${toggleRow({
+            id:      "profile-modal-password-lock-toggle",
+            icon:    "ti-lock",
+            title:   "Chat Password Lock",
+            desc:    "Require your password each time you open Buzz.",
+            checked: user.passwordLockEnabled !== false,
+            tier:    "security"
+          })}
+          ${toggleRow({
+            id:      "profile-modal-login-photo-toggle",
+            icon:    "ti-shield-check",
+            title:   "Login Photo Capture",
+            desc:    "If someone enters the wrong password, we'll take one photo using this device's camera and show it to you in Security Logs.",
+            checked: !!user.livePhotoEnabled,
+            tier:    "security"
+          })}
+          ${toggleRow({
+            id:      "profile-modal-SSC-dashbard-toggle",
+            icon:    "ti-chart-bar",
+            title:   "Show SSC Dashboard",
+            desc:    "Display the SSC panel on the site's loading screen.",
+            checked: !!user.showDashboard,
+            tier:    "preference"
+          })}
+        </div><!-- /security card -->
+
+
+        <!-- ══ SECTION 3: DATA & USAGE ════════════════════════════════════ -->
+        <span class="acc-section-label">
+          Data &amp; Usage
+          <span class="acc-live-badge">
+            <span class="acc-live-dot"></span>LIVE
+          </span>
+        </span>
+
+        <div class="profile-content-card dev-diagnostics-card">
+
+          <!-- Today overview (always visible) -->
+          <div class="acc-today-header">
+            <span class="acc-today-title"><i class="ti ti-activity" style="font-size:13px;margin-right:5px;color:#a855f7;"></i>Today's Session</span>
+          </div>
+          <p class="acc-today-caption">Resets daily · saved across reloads · <span id="acc-last-updated">updated just now</span></p>
+
+          <div class="dev-stats-grid">
+            <div class="dev-stat-item">
+              <div class="dev-stat-icon" style="background:rgba(59,130,246,0.15);color:#3b82f6;"><i class="ti ti-download"></i></div>
+              <div class="dev-stat-info">
+                <span class="dev-stat-value" id="dev-data-transferred">0 B</span>
+                <span class="dev-stat-label">Downloaded (Wire)</span>
+              </div>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="profile-modal-SSC-dashbard-toggle" ${user.showDashboard ? "checked" : ""}>
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-        <div class="profile-content-card">
-          <h3>Chat Password Lock</h3>
-          <div class="settings-row">
-            <div class="settings-label-wrap">
-              <span class="settings-label-main">Enable Password Lock</span>
-              <span class="settings-label-sub">Require password prompt when opening website</span>
+            <div class="dev-stat-item">
+              <div class="dev-stat-icon" style="background:rgba(249,115,22,0.15);color:#f97316;"><i class="ti ti-upload"></i></div>
+              <div class="dev-stat-info">
+                <span class="dev-stat-value" id="dev-data-uploaded">0 B</span>
+                <span class="dev-stat-label">Uploaded (Sent)</span>
+              </div>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="profile-modal-password-lock-toggle" ${user.passwordLockEnabled !== false ? "checked" : ""}>
-              <span class="slider"></span>
-            </label>
+            <div class="dev-stat-item">
+              <div class="dev-stat-icon" style="background:rgba(34,197,94,0.15);color:#22c55e;"><i class="ti ti-database"></i></div>
+              <div class="dev-stat-info">
+                <span class="dev-stat-value" id="dev-data-cached">0 B</span>
+                <span class="dev-stat-label">Cached (Local)</span>
+              </div>
+            </div>
+            <div class="dev-stat-item dev-stat-total">
+              <div class="dev-stat-icon" style="background:rgba(168,85,247,0.15);color:#a855f7;"><i class="ti ti-world"></i></div>
+              <div class="dev-stat-info">
+                <span class="dev-stat-value" id="dev-data-total">0 B</span>
+                <span class="dev-stat-label">Total Network</span>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-      ${devDiagnosticsCard}
+          <div class="dev-stat-meta" style="margin-top:12px;display:flex;gap:16px;font-size:11px;color:var(--text-secondary);opacity:0.55;">
+            <span><i class="ti ti-file" style="font-size:11px;"></i> Resources: <strong id="dev-data-resources">0</strong></span>
+            <span><i class="ti ti-cache" style="font-size:11px;"></i> Cache hits: <strong id="dev-data-cached-count">0</strong></span>
+          </div>
+
+          <!-- Daily History accordion -->
+          <div class="acc-card-divider" style="margin-top:16px;"></div>
+          <div class="acc-accordion ${historyOpen ? "open" : ""}" id="acc-history-accordion">
+            <div class="acc-accordion-header" id="acc-history-header">
+              <span class="acc-accordion-title">
+                <i class="ti ti-calendar-stats" style="color:#3b82f6;"></i>
+                Daily History <span style="opacity:0.45;font-weight:400;margin-left:4px;">(Last 7 Days)</span>
+              </span>
+              <i class="ti ti-chevron-down acc-accordion-chevron"></i>
+            </div>
+            <div class="acc-accordion-body">
+              <div class="acc-accordion-body-inner" style="padding-top:4px;">
+                <div style="overflow-x:auto;">
+                  <table class="dev-history-table">
+                    <thead>
+                      <tr><th>Day</th><th>Downloaded</th><th>Uploaded</th><th>Total</th></tr>
+                    </thead>
+                    <tbody id="dev-data-history-body">
+                      <tr><td colspan="4" style="text-align:center;opacity:0.5;padding:8px;">Loading…</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature Breakdown accordion -->
+          <div class="acc-card-divider"></div>
+          <div class="acc-accordion ${featuresOpen ? "open" : ""}" id="acc-features-accordion">
+            <div class="acc-accordion-header" id="acc-features-header">
+              <span class="acc-accordion-title">
+                <i class="ti ti-flame" style="color:#ef4444;"></i>
+                Feature Breakdown
+              </span>
+              <i class="ti ti-chevron-down acc-accordion-chevron"></i>
+            </div>
+            <div class="acc-accordion-body">
+              <div class="acc-accordion-body-inner" style="padding-top:4px;">
+                <p style="font-size:11px;color:var(--text-secondary);margin:0 0 10px 0;opacity:0.6;">Feature-level breakdown of today's data usage</p>
+                <div id="dev-feature-consumers"></div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /data card -->
+
+      </div><!-- /acc-sections-wrap -->
     `;
 
-    // Immediately update the diagnostics UI
+    // Immediately refresh Data Usage UI
     if (window.DataUsageTracker) {
       window.DataUsageTracker.updateUI();
     }
 
+    // ── Accordion wiring ───────────────────────────────────────────────────
+    const wireAccordion = (accordionId, storageKey) => {
+      const accordion = container.querySelector(`#${accordionId}`);
+      const header    = container.querySelector(`#${accordionId.replace("accordion", "header")}`);
+      if (!accordion || !header) return;
+      header.addEventListener("click", () => {
+        const isOpen = accordion.classList.toggle("open");
+        localStorage.setItem(storageKey, isOpen ? "1" : "0");
+      });
+    };
+    wireAccordion("acc-history-accordion",  "buzz_acc_history_open");
+    wireAccordion("acc-features-accordion", "buzz_acc_features_open");
 
-    container.querySelector("#profile-modal-live-photo-toggle").addEventListener("change", async (e) => {
+    // ── Toggle: Login Photo Capture (formerly Live Photo) ──────────────────
+    container.querySelector("#profile-modal-login-photo-toggle").addEventListener("change", async (e) => {
       const enabled = e.target.checked;
       const res = await updateProfile({ livePhotoEnabled: enabled });
       if (res.code === 200 && res.Data?.status) {
         State.currentUser.livePhotoEnabled = enabled;
         localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-        showToast(`Live photo capture ${enabled ? "enabled" : "disabled"}`, "success");
+        showToast(`Login photo capture ${enabled ? "enabled" : "disabled"}`, "success");
       } else {
         e.target.checked = !enabled;
-        showToast("Failed to update profile setting", "error");
+        showToast("Failed to update setting", "error");
       }
     });
+
+    // ── Toggle: SSC Dashboard ──────────────────────────────────────────────
     container.querySelector("#profile-modal-SSC-dashbard-toggle").addEventListener("change", async (e) => {
       const enabled = e.target.checked;
       const res = await updateProfile({ showDashboard: enabled });
       if (res.code === 200 && res.Data?.status) {
         State.currentUser.showDashboard = enabled;
         localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-        showToast(`SSC Dashborad ${enabled ? "enabled" : "disabled"}`, "success");
+        showToast(`SSC Dashboard ${enabled ? "enabled" : "disabled"}`, "success");
       } else {
         e.target.checked = !enabled;
-        showToast("Failed to update profile setting", "error");
+        showToast("Failed to update setting", "error");
       }
     });
+
+    // ── Toggle: Password Lock ──────────────────────────────────────────────
     container.querySelector("#profile-modal-password-lock-toggle").addEventListener("change", async (e) => {
       const enabled = e.target.checked;
       const res = await updateProfile({ passwordLockEnabled: enabled });
       if (res.code === 200 && res.Data?.status) {
         State.currentUser.passwordLockEnabled = enabled;
         localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-        showToast(`Password Lock ${enabled ? "enabled" : "disabled"}`, "success");
+        showToast(`Password lock ${enabled ? "enabled" : "disabled"}`, "success");
       } else {
         e.target.checked = !enabled;
-        showToast("Failed to update profile setting", "error");
+        showToast("Failed to update setting", "error");
       }
     });
 
-    // Avatar upload and trigger buttons
-    const avatarInput = container.querySelector("#profile-avatar-file-input");
-    const uploadBtn = container.querySelector("#profile-upload-avatar-btn");
-    const settingsAvatarWrap = container.querySelector("#settings-avatar-wrap");
-    const removeBtn = container.querySelector("#profile-remove-avatar-btn");
+    // ── Avatar upload & remove ─────────────────────────────────────────────
+    const avatarInput         = container.querySelector("#profile-avatar-file-input");
+    const uploadBtn           = container.querySelector("#profile-upload-avatar-btn");
+    const settingsAvatarWrap  = container.querySelector("#settings-avatar-wrap");
+    const removeBtn           = container.querySelector("#profile-remove-avatar-btn");
 
     const triggerUpload = () => avatarInput && avatarInput.click();
-    if (uploadBtn) uploadBtn.onclick = triggerUpload;
+    if (uploadBtn)          uploadBtn.onclick         = triggerUpload;
     if (settingsAvatarWrap) settingsAvatarWrap.onclick = triggerUpload;
 
     if (avatarInput) {
       avatarInput.onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         const formData = new FormData();
         formData.append("file", file);
-
         if (window.showLoader) window.showLoader();
         try {
-          const uploadRes = await fetch("/api/upload", {
+          const uploadRes  = await fetch("/api/upload", {
             method: "POST",
-            headers: {
-              "Authorization": `Bearer ${TokenStore.getToken()}`
-            },
+            headers: { "Authorization": `Bearer ${TokenStore.getToken()}` },
             body: formData
           });
           const uploadData = await uploadRes.json();
           if (uploadData.original) {
-            const newUrl = uploadData.original;
+            const newUrl    = uploadData.original;
             const updateRes = await updateProfile({ avatar: newUrl });
             if (updateRes.code === 200 && updateRes.Data?.status) {
               State.currentUser.avatar = newUrl;
               localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-              
-              // Update settings UI card
               const imgEl = container.querySelector("#settings-avatar-img");
               if (imgEl) {
                 imgEl.src = newUrl;
               } else {
                 const wrap = container.querySelector("#settings-avatar-wrap");
                 if (wrap) {
-                  wrap.innerHTML = `<img id="settings-avatar-img" src="${newUrl}" style="width: 100%; height: 100%; object-fit: cover;" />
-                    <div class="avatar-upload-overlay" style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+                  wrap.innerHTML = `<img id="settings-avatar-img" src="${newUrl}" style="width:100%;height:100%;object-fit:cover;" />
+                    <div class="avatar-upload-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
                         <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                         <circle cx="12" cy="13" r="4"/>
@@ -804,10 +881,8 @@ async function renderPeopleTab(tab) {
                 }
               }
               if (removeBtn) removeBtn.style.display = "block";
-              
-              // Trigger global avatar sync
               updateGlobalUserAvatarUI();
-              showToast("Profile picture updated successfully!", "success");
+              showToast("Profile picture updated!", "success");
             } else {
               showToast("Failed to update profile picture", "error");
             }
@@ -831,13 +906,11 @@ async function renderPeopleTab(tab) {
           if (updateRes.code === 200 && updateRes.Data?.status) {
             State.currentUser.avatar = null;
             localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-
-            // Reset settings UI card
             const wrap = container.querySelector("#settings-avatar-wrap");
             if (wrap) {
               const letter = (State.currentUser.username || "U").charAt(0).toUpperCase();
-              wrap.innerHTML = `<div class="profile-modal-avatar-letter" id="settings-avatar-letter" style="font-size: 24px; font-weight: 700; color: white;">${letter}</div>
-                <div class="avatar-upload-overlay" style="position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
+              wrap.innerHTML = `<div class="profile-modal-avatar-letter" id="settings-avatar-letter" style="font-size:24px;font-weight:700;color:white;">${letter}</div>
+                <div class="avatar-upload-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
                     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
                     <circle cx="12" cy="13" r="4"/>
@@ -845,10 +918,8 @@ async function renderPeopleTab(tab) {
                 </div>`;
             }
             removeBtn.style.display = "none";
-
-            // Trigger global avatar sync
             updateGlobalUserAvatarUI();
-            showToast("Profile picture removed successfully!", "success");
+            showToast("Profile picture removed!", "success");
           } else {
             showToast("Failed to remove profile picture", "error");
           }
@@ -861,20 +932,27 @@ async function renderPeopleTab(tab) {
       };
     }
 
-    // Save username event
-    const saveUsernameBtn = container.querySelector("#profile-save-username-btn");
-    const usernameInput = container.querySelector("#profile-modal-info-username");
-    if (saveUsernameBtn && usernameInput) {
-      saveUsernameBtn.onclick = async () => {
+    // ── Username — auto-save on blur ───────────────────────────────────────
+    const usernameInput    = container.querySelector("#profile-modal-info-username");
+    const savedIndicator   = container.querySelector("#username-saved-indicator");
+    let   savedIndicatorTm = null;
+
+    const showSavedIndicator = () => {
+      if (!savedIndicator) return;
+      savedIndicator.classList.add("visible");
+      clearTimeout(savedIndicatorTm);
+      savedIndicatorTm = setTimeout(() => savedIndicator.classList.remove("visible"), 2200);
+    };
+
+    if (usernameInput) {
+      usernameInput.addEventListener("blur", async () => {
         const newUsername = usernameInput.value.trim();
         if (!newUsername) {
           showToast("Username cannot be empty", "error");
+          usernameInput.value = State.currentUser.username || "";
           return;
         }
-        if (newUsername === State.currentUser.username) {
-          showToast("Username is unchanged", "info");
-          return;
-        }
+        if (newUsername === State.currentUser.username) return; // unchanged — do nothing
 
         if (window.showLoader) window.showLoader();
         try {
@@ -882,26 +960,22 @@ async function renderPeopleTab(tab) {
           if (res.code === 200 && res.Data?.status) {
             State.currentUser.username = newUsername;
             localStorage.setItem("SSC_USER", JSON.stringify(State.currentUser));
-
-            // Sync settings card letter if no avatar is set
             const letterEl = container.querySelector("#settings-avatar-letter");
-            if (letterEl) {
-              letterEl.textContent = newUsername.charAt(0).toUpperCase();
-            }
-
-            // Sync global layout & sidebar username and avatar initials
+            if (letterEl) letterEl.textContent = newUsername.charAt(0).toUpperCase();
             updateGlobalUserAvatarUI();
-            showToast("Username updated successfully!", "success");
+            showSavedIndicator();
           } else {
             showToast(res.message || "Failed to update username", "error");
+            usernameInput.value = State.currentUser.username || "";
           }
         } catch (err) {
           console.error("[Username Update Error]", err);
           showToast("Failed to update username", "error");
+          usernameInput.value = State.currentUser.username || "";
         } finally {
           if (window.hideLoader) window.hideLoader();
         }
-      };
+      });
     }
 
   } else if (tab === "whitelist") {
