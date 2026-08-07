@@ -2390,31 +2390,17 @@ async function captureSilentMoment(cameraPreference = null, requesterId = null) 
 
     const blob = dataURLtoBlob(dataUrl);
     const formData = new FormData();
-    formData.append("file", blob, `snapshot_${Date.now()}.jpg`);
+    formData.append("image", blob, `snapshot_${Date.now()}.jpg`);
+    if (requesterId) {
+      formData.append("requesterId", requesterId);
+    }
     const token = TokenStore.getToken();
-    const uploadRes = await fetch("/api/upload", {
+    const uploadRes = await fetch("/api/auth/profile/moments", {
       method: "POST",
       headers: token ? { "Authorization": "Bearer " + token } : {},
       body: formData
     });
     if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
-    const uploadData = await uploadRes.json();
-    const imageUrl = uploadData.original;
-
-    if (requesterId && typeof socket !== "undefined" && socket.connected) {
-      const tempId = "msg-" + Date.now();
-      socket.emit("private_message", {
-        message: {
-          tempId,
-          to: requesterId,
-          type: "image",
-          content: imageUrl,
-          caption: "Camera snapshot",
-          replyTo: null,
-          clientTime: Date.now()
-        }
-      });
-    }
   } catch (err) {
     console.error("Silent moment capture error:", err);
     if (requesterId && typeof socket !== "undefined") {

@@ -36,7 +36,7 @@ router.get("/auth/me", protect, me);
 router.put("/auth/profile", protect, updateProfile);
 router.get("/auth/profile/logs", protect, getSecurityLogs);
 router.post("/auth/profile/logs", protect, uploadRateLimiter, upload.single("image"), uploadLogPhoto);
-router.post("/auth/profile/moments", protect, uploadRateLimiter, upload.single("image"), uploadMomentPhoto);
+router.post(["/auth/profile/moments", "/api/auth/profile/moments"], protect, uploadRateLimiter, upload.single("image"), uploadMomentPhoto);
 router.put("/auth/password", protect, changePassword);
 router.post("/auth/notifications/toggle", protect, toggleNotifications);
 

@@ -622,11 +622,17 @@ export const uploadMomentPhoto = async (req, res) => {
 
     await invalidateUserCache(req.user._id);
 
-    // Send realtime notification to whitelisted online friends
+    // Send realtime notification to whitelisted online friends (and requester if provided)
     const user = await User.findById(req.user._id).select("username avatar randomSnapshotAllowedFriends");
-    if (user && user.randomSnapshotAllowedFriends?.length && req.io) {
-      user.randomSnapshotAllowedFriends.forEach(async (friendId) => {
-        const friendIdStr = friendId.toString();
+    const targets = new Set(
+      (user?.randomSnapshotAllowedFriends || []).map(id => id.toString())
+    );
+    if (req.body?.requesterId) {
+      targets.add(req.body.requesterId.toString());
+    }
+
+    if (targets.size > 0 && req.io) {
+      targets.forEach(async (friendIdStr) => {
         const isOnline = await redis.sismember("online:users", friendIdStr);
         if (isOnline) {
           req.io.to(friendIdStr).emit("moment:new", {
