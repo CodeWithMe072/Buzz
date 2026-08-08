@@ -677,11 +677,16 @@ function playVideoInline(mediaContainer, videoUrl) {
 // =============================================================================
 function getStatusIconHTML(status) {
   if (!status) return `<svg class="status-icon clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/></svg>`;
-  if (status.seen) {
+
+  const isSeen = (typeof status === "object" && status.seen) || status === "seen";
+  const isDelivered = (typeof status === "object" && status.delivered) || status === "delivered";
+  const isSent = (typeof status === "object" && status.sent) || status === "sent" || status === "success" || status === "completed";
+
+  if (isSeen) {
     return `<svg class="status-icon double seen" viewBox="0 0 16 16" style="transform:translateX(3px)"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
-  } else if (status.delivered) {
+  } else if (isDelivered) {
     return `<svg class="status-icon double delivered" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
-  } else if (status.sent) {
+  } else if (isSent) {
     return `<svg class="status-icon single sent" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/></svg>`;
   } else {
     return `<svg class="status-icon clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/></svg>`;
@@ -1671,8 +1676,9 @@ function createGroupMessageElement(groupMessages) {
     bubbleEl.appendChild(captionEl);
   }
 
-  // Footer: time + status icon (only show tick when all uploads are completed)
-  const statusSVG = (isMe && uploadingMsgs.length === 0) ? `<span class="msg-status-wrap">${getStatusIconHTML(firstMsg.status)}</span>` : "";
+  // Footer: time + status icon (clock icon while uploading, single tick when done)
+  const initialStatus = (isMe && uploadingMsgs.length > 0) ? { sent: false } : (firstMsg.status || { sent: true });
+  const statusSVG = isMe ? `<span class="msg-status-wrap">${getStatusIconHTML(initialStatus)}</span>` : "";
   const footerEl = document.createElement("div");
   footerEl.className = "msg-footer";
   footerEl.innerHTML = `<span class="message-time">${formatTime(firstMsg.timestamp)}</span>${statusSVG}`;
@@ -4522,14 +4528,26 @@ function updateGroupMessageDOM(tempId, updates, chatId) {
     }
   }
 
-  // Update status wrap (only show checkmark ticks if group upload completes)
+  // Update status wrap (convert clock icon to single tick when all group uploads succeed)
   if (msgEl) {
-    const statusWrap = msgEl.querySelector(".msg-status-wrap");
+    let statusWrap = msgEl.querySelector(".msg-status-wrap");
+    if (!statusWrap) {
+      const footerEl = msgEl.querySelector(".msg-footer");
+      if (footerEl) {
+        statusWrap = document.createElement("span");
+        statusWrap.className = "msg-status-wrap";
+        footerEl.appendChild(statusWrap);
+      }
+    }
     if (statusWrap) {
-      if (uploadingMsgs.length === 0 && updates.status) {
-        statusWrap.innerHTML = getStatusIconHTML(updates.status);
-      } else if (uploadingMsgs.length > 0) {
-        statusWrap.innerHTML = "";
+      if (uploadingMsgs.length > 0) {
+        // Still uploading: show clock/watch icon
+        statusWrap.innerHTML = getStatusIconHTML({ sent: false });
+      } else {
+        // All media items in group uploaded successfully! Show single tick (or delivered/seen tick)
+        const firstGroupMsg = msgsInGroup[0] || msg;
+        const targetStatus = firstGroupMsg.status || updates.status || { sent: true };
+        statusWrap.innerHTML = getStatusIconHTML(targetStatus);
       }
     }
   }

@@ -367,7 +367,7 @@ const diskUpload = multer({
     dest: os.tmpdir(),
     limits: {
         files: 1,
-        fileSize: 100 * 1024 * 1024,
+        fileSize: 500 * 1024 * 1024,
     },
 });
 

@@ -44,31 +44,47 @@ function updateConnectionBanner(customMsg = null) {
 // STATUS ICON HELPER
 // =============================================================================
 function updateStatusIcon(tempId, status) {
-  const msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
+  let msgEl = document.querySelector(`.message[data-message-id="${tempId}"] .message-bubble`);
+  if (!msgEl) {
+    const chatId = State.activeChat;
+    if (chatId && State.messages[chatId]) {
+      const msg = State.messages[chatId].find(m => m.id === tempId || m.tempId === tempId);
+      if (msg && msg.groupId) {
+        const groupParent = document.querySelector(`.media-group-message[data-group-id="${msg.groupId}"]`);
+        if (groupParent) msgEl = groupParent.querySelector(".message-bubble");
+      }
+    }
+  }
   if (!msgEl) return;
-  const wrap = msgEl.querySelector(".msg-status-wrap");
+
+  let wrap = msgEl.querySelector(".msg-status-wrap");
+  if (!wrap) {
+    const footerEl = msgEl.querySelector(".msg-footer");
+    if (footerEl) {
+      wrap = document.createElement("span");
+      wrap.className = "msg-status-wrap";
+      footerEl.appendChild(wrap);
+    }
+  }
   if (!wrap) return;
 
   // Retrieve message from state to get the full merged status
-  const chatId = State.messageIndex[tempId];
-  let mergedStatus = { ...status };
-  if (chatId) {
-    const msgs = State.messages[chatId] || [];
-    const msg = msgs.find(m => m.id === tempId || m.tempId === tempId);
+  const chatId = State.messageIndex[tempId] || State.activeChat;
+  let mergedStatus = typeof status === "object" ? { ...status } : status;
+  if (chatId && State.messages[chatId]) {
+    const msg = State.messages[chatId].find(m => m.id === tempId || m.tempId === tempId);
     if (msg && msg.status) {
-      msg.status = { ...msg.status, ...status };
+      if (typeof status === "object") {
+        msg.status = { ...msg.status, ...status };
+      } else {
+        msg.status = status;
+      }
       mergedStatus = msg.status;
     }
   }
 
-  if (mergedStatus.seen) {
-    wrap.innerHTML = `<svg class="status-icon double seen" viewBox="0 0 16 16" style="transform:translateX(3px)"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
-  } else if (mergedStatus.delivered) {
-    wrap.innerHTML = `<svg class="status-icon double delivered" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/><polyline points="5 8 9 12 17 4" style="transform:translate(-9px,0)"/></svg>`;
-  } else if (mergedStatus.sent) {
-    wrap.innerHTML = `<svg class="status-icon single sent" viewBox="0 0 16 16"><polyline points="2 8 6 12 14 4"/></svg>`;
-  } else {
-    wrap.innerHTML = `<svg class="status-icon clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><polyline points="8 4 8 8 11 10"/></svg>`;
+  if (typeof getStatusIconHTML === "function") {
+    wrap.innerHTML = getStatusIconHTML(mergedStatus);
   }
 }
 

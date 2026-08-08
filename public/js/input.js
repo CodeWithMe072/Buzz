@@ -429,12 +429,12 @@ function initChatWindow() {
         const sendPreviewBtn = document.getElementById("send-media-upload-preview");
         if (summary) {
             const totalBytes = stagedFiles.reduce((acc, item) => acc + item.file.size, 0);
-            const limit = 25 * 1024 * 1024; // 25 MB
+            const limit = 500 * 1024 * 1024; // 500 MB limit (single file or total batch)
             if (totalBytes > limit) {
-                summary.innerHTML = `<span style="color:#ef4444;font-weight:600;">${stagedFiles.length} files · ${formatBytes(totalBytes)} / 25 MB (Exceeds limit)</span>`;
+                summary.innerHTML = `<span style="color:#ef4444;font-weight:600;">${stagedFiles.length} files · ${formatBytes(totalBytes)} / 500 MB (Exceeds limit)</span>`;
                 if (sendPreviewBtn) sendPreviewBtn.disabled = true;
             } else {
-                summary.textContent = `${stagedFiles.length} file${stagedFiles.length > 1 ? "s" : ""} · ${formatBytes(totalBytes)} / 25 MB total`;
+                summary.textContent = `${stagedFiles.length} file${stagedFiles.length > 1 ? "s" : ""} · ${formatBytes(totalBytes)} / 500 MB total`;
                 if (sendPreviewBtn) sendPreviewBtn.disabled = stagedFiles.length === 0;
             }
         } else {
