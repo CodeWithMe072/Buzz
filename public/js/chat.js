@@ -190,7 +190,7 @@ function renderChatList(filter = "") {
       : `<img src="${conv.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" /><span style="display:none;">${conv.username.charAt(0).toUpperCase()}</span>`;
 
     item.innerHTML = `
-      <div class="avatar ${conv.online ? "online" : ""}">
+      <div class="avatar ${conv.online ? "online" : ""}" style="cursor: pointer;" title="View ${sanitizeInput(conv.username)}'s profile">
         ${avatarHTML}
       </div>
       <div class="chat-item-content">
@@ -203,10 +203,178 @@ function renderChatList(filter = "") {
         </div>
       </div>
       ${conv.unread > 0 ? `<span class="unread-badge">${conv.unread}</span>` : ""}`;
+
+    const avatarItemEl = item.querySelector(".avatar");
+    if (avatarItemEl) {
+      avatarItemEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openContactProfilePreview(conv);
+      });
+    }
+
     item.addEventListener("click", () => openChat(conv.id));
     chatList.appendChild(item);
   });
+
+  // Bind top current user profile avatar click to open user's account profile
+  const currentUserAvatar = document.getElementById("current-user-avatar");
+  if (currentUserAvatar && !currentUserAvatar.dataset.profileListenerBound) {
+    currentUserAvatar.dataset.profileListenerBound = "true";
+    currentUserAvatar.style.cursor = "pointer";
+    currentUserAvatar.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (typeof openProfileModal === "function") {
+        openProfileModal("account", true);
+      }
+    });
+  }
 }
+
+// =============================================================================
+// WHATSAPP-STYLE CONTACT PROFILE PREVIEW MODAL
+// =============================================================================
+function openContactProfilePreview(conv) {
+  if (!conv) return;
+  const modal = document.getElementById("contact-profile-preview-modal");
+  const usernameEl = document.getElementById("cpp-username");
+  const avatarImg = document.getElementById("cpp-avatar-img");
+  const avatarLetter = document.getElementById("cpp-avatar-letter");
+  const avatarContainer = document.getElementById("cpp-avatar-container");
+  const btnChat = document.getElementById("cpp-action-chat");
+  const btnAudio = document.getElementById("cpp-action-audio");
+  const btnVideo = document.getElementById("cpp-action-video");
+  const btnInfo = document.getElementById("cpp-action-info");
+
+  if (!modal) return;
+
+  if (usernameEl) usernameEl.textContent = conv.username || "User";
+
+  const isLetter = !conv.avatar || conv.avatar.length === 1;
+  if (isLetter) {
+    if (avatarImg) avatarImg.style.display = "none";
+    if (avatarLetter) {
+      avatarLetter.style.display = "flex";
+      avatarLetter.textContent = (conv.avatar || conv.username?.charAt(0) || "U").toUpperCase();
+    }
+  } else {
+    if (avatarLetter) avatarLetter.style.display = "none";
+    if (avatarImg) {
+      avatarImg.src = conv.avatar;
+      avatarImg.style.display = "block";
+    }
+  }
+
+  if (btnChat) {
+    btnChat.onclick = (e) => {
+      e.stopPropagation();
+      closeContactProfilePreview();
+      openChat(conv.id);
+    };
+  }
+
+  if (btnAudio) {
+    btnAudio.onclick = (e) => {
+      e.stopPropagation();
+      closeContactProfilePreview();
+      openChat(conv.id);
+      if (window.CallManager && typeof window.CallManager.open === "function") {
+        window.CallManager.open("audio");
+      }
+    };
+  }
+
+  if (btnVideo) {
+    btnVideo.onclick = (e) => {
+      e.stopPropagation();
+      closeContactProfilePreview();
+      openChat(conv.id);
+      if (window.CallManager && typeof window.CallManager.open === "function") {
+        window.CallManager.open("video");
+      }
+    };
+  }
+
+  if (btnInfo) {
+    btnInfo.onclick = (e) => {
+      e.stopPropagation();
+      openFullProfilePhotoViewer(conv.avatar, conv.username);
+    };
+  }
+
+  if (avatarContainer) {
+    avatarContainer.onclick = (e) => {
+      e.stopPropagation();
+      openFullProfilePhotoViewer(conv.avatar, conv.username);
+    };
+  }
+
+  modal.style.display = "flex";
+}
+
+function openFullProfilePhotoViewer(avatarUrl, username) {
+  closeContactProfilePreview();
+
+  const modal = document.getElementById("profile-photo-viewer-modal");
+  const usernameEl = document.getElementById("ppv-username");
+  const imgEl = document.getElementById("ppv-img");
+  const letterEl = document.getElementById("ppv-letter-fallback");
+  const backBtn = document.getElementById("ppv-back-btn");
+
+  if (!modal) return;
+
+  if (usernameEl) usernameEl.textContent = username || "User";
+
+  const isLetter = !avatarUrl || avatarUrl.length === 1;
+  if (isLetter) {
+    if (imgEl) imgEl.style.display = "none";
+    if (letterEl) {
+      letterEl.style.display = "flex";
+      letterEl.textContent = (avatarUrl || username?.charAt(0) || "U").toUpperCase();
+    }
+  } else {
+    if (letterEl) letterEl.style.display = "none";
+    if (imgEl) {
+      imgEl.src = avatarUrl;
+      imgEl.style.display = "block";
+    }
+  }
+
+  if (backBtn) {
+    backBtn.onclick = () => closeFullProfilePhotoViewer();
+  }
+
+  modal.style.display = "flex";
+}
+
+function closeFullProfilePhotoViewer() {
+  const modal = document.getElementById("profile-photo-viewer-modal");
+  if (modal) modal.style.display = "none";
+}
+
+window.openFullProfilePhotoViewer = openFullProfilePhotoViewer;
+window.closeFullProfilePhotoViewer = closeFullProfilePhotoViewer;
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    closeFullProfilePhotoViewer();
+  }
+});
+
+function closeContactProfilePreview() {
+  const modal = document.getElementById("contact-profile-preview-modal");
+  if (modal) modal.style.display = "none";
+}
+
+window.openContactProfilePreview = openContactProfilePreview;
+window.closeContactProfilePreview = closeContactProfilePreview;
+window.openFullProfilePhotoViewer = openFullProfilePhotoViewer;
+
+document.addEventListener("click", (e) => {
+  const modal = document.getElementById("contact-profile-preview-modal");
+  if (modal && modal.style.display === "flex" && e.target === modal) {
+    closeContactProfilePreview();
+  }
+});
 
 // =============================================================================
 // OPEN CHAT
@@ -256,7 +424,12 @@ function openChat(chatId) {
 
   // Clone element to reset previous click listeners
   const newAvatarEl = avatarEl.cloneNode(true);
-  newAvatarEl.style.cursor = "default";
+  newAvatarEl.style.cursor = "pointer";
+  newAvatarEl.title = `View ${sanitizeInput(conv.username)}'s profile`;
+  newAvatarEl.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openContactProfilePreview(conv);
+  });
   avatarEl.parentNode.replaceChild(newAvatarEl, avatarEl);
 
 
@@ -3524,115 +3697,9 @@ window.updateStatusUnseenIndicator = updateStatusUnseenIndicator;
 // FULLSCREEN PROFILE PICTURE VIEW
 // =============================================================================
 function viewFullscreenProfilePicture(imgUrl, username) {
-  if (!imgUrl || imgUrl.length <= 1) return;
-
-  const overlay = document.createElement("div");
-  overlay.id = "profile-pic-lightbox";
-  overlay.style.cssText = `
-    position: fixed;
-    inset: 0;
-    background: rgba(10, 10, 10, 0.9);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
-    z-index: 10000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  `;
-
-  const header = document.createElement("div");
-  header.style.cssText = `
-    position: absolute;
-    top: 20px;
-    width: 100%;
-    max-width: 800px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 24px;
-    box-sizing: border-box;
-    z-index: 10001;
-  `;
-
-  const title = document.createElement("span");
-  title.textContent = `${username}'s Profile Picture`;
-  title.style.cssText = `
-    color: white;
-    font-size: 16px;
-    font-weight: 600;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  `;
-
-  const closeBtn = document.createElement("button");
-  closeBtn.innerHTML = `
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18"></line>
-      <line x1="6" y1="6" x2="18" y2="18"></line>
-    </svg>
-  `;
-  closeBtn.style.cssText = `
-    background: rgba(255,255,255,0.1);
-    border: none;
-    color: white;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background 0.2s, transform 0.2s;
-  `;
-  closeBtn.onmouseover = () => { closeBtn.style.background = 'rgba(255,255,255,0.2)'; closeBtn.style.transform = 'scale(1.05)'; };
-  closeBtn.onmouseout = () => { closeBtn.style.background = 'rgba(255,255,255,0.1)'; closeBtn.style.transform = 'scale(1)'; };
-
-  const img = document.createElement("img");
-  img.src = imgUrl;
-  img.style.cssText = `
-    max-width: 90%;
-    max-height: 80vh;
-    border-radius: 12px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-    transform: scale(0.9);
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    user-select: none;
-    -webkit-user-drag: none;
-  `;
-
-  header.appendChild(title);
-  header.appendChild(closeBtn);
-  overlay.appendChild(header);
-  overlay.appendChild(img);
-  document.body.appendChild(overlay);
-
-  setTimeout(() => {
-    overlay.style.opacity = "1";
-    img.style.transform = "scale(1)";
-  }, 10);
-
-  const closeLightbox = () => {
-    overlay.style.opacity = "0";
-    img.style.transform = "scale(0.9)";
-    setTimeout(() => {
-      overlay.remove();
-    }, 300);
-    document.removeEventListener("keydown", handleEsc);
-  };
-
-  const handleEsc = (e) => {
-    if (e.key === "Escape") closeLightbox();
-  };
-  document.addEventListener("keydown", handleEsc);
-
-  closeBtn.onclick = closeLightbox;
-  overlay.onclick = (e) => {
-    if (e.target === overlay || e.target === img.parentNode) {
-      closeLightbox();
-    }
-  };
+  if (typeof openFullProfilePhotoViewer === "function") {
+    openFullProfilePhotoViewer(imgUrl, username);
+  }
 }
 window.viewFullscreenProfilePicture = viewFullscreenProfilePicture;
 

@@ -1423,6 +1423,9 @@ const CallManager = (() => {
       if ($("call-modal").classList.contains("minimized")) return;
       if (e.target.id === "call-modal" && _callState !== "connected") close();
     });
+
+    window.addEventListener("beforeunload", () => close(true));
+    window.addEventListener("pagehide", () => close(true));
   }
 
   return { open, close, accept, reject, rejoin, wireSocket, initButtons, minimize, restore, getCallState };

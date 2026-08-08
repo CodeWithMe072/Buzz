@@ -55,6 +55,18 @@
             });
         }
     }
+
+    // Document-level delegation to ensure + -> Camera works reliably after dynamic DOM updates
+    document.addEventListener("click", (e) => {
+        const btn = e.target.closest("#camera-btn-custom");
+        if (btn) {
+            const actionsPopup = document.getElementById("chat-actions-popup");
+            if (actionsPopup) {
+                actionsPopup.classList.remove("active");
+            }
+            openCameraCaptureOverlay();
+        }
+    });
     window.initCameraCapture = initCameraCapture;
     window.openCameraCaptureOverlay = openCameraCaptureOverlay;
     window.closeCameraCaptureOverlay = closeCameraCaptureOverlay;
@@ -342,6 +354,10 @@
         }
         stopRecordingTimer();
     }
+
+    // Clean up tracks when tab closes or hides to immediately remove Android silent notifications
+    window.addEventListener("beforeunload", stopLiveCameraStream);
+    window.addEventListener("pagehide", stopLiveCameraStream);
 
     async function clearStatusPendingUpload() {
         if (window.currentStatusUploadId && window.IndexedDBQueueService) {
@@ -786,7 +802,11 @@
                 const objectUrl = URL.createObjectURL(capturedBlob);
                 videoPreview.src = objectUrl;
                 videoPreview.style.display = "block";
-                videoPreview.classList.remove("mirrored-media");
+                if (currentCameraFacing === "user") {
+                    videoPreview.classList.add("mirrored-media");
+                } else {
+                    videoPreview.classList.remove("mirrored-media");
+                }
                 videoEl.style.display = "none";
                 videoPreview.play();
             }
@@ -1794,7 +1814,11 @@
             if (videoPreview) {
                 videoPreview.src = objectUrl;
                 videoPreview.style.display = "block";
-                videoPreview.classList.remove("mirrored-media");
+                if (draft.cameraFacing === "user" || currentCameraFacing === "user") {
+                    videoPreview.classList.add("mirrored-media");
+                } else {
+                    videoPreview.classList.remove("mirrored-media");
+                }
                 videoPreview.play();
             }
             if (imgPreview) {
