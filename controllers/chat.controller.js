@@ -386,7 +386,11 @@ export const deleteMessage = async (req, res) => {
     const { type } = req.body; // 'me' or 'everyone'
     const myId = req.user._id;
 
-    const message = await Message.findById(messageId);
+    const query = mongoose.Types.ObjectId.isValid(messageId)
+      ? { _id: messageId }
+      : { tempId: messageId };
+
+    const message = await Message.findOne(query);
     if (!message) {
       return res.status(404).json({ status: false, message: "Message not found" });
     }
@@ -394,13 +398,13 @@ export const deleteMessage = async (req, res) => {
     if (type === "everyone") {
       // Add both users' IDs to soft delete list
       await Message.updateOne(
-        { _id: messageId },
+        { _id: message._id },
         { $addToSet: { deletedFor: { $each: [message.from, message.to] } } }
       );
     } else {
       // Add current user ID to soft delete list
       await Message.updateOne(
-        { _id: messageId },
+        { _id: message._id },
         { $addToSet: { deletedFor: myId } }
       );
     }

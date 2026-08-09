@@ -8395,32 +8395,40 @@ input:checked+.slider:before {
 }
 
 .whatsapp-emoji-bar {
-   background: #1c1c1e;
+    background: #1c1c1e;
     border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 24px;
-    padding: 6px 10px;
+    border-radius: 30px;
+    padding: 6px 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
-    gap: 4px;
+    gap: 2px;
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    width: 300px;
+    width: auto !important;
+    max-width: calc(100vw - 20px);
     box-sizing: border-box;
 }
 
 .whatsapp-emoji-bar .emoji-btn {
-       background: none;
+    background: none;
     border: none;
     font-size: 19px;
     cursor: pointer;
-    padding: 2px 6px;
+    padding: 2px;
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    max-width: 36px !important;
+    max-height: 36px !important;
     border-radius: 50%;
     transition: transform 0.12s, background-color 0.12s;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0 !important;
 }
 
 .whatsapp-emoji-bar .emoji-btn:hover {

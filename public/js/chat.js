@@ -1612,6 +1612,13 @@ function createGroupMessageElement(groupMessages) {
 
     // Attachment lightbox click handler
     itemEl.onclick = (e) => {
+      if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        const parentMsgEl = itemEl.closest(".message, .media-group-message") || msgEl;
+        window.toggleMessageSelection(msg, parentMsgEl);
+        return;
+      }
       e.stopPropagation();
       if (typeof MediaViewer !== "undefined") {
         if ((!window.viewer || window.viewer.chatId !== State.activeChat) && State.activeChat) {
@@ -1685,6 +1692,62 @@ function createGroupMessageElement(groupMessages) {
   bubbleEl.appendChild(footerEl);
 
   msgEl.appendChild(bubbleEl);
+
+  // Touch / Hold events for mobile context menu & selection on media groups
+  let groupTouchTimer = null;
+  let groupOptionsTriggered = false;
+  let groupStartX = 0;
+  let groupStartY = 0;
+
+  msgEl.addEventListener("touchstart", (e) => {
+    groupOptionsTriggered = false;
+    const touch = e.touches[0];
+    groupStartX = touch.clientX;
+    groupStartY = touch.clientY;
+
+    if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+      return;
+    }
+
+    groupTouchTimer = setTimeout(() => {
+      groupOptionsTriggered = true;
+      if (typeof showGroupMessageOptions === "function") {
+        showGroupMessageOptions(groupMessages, msgEl, e);
+      }
+    }, 450);
+  }, { passive: true });
+
+  msgEl.addEventListener("touchend", (e) => {
+    const touch = e.changedTouches?.[0];
+    const endX = touch ? touch.clientX : groupStartX;
+    const endY = touch ? touch.clientY : groupStartY;
+    const distance = Math.hypot(endX - groupStartX, endY - groupStartY);
+
+    if (groupTouchTimer) {
+      clearTimeout(groupTouchTimer);
+      groupTouchTimer = null;
+    }
+
+    if (groupOptionsTriggered) {
+      e.preventDefault();
+      return;
+    }
+
+    if (State.selectedMessageIds && State.selectedMessageIds.size > 0 && distance < 10) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.toggleMessageSelection(firstMsg, msgEl);
+      return;
+    }
+  }, { passive: false });
+
+  msgEl.addEventListener("click", (e) => {
+    if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.toggleMessageSelection(firstMsg, msgEl);
+    }
+  });
 
   // Context menu listener for media group
   msgEl.addEventListener("contextmenu", (e) => {
@@ -1891,7 +1954,12 @@ function showMessageOptions(message, msgEl, event) {
     e.stopPropagation();
     popup.remove();
 
-    const msgId = message.id || message._id || message.tempId;
+    const isGroup = !!message.groupId;
+    const chatId = State.activeChat;
+    const msgsInChat = (chatId && State.messages[chatId]) ? State.messages[chatId] : [];
+    const groupItems = isGroup ? msgsInChat.filter(m => m && m.groupId === message.groupId) : [message];
+    const targetMsgIds = (groupItems.length > 0 ? groupItems : [message]).map(m => m.id || m._id || m.tempId).filter(Boolean);
+
     const isMe = message.sender === "me" ||
       message.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
       message.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
@@ -1902,7 +1970,7 @@ function showMessageOptions(message, msgEl, event) {
     modal.style.zIndex = "2200";
     modal.innerHTML = `
       <div class="delete-confirm-box">
-        <h3>Delete message?</h3>
+        <h3>${isGroup ? 'Delete media group?' : 'Delete message?'}</h3>
         <div class="delete-confirm-actions">
           ${isMe ? '<button type="button" class="delete-btn everyone-btn">Delete for everyone</button>' : ''}
           <button type="button" class="delete-btn me-btn">Delete for me</button>
@@ -1927,16 +1995,19 @@ function showMessageOptions(message, msgEl, event) {
 
     const performDelete = async (type) => {
       try {
-        const res = await apiRequest("DELETE", `/api/message/${msgId}`, { type });
-        if (res && res.status) {
-          // Emit socket deletion sync event
-          if (typeof socket !== "undefined" && socket.emit) {
-            socket.emit("delete_message", { messageId: msgId, to: State.activeChat, type });
+        const deletePromises = targetMsgIds.map(async (msgId) => {
+          const res = await apiRequest("DELETE", `/api/message/${msgId}`, { type });
+          if (res && res.status) {
+            if (typeof socket !== "undefined" && socket.emit) {
+              socket.emit("delete_message", { messageId: msgId, to: State.activeChat, type });
+            }
+            if (typeof window.animateAndDeleteMessageFromDom === "function") {
+              window.animateAndDeleteMessageFromDom(msgId);
+            }
           }
-          showToast("Message deleted", "success");
-        } else {
-          showToast("Failed to delete message", "error");
-        }
+        });
+        await Promise.all(deletePromises);
+        showToast(isGroup ? "Media group deleted" : "Message deleted", "success");
       } catch (err) {
         console.error("Delete message error:", err);
         showToast("Error deleting message", "error");
@@ -2682,6 +2753,40 @@ window.openEmojiPickerModal = function (messageId, chatId) {
   modal.addEventListener("click", outsideClickHandler);
 };
 
+window.updateChatListLastMessage = function (chatId) {
+  if (!chatId) return;
+  const conv = State.conversations.find(c => c.id === chatId);
+  if (!conv) return;
+
+  const msgs = State.messages[chatId] || [];
+  const newLastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+
+  if (newLastMsg) {
+    conv.lastMessage = newLastMsg;
+    conv.timestamp = newLastMsg.timestamp;
+  } else {
+    conv.lastMessage = null;
+    conv.timestamp = null;
+  }
+
+  // Update chat item preview & time in left sidebar DOM
+  const item = document.querySelector(`.chat-item[data-conv-id="${chatId}"]`);
+  if (item) {
+    const timeEl = item.querySelector(".chat-item-time");
+    if (timeEl) {
+      timeEl.textContent = newLastMsg && newLastMsg.timestamp ? formatTime(newLastMsg.timestamp) : "";
+    }
+    const previewEl = item.querySelector(".chat-item-preview");
+    if (previewEl) {
+      previewEl.innerHTML = typeof getLastMessageHTML === "function" ? getLastMessageHTML(conv) : "";
+    }
+  } else {
+    if (typeof renderChatList === "function") {
+      renderChatList();
+    }
+  }
+};
+
 window.animateAndDeleteMessageFromDom = function (messageId) {
   const msgEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
   const groupItemEl = document.querySelector(`.media-group-item[data-message-id="${messageId}"]`);
@@ -2691,7 +2796,7 @@ window.animateAndDeleteMessageFromDom = function (messageId) {
   }
 
   // Remove the message object from the local State.messages array to keep state in sync
-  const chatId = State.messageIndex[messageId];
+  const chatId = State.messageIndex[messageId] || State.activeChat;
   if (chatId) {
     const msgs = State.messages[chatId] || [];
     const index = msgs.findIndex(m => String(m.id ?? m.tempId ?? m._id) === String(messageId));
@@ -2721,11 +2826,16 @@ window.animateAndDeleteMessageFromDom = function (messageId) {
       msgEl.remove();
     }, 400);
   }
+
+  // Update chat list last message preview & time if deleted message was the last message
+  if (chatId && typeof window.updateChatListLastMessage === "function") {
+    window.updateChatListLastMessage(chatId);
+  }
 };
 
 // Clear current message selection
 window.clearMessageSelection = function () {
-  document.querySelectorAll(".message.selected").forEach(el => el.classList.remove("selected"));
+  document.querySelectorAll(".message.selected, .media-group-message.selected").forEach(el => el.classList.remove("selected"));
   document.querySelectorAll(".mobile-emoji-bar").forEach(el => el.remove());
 
   const selectionHeader = document.getElementById("mobile-selection-header");
@@ -2748,17 +2858,21 @@ window.clearMessageSelection = function () {
 
 // Toggle single message selection in multi-selection mode
 window.toggleMessageSelection = function (message, msgEl) {
-  const msgId = message.id || message._id || message.tempId;
+  const msgId = message.id || message._id || message.tempId || message.groupId;
   if (!State.selectedMessageIds) {
     State.selectedMessageIds = new Set();
   }
 
+  if (!msgEl || (!msgEl.classList.contains("message") && !msgEl.classList.contains("media-group-message"))) {
+    msgEl = document.querySelector(`.message[data-message-id="${msgId}"], .media-group-message[data-group-id="${msgId}"], .media-group-message[data-message-id="${msgId}"]`);
+  }
+
   if (State.selectedMessageIds.has(msgId)) {
     State.selectedMessageIds.delete(msgId);
-    msgEl.classList.remove("selected");
+    if (msgEl) msgEl.classList.remove("selected");
   } else {
     State.selectedMessageIds.add(msgId);
-    msgEl.classList.add("selected");
+    if (msgEl) msgEl.classList.add("selected");
   }
 
   const count = State.selectedMessageIds.size;
@@ -2794,7 +2908,7 @@ window.toggleMessageSelection = function (message, msgEl) {
   } else {
     // If count returned to exactly 1, show reactions bar for the single remaining message
     const remainingId = Array.from(State.selectedMessageIds)[0];
-    const remainingEl = document.querySelector(`.message[data-message-id="${remainingId}"]`);
+    const remainingEl = document.querySelector(`.message[data-message-id="${remainingId}"], .media-group-message[data-group-id="${remainingId}"]`);
     if (remainingEl) {
       const remainingChatId = State.messageIndex[remainingId];
       if (remainingChatId) {
@@ -2832,8 +2946,8 @@ window.showMobileEmojiBarForMessage = function (message, msgEl) {
       <button class="emoji-btn plus-btn" data-emoji="plus" title="More reactions"><i class="ti ti-plus"></i></button>
   `;
 
-  const barWidth = 300;
   const viewportWidth = window.innerWidth;
+  const barWidth = Math.min(345, viewportWidth - 20);
 
   emojiBar.style.position = "fixed";
   let left = rect.left + rect.width / 2 - barWidth / 2;
@@ -2895,6 +3009,13 @@ window.showMobileEmojiBarForMessage = function (message, msgEl) {
 // Select a message (mobile/tablet view) and initialize selection mode
 window.selectMessageMobile = function (message, msgEl) {
   const msgId = message.id || message._id || message.tempId;
+
+  // If selection mode is already active, toggle selection of this message instead of clearing
+  if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
+    window.toggleMessageSelection(message, msgEl);
+    return;
+  }
+
   clearMessageSelection();
 
   State.selectedMessageIds = new Set([msgId]);
@@ -2935,7 +3056,7 @@ window.selectMessageMobile = function (message, msgEl) {
       if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
         const emojiBar = document.querySelector(".mobile-emoji-bar");
         const clickedInsideEmojiBar = emojiBar && emojiBar.contains(e.target);
-        const clickedInsideMessage = e.target.closest(".message");
+        const clickedInsideMessage = e.target.closest(".message, .media-group-message");
         const clickedInsideSelectionHeader = e.target.closest(".mobile-selection-header");
         const clickedInsideDropdown = e.target.closest(".selection-dropdown-menu");
 
@@ -3124,29 +3245,53 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("#delete-selection-btn")) {
     if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
       let allMine = true;
-      const msgIds = Array.from(State.selectedMessageIds);
+      const rawMsgIds = Array.from(State.selectedMessageIds);
 
-      for (const msgId of msgIds) {
-        const chatId = State.messageIndex[msgId];
-        if (chatId) {
-          const msg = (State.messages[chatId] || []).find(m => m && (m.id || m._id || m.tempId) === msgId);
-          if (msg) {
-            const isMe = msg.sender === "me" ||
-              msg.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
-              msg.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
-            if (!isMe) {
-              allMine = false;
-            }
+      // Expand any selected media group IDs into all items of that media group
+      const allTargetMsgIds = new Set();
+      const allTargetMsgs = [];
+
+      for (const rawId of rawMsgIds) {
+        const chatId = State.messageIndex[rawId] || State.activeChat;
+        const msgsInChat = State.messages[chatId] || [];
+        let msg = msgsInChat.find(m => m && (m.id === rawId || m._id === rawId || m.tempId === rawId || m.groupId === rawId));
+        if (msg) {
+          if (msg.groupId) {
+            const groupItems = msgsInChat.filter(m => m && m.groupId === msg.groupId);
+            groupItems.forEach(item => {
+              const itemId = item.id || item._id || item.tempId;
+              if (itemId) {
+                allTargetMsgIds.add(itemId);
+                allTargetMsgs.push(item);
+              }
+            });
+          } else {
+            const itemId = msg.id || msg._id || msg.tempId || rawId;
+            allTargetMsgIds.add(itemId);
+            allTargetMsgs.push(msg);
           }
+        } else {
+          allTargetMsgIds.add(rawId);
         }
       }
+
+      for (const msg of allTargetMsgs) {
+        const isMe = msg.sender === "me" ||
+          msg.user?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString() ||
+          msg.from?.toString() === (State.currentUser?.id || State.currentUser?._id)?.toString();
+        if (!isMe) {
+          allMine = false;
+        }
+      }
+
+      const finalMsgIds = Array.from(allTargetMsgIds);
 
       const modal = document.createElement("div");
       modal.className = "modal-overlay delete-message-modal";
       modal.style.zIndex = "2200";
       modal.innerHTML = `
         <div class="delete-confirm-box">
-          <h3>Delete ${msgIds.length} message${msgIds.length > 1 ? 's' : ''}?</h3>
+          <h3>Delete selected message${finalMsgIds.length > 1 ? 's' : ''}?</h3>
           <div class="delete-confirm-actions">
             ${allMine ? '<button type="button" class="delete-btn everyone-btn">Delete for everyone</button>' : ''}
             <button type="button" class="delete-btn me-btn">Delete for me</button>
@@ -3174,15 +3319,19 @@ document.addEventListener("click", (e) => {
 
       const performDelete = async (type) => {
         try {
-          for (const msgId of msgIds) {
+          const deletePromises = finalMsgIds.map(async (msgId) => {
             const res = await apiRequest("DELETE", `/api/message/${msgId}`, { type });
             if (res && res.status) {
               if (typeof socket !== "undefined" && socket.emit) {
                 socket.emit("delete_message", { messageId: msgId, to: State.activeChat, type });
               }
+              if (typeof window.animateAndDeleteMessageFromDom === "function") {
+                window.animateAndDeleteMessageFromDom(msgId);
+              }
             }
-          }
-          showToast(`Deleted ${msgIds.length} message${msgIds.length > 1 ? 's' : ''}`, "success");
+          });
+          await Promise.all(deletePromises);
+          showToast(`Deleted selected message${finalMsgIds.length > 1 ? 's' : ''}`, "success");
         } catch (err) {
           console.error("Delete messages error:", err);
           showToast("Error deleting messages", "error");
