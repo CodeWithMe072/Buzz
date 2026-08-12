@@ -115,9 +115,6 @@ async function buildCommonArgs() {
   // Use Node.js as the JavaScript runtime for signature decryption
   args.push("--js-runtimes", "node");
 
-  // Use a web player client which is less aggressive on bot checks
-  args.push("--extractor-args", "youtube:player_client=web");
-
   // Cookie authentication
   const { cookiesPath, useBrowserCookies } = await getCookiesConfig();
   if (cookiesPath) {

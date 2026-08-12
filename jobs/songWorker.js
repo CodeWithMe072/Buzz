@@ -43,6 +43,12 @@ export const songWorker = new Worker(
       console.log(`[SongWorker] Fetching metadata for videoId: ${videoId}`);
       const meta = await getMetadata(videoUrl).catch((metaErr) => {
         console.warn(`[SongWorker] Metadata extraction failed for ${videoId}: ${metaErr.message}`);
+        const isNonRetryable =
+          metaErr.message.includes("Requested format is not available") ||
+          metaErr.message.includes("Only images are available");
+        if (isNonRetryable) {
+          throw metaErr;
+        }
         return {
           title: request.title,
           uploader: request.channelTitle || "Unknown Artist",
@@ -171,6 +177,23 @@ export const songWorker = new Worker(
       // Clean up temporary file if it still exists
       if (await fs.pathExists(tempPath)) {
         await fs.remove(tempPath).catch(() => {});
+      }
+
+      // Check if the error is non-retryable
+      const errMsg = err.message || "";
+      const isNonRetryable =
+        errMsg.includes("Requested format is not available") ||
+        errMsg.includes("Only images are available") ||
+        errMsg.includes("duration is too short") ||
+        errMsg.includes("duration is too long") ||
+        errMsg.includes("Video duration is too");
+
+      if (isNonRetryable) {
+        console.log(`[SongWorker] Non-retryable error detected: ${errMsg}. Failing request immediately.`);
+        request.status = "failed";
+        request.failureReason = errMsg;
+        await request.save().catch(() => {});
+        return; // Resolve successfully to prevent BullMQ retries
       }
 
       // Propagate the error so BullMQ tracks attempts and handles retries
