@@ -74,8 +74,10 @@ function formatDuration(sec) {
 
 /**
  * Helper to write cookies content to a file if configured in environment variables.
+ * Returns { cookiesPath, useBrowserCookies } to inform callers how to authenticate.
  */
-async function getCookiesPath() {
+async function getCookiesConfig() {
+  // 1. Check for explicit cookies file/content via env var
   if (process.env.YOUTUBE_COOKIES) {
     try {
       const cookiesPath = path.join(os.tmpdir(), "youtube_cookies.txt");
@@ -89,12 +91,42 @@ async function getCookiesPath() {
         }
       }
       await fs.writeFile(cookiesPath, content.trim());
-      return cookiesPath;
+      return { cookiesPath, useBrowserCookies: false };
     } catch (err) {
       console.error("[ytDownloader] Failed to write cookies file:", err.message);
     }
   }
-  return null;
+
+  // 2. Check for explicit cookie browser preference via env var (e.g. "chrome", "firefox", "edge")
+  if (process.env.YOUTUBE_COOKIES_BROWSER) {
+    return { cookiesPath: null, useBrowserCookies: process.env.YOUTUBE_COOKIES_BROWSER };
+  }
+
+  // 3. No cookies configured — rely on JS runtime + web player client to bypass bot checks
+  return { cookiesPath: null, useBrowserCookies: false };
+}
+
+/**
+ * Builds common yt-dlp arguments for JS runtime and cookie authentication.
+ */
+async function buildCommonArgs() {
+  const args = [];
+
+  // Use Node.js as the JavaScript runtime for signature decryption
+  args.push("--js-runtimes", "node");
+
+  // Use a web player client which is less aggressive on bot checks
+  args.push("--extractor-args", "youtube:player_client=web");
+
+  // Cookie authentication
+  const { cookiesPath, useBrowserCookies } = await getCookiesConfig();
+  if (cookiesPath) {
+    args.push("--cookies", cookiesPath);
+  } else if (useBrowserCookies) {
+    args.push("--cookies-from-browser", useBrowserCookies);
+  }
+
+  return args;
 }
 
 /**
@@ -102,13 +134,9 @@ async function getCookiesPath() {
  */
 export async function getMetadata(videoUrl) {
   const binaryPath = await ensureYtdlp();
-  const cookiesPath = await getCookiesPath();
+  const commonArgs = await buildCommonArgs();
   return new Promise((resolve, reject) => {
-    const args = ["--dump-json", "--no-playlist"];
-    if (cookiesPath) {
-      args.push("--cookies", cookiesPath);
-    }
-    args.push(videoUrl);
+    const args = [...commonArgs, "--dump-json", "--no-playlist", videoUrl];
     const proc = spawn(binaryPath, args);
     let stdout = "";
     let stderr = "";
@@ -151,7 +179,7 @@ export async function getMetadata(videoUrl) {
  */
 export async function downloadAudioStream(videoUrl, outputPath) {
   const binaryPath = await ensureYtdlp();
-  const cookiesPath = await getCookiesPath();
+  const commonArgs = await buildCommonArgs();
   
   // yt-dlp -o format: we use the parent dir + filename template
   const parsedPath = path.parse(outputPath);
@@ -159,16 +187,14 @@ export async function downloadAudioStream(videoUrl, outputPath) {
 
   return new Promise((resolve, reject) => {
     const args = [
+      ...commonArgs,
       "-x",
       "--audio-format", "mp3",
       "--audio-quality", "0", // Best VBR
       "--no-playlist",
-      "-o", templatePath
+      "-o", templatePath,
+      videoUrl
     ];
-    if (cookiesPath) {
-      args.push("--cookies", cookiesPath);
-    }
-    args.push(videoUrl);
 
     console.log(`[ytDownloader] Downloading and transcoding audio for: ${videoUrl}`);
     const proc = spawn(binaryPath, args);
