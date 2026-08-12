@@ -587,6 +587,41 @@ const EmojiPanel = (() => {
     };
   }
 
+  function scrollToBottom() {
+    const container = document.getElementById("messages-container");
+    if (container) {
+      setTimeout(() => {
+        container.scrollTop = 99999;
+      }, 150); // delay to let layout transition complete
+    }
+  }
+
+  function setEmojiPanelActive(isActive, fromPopstate = false) {
+    const panel = $("custom-emoji-panel");
+    if (!panel) return;
+    
+    if (isActive) {
+      if (!window.__emojiPanelActive) {
+        window.__emojiPanelActive = true;
+        window.history.pushState({ emojiPanelOpen: true }, "", window.location.pathname);
+      }
+      panel.classList.add("active");
+    } else {
+      if (window.__emojiPanelActive) {
+        window.__emojiPanelActive = false;
+        if (!fromPopstate) {
+          window.__ignoreNextPopstate = true;
+          window.history.back();
+        }
+      }
+      panel.classList.remove("active");
+    }
+    scrollToBottom();
+    if (typeof window.updateInputContainerState === "function") window.updateInputContainerState();
+  }
+  
+  window.setEmojiPanelActive = setEmojiPanelActive;
+
   function init() {
     const btn = $("emoji-panel-btn");
     const panel = $("custom-emoji-panel");
@@ -602,22 +637,12 @@ const EmojiPanel = (() => {
     // Rebuild and load navigation tabs initially
     loadCustomGifsAndTrending();
 
-    const scrollToBottom = () => {
-      const container = document.getElementById("messages-container");
-      if (container) {
-        setTimeout(() => {
-          container.scrollTop = 99999;
-        }, 150); // delay to let layout transition complete
-      }
-    };
-
     // Toggle panel
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const isActive = panel.classList.toggle("active");
-      scrollToBottom();
-      if (typeof window.updateInputContainerState === "function") window.updateInputContainerState();
-      if (isActive) {
+      const nextActive = !window.__emojiPanelActive;
+      setEmojiPanelActive(nextActive);
+      if (nextActive) {
         // Dismiss the virtual keyboard
         const activeInput = document.activeElement;
         if (activeInput && (activeInput.tagName === "INPUT" || activeInput.tagName === "TEXTAREA")) {
@@ -636,10 +661,8 @@ const EmojiPanel = (() => {
     const messageInput = $("message-input");
     if (messageInput) {
       messageInput.addEventListener("click", () => {
-        if (panel.classList.contains("active")) {
-          panel.classList.remove("active");
-          scrollToBottom();
-          if (typeof window.updateInputContainerState === "function") window.updateInputContainerState();
+        if (window.__emojiPanelActive) {
+          setEmojiPanelActive(false);
         }
       });
     }
@@ -647,10 +670,8 @@ const EmojiPanel = (() => {
     // Close on click outside (but not on input or panel elements, nor custom uploader/confirm modals)
     document.addEventListener("click", (e) => {
       if (!panel.contains(e.target) && e.target !== btn && !e.target.closest("#emoji-panel-btn") && e.target !== messageInput && !e.target.closest("#custom-gif-upload-modal") && !e.target.closest("#custom-confirm-modal")) {
-        if (panel.classList.contains("active")) {
-          panel.classList.remove("active");
-          scrollToBottom();
-          if (typeof window.updateInputContainerState === "function") window.updateInputContainerState();
+        if (window.__emojiPanelActive) {
+          setEmojiPanelActive(false);
         }
       }
     });
@@ -1644,11 +1665,7 @@ const EmojiPanel = (() => {
     }
 
     // Close picker drawer
-    const panel = $("custom-emoji-panel");
-    if (panel) {
-      panel.classList.remove("active");
-      if (typeof window.updateInputContainerState === "function") window.updateInputContainerState();
-    }
+    setEmojiPanelActive(false);
 
     // Reset replyingTo state
     State.replyingTo = null;

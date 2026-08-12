@@ -217,6 +217,8 @@ const NetworkMonitor = {
   get canSend() { return this.isOnline && this.isSocketConnected; }
 };
 
+window.State = State;
+
 // ── Audio / Recording ───────────────────────────────────────
 let currentStream      = null;
 let mediaRecorder      = null;

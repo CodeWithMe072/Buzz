@@ -18,7 +18,18 @@ export async function init() {
                 const wrapper = document.createElement("div");
                 wrapper.innerHTML = html;
                 passwordOverlay = wrapper.firstElementChild;
-                passwordOverlay.classList.remove("active");
+                let isShowDashboard = true;
+                if (savedUser) {
+                    try {
+                        const u = JSON.parse(savedUser);
+                        isShowDashboard = u.showDashboard ?? true;
+                    } catch(e) {}
+                }
+                if (!isShowDashboard) {
+                    passwordOverlay.classList.add("active");
+                } else {
+                    passwordOverlay.classList.remove("active");
+                }
                 document.body.appendChild(passwordOverlay);
                 
                 const passwordInput = document.getElementById("passwordInput");

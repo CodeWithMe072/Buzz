@@ -113,8 +113,8 @@ app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
 /* ---------- Page routes ---------- */
-// All pages are served from index.ejs — client-side JS handles screens
-app.get("/", (req, res) => {
+// All pages are served from index.ejs — client-side JS handles screens and SPA routes
+const renderApp = (req, res) => {
   // Ensure they have a device ID cookie
   if (!req.cookies?.deviceId) {
     const newDeviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
@@ -135,11 +135,17 @@ app.get("/", (req, res) => {
     isPasswordLockEnabled: user?.passwordLockEnabled ?? true,
     isServerLogin
   });
-});
+};
 
-// Redirect any other page hit back to "/" so the SPA handles it
-app.get("/app", (req, res) => res.redirect("/"));
-app.get("/login", (req, res) => res.redirect("/"));
+app.get("/", renderApp);
+app.get("/app", renderApp);
+app.get("/login", renderApp);
+app.get("/signup", renderApp);
+app.get(/^\/verify/, renderApp);
+app.get(/^\/inbox/, renderApp);
+app.get(/^\/status/, renderApp);
+app.get(/^\/@/, renderApp);
+
 /* ---------- req.io Middleware ---------- */
 app.use((req, res, next) => {
   req.io = io;
@@ -169,7 +175,7 @@ app.use((req, res) => {
   ) {
     return res.status(404).json({ status: false, message: "Route not found" });
   }
-  res.redirect("/");
+  renderApp(req, res);
 });
 
 /* ---------- Socket.io ---------- */

@@ -408,6 +408,13 @@
         // Hide caption container
         const captionContainer = document.getElementById("camera-preview-caption-container");
         if (captionContainer) captionContainer.style.display = "none";
+
+        // Clean up history stack if we pushed a dummy state
+        if (window.__cameraPreviewActive) {
+            window.__cameraPreviewActive = false;
+            window.__ignoreNextPopstate = true;
+            window.history.back();
+        }
     }
 
     async function toggleCameraFacing() {
@@ -882,6 +889,12 @@
         if (actionControls) actionControls.style.display = "none";
         if (previewControls) previewControls.style.display = "flex";
 
+        // Push history state to intercept browser Back button
+        if (!window.__cameraPreviewActive) {
+            window.history.pushState({ cameraPreviewActive: true }, "", window.location.pathname);
+            window.__cameraPreviewActive = true;
+        }
+
         // Show/hide preview mute button if preview media is a video
         const muteBtn = document.getElementById("camera-preview-mute-btn");
         if (muteBtn) {
@@ -1010,6 +1023,13 @@
         const overlay = document.getElementById("camera-capture-overlay");
         if (overlay && overlay.style.display !== "none") {
             startLiveCameraStream();
+        }
+
+        // Clean up history stack if we pushed a dummy state
+        if (window.__cameraPreviewActive) {
+            window.__cameraPreviewActive = false;
+            window.__ignoreNextPopstate = true;
+            window.history.back();
         }
     }
 

@@ -195,6 +195,14 @@ class MediaViewer {
         this.overlay.classList.add('active');
         document.body.style.overflow = 'hidden';
 
+        window.__mediaViewerActive = true;
+        window.activeMediaViewer = this;
+
+        const activeItem = this.mediaItems[this.currentIndex];
+        if (activeItem) {
+            window.history.pushState({ mediaViewerOpen: true }, "", `/inbox/${this.chatId}/${activeItem.id}`);
+        }
+
         // Bind dynamic keydown listener
         this.keydownHandler = (e) => {
             if (!this.overlay.classList.contains('active')) return;
@@ -207,7 +215,7 @@ class MediaViewer {
         this.render(true);
     }
 
-    close() {
+    close(fromPopstate = false) {
         this.overlay.classList.remove('active');
         document.body.style.overflow = '';
         
@@ -248,6 +256,14 @@ class MediaViewer {
         this.container.innerHTML = '';
         this.thumbnailContainer.innerHTML = '';
         this.renderedCount = 0;
+
+        window.__mediaViewerActive = false;
+        window.activeMediaViewer = null;
+
+        if (!fromPopstate && window.history.state && window.history.state.mediaViewerOpen) {
+            window.__ignoreNextPopstate = true;
+            window.history.back();
+        }
     }
 
     async loadMoreFromDB() {
@@ -658,6 +674,12 @@ class MediaViewer {
                 }
             }
         });
+
+        // Update URL without polluting history stack!
+        const activeItem = this.mediaItems[this.currentIndex];
+        if (activeItem) {
+            window.history.replaceState({ mediaViewerOpen: true }, "", `/inbox/${this.chatId}/${activeItem.id}`);
+        }
 
         this.thumbnailContainer.querySelectorAll('.thumbnail-item').forEach((t) => {
             const indexAttr = Number(t.dataset.index);
@@ -1452,3 +1474,13 @@ class MediaViewer {
         }
     }
 }
+
+// Global Helper to open the chat media viewer
+window.openChatMediaViewer = function(mediaId) {
+    if (typeof MediaViewer !== "undefined" && window.State && window.State.activeChat) {
+        if (!window.viewer || window.viewer.chatId !== window.State.activeChat) {
+            window.viewer = new MediaViewer(window.State.activeChat);
+        }
+        window.viewer.open(mediaId, null, true);
+    }
+};

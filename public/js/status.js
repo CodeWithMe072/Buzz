@@ -264,6 +264,13 @@
                     if (videoStream) videoStream.style.display = "none";
                     if (captureControls) captureControls.style.display = "none";
                     if (previewControls) previewControls.style.display = "flex";
+
+                    // Push history state to intercept browser Back button
+                    if (!window.__cameraPreviewActive) {
+                        window.history.pushState({ cameraPreviewActive: true }, "", window.location.pathname);
+                        window.__cameraPreviewActive = true;
+                    }
+
                     if (captionContainer) captionContainer.style.display = "block";
                     if (captionInput) captionInput.value = "";
 
@@ -2084,6 +2091,10 @@
             }
 
             pickerOverlay.style.display = "flex";
+            if (!window.__songPickerActive && !window.__cameraTrimmerActive) {
+                window.history.pushState({ songPickerOpen: true }, "", window.location.pathname);
+                window.__songPickerActive = true;
+            }
             if (searchInput) {
                 searchInput.value = "";
                 searchInput.focus();
@@ -2097,6 +2108,11 @@
         if (closeBtn) {
             closeBtn.onclick = () => {
                 pickerOverlay.style.display = "none";
+                if (window.__songPickerActive) {
+                    window.__songPickerActive = false;
+                    window.__ignoreNextPopstate = true;
+                    window.history.back();
+                }
                 // Resume video preview when closing picker
                 const videoPreview = document.getElementById("camera-capture-video-preview");
                 if (videoPreview && videoPreview.style.display !== "none" && videoPreview.src) {
@@ -2196,6 +2212,13 @@
                     trimmerAudio.src = "";
                 }
                 if (trimmerOverlay) trimmerOverlay.style.display = "none";
+
+                // Pop history stack if it is active (could be clicked from status preview or trimmer)
+                if (window.__cameraTrimmerActive) {
+                    window.__cameraTrimmerActive = false;
+                    window.__ignoreNextPopstate = true;
+                    window.history.back();
+                }
             };
         }
 
@@ -2203,14 +2226,9 @@
         if (trimmerCancelBtn) {
             trimmerCancelBtn.onclick = (e) => {
                 e.stopPropagation();
-                window.pendingStatusSongRef = null;
-                updateSongBadgeVisibility();
-                if (trimmerAudio) {
-                    trimmerAudio.pause();
-                    trimmerAudio.src = "";
+                if (typeof window.showCameraTrimmerDiscardConfirmation === "function") {
+                    window.showCameraTrimmerDiscardConfirmation(false);
                 }
-                if (trimmerOverlay) trimmerOverlay.style.display = "none";
-                restoreCameraPreviewControls();
             };
         }
 
@@ -2224,6 +2242,13 @@
                 updateSongBadgeVisibility();
                 if (trimmerOverlay) trimmerOverlay.style.display = "none";
                 restoreCameraPreviewControls();
+
+                // Pop history stack
+                if (window.__cameraTrimmerActive) {
+                    window.__cameraTrimmerActive = false;
+                    window.__ignoreNextPopstate = true;
+                    window.history.back();
+                }
             };
         }
 
@@ -2865,6 +2890,12 @@
                         }
 
                         pickerOverlay.style.display = "none";
+
+                        // Transition history state active flag
+                        if (window.__songPickerActive) {
+                            window.__songPickerActive = false;
+                            window.__cameraTrimmerActive = true;
+                        }
                     };
                 }
 
@@ -2872,6 +2903,26 @@
             });
         }
         window.initAudioTrimmer = initAudioTrimmer;
+
+        function discardSongAndGoBackToPicker() {
+            window.pendingStatusSongRef = null;
+            updateSongBadgeVisibility();
+            if (trimmerAudio) {
+                trimmerAudio.pause();
+                trimmerAudio.src = "";
+            }
+            if (trimmerOverlay) trimmerOverlay.style.display = "none";
+            
+            // Show picker sheet again
+            if (pickerOverlay) {
+                pickerOverlay.style.display = "flex";
+                if (searchInput) {
+                    searchInput.value = "";
+                    searchInput.focus();
+                }
+            }
+        }
+        window.discardSongAndGoBackToPicker = discardSongAndGoBackToPicker;
     }
 
     function prefetchNextSegment() {

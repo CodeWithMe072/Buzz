@@ -79,6 +79,14 @@ async function unlockScreen() {
                     if (typeof showChatScreen === "function") {
                         showChatScreen();
                     }
+
+                    if (window.Router) {
+                        const currentPath = window.location.pathname;
+                        if (currentPath === "/" || currentPath === "") {
+                            const targetPath = window.Router.consumePendingRoute() || "/inbox";
+                            window.Router.navigate(targetPath, { replace: true });
+                        }
+                    }
                 } catch (err) {
                     console.error("Failed to load chat layout after unlock:", err);
                 } finally {

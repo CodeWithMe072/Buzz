@@ -91,7 +91,7 @@ export const readUserFromCookie = async (req, res, next) => {
     );
 
     const user = await User.findById(decoded.id)
-      .select("_id username email avatar isActive showDashboard");
+      .select("_id username email avatar isActive showDashboard passwordLockEnabled");
     req.user = user || null;
 
     next();

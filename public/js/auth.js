@@ -108,6 +108,13 @@ async function bootstrapAfterLogin() {
     window.hideLoader();
   }
 
+  // Handle SPA routing after chat initialization
+  if (window.Router && window.Router.isUnlocked()) {
+    const currentPath = window.location.pathname;
+    const targetPath = window.Router.consumePendingRoute() || (currentPath.startsWith("/inbox") ? currentPath : "/inbox");
+    window.Router.handleRouteChange(targetPath);
+  }
+
   // Start background loading of non-critical modules (emoji, media, calls)
   if (typeof window.startBackgroundLoading === "function") {
     window.startBackgroundLoading();
@@ -306,7 +313,12 @@ function initPeoplePanel() {
   if (userProfileHeader) {
     userProfileHeader.style.cursor = "pointer";
     userProfileHeader.onclick = () => {
-      openProfileModal("account");
+      const username = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
+      if (window.Router) {
+        window.Router.navigate("/@" + username);
+      } else {
+        openProfileModal(null);
+      }
     };
   }
 
@@ -379,7 +391,7 @@ function formatRelativeTime(date) {
   return `${diffDays}d ago`;
 }
 
-function openLogLightbox(url, timestamp) {
+function openLogLightbox(url, timestamp, logId, logOwnerUsername = null) {
   if (document.querySelector(".log-lightbox-overlay")) return;
   const lightbox = document.createElement("div");
   lightbox.className = "log-lightbox-overlay";
@@ -390,14 +402,29 @@ function openLogLightbox(url, timestamp) {
       <div class="lightbox-meta">Captured on ${new Date(timestamp).toLocaleString()}</div>
     </div>
   `;
-  lightbox.querySelector(".lightbox-close").onclick = () => {
+
+  const username = logOwnerUsername || ((window.State && window.State.currentUser) ? window.State.currentUser.username : "me");
+
+  window.__logLightboxActive = true;
+  window.history.pushState({ lightboxOpen: true }, "", `/@${username}/log/${logId}`);
+
+  const closeLightbox = (fromPopstate = false) => {
     lightbox.classList.remove("active");
     setTimeout(() => lightbox.remove(), 300);
+    window.__logLightboxActive = false;
+    window.closeLogLightbox = null;
+    if (!fromPopstate && window.history.state && window.history.state.lightboxOpen) {
+      window.__ignoreNextPopstate = true;
+      window.history.back();
+    }
   };
+
+  window.closeLogLightbox = closeLightbox;
+
+  lightbox.querySelector(".lightbox-close").onclick = () => closeLightbox(false);
   lightbox.onclick = (e) => {
     if (e.target === lightbox) {
-      lightbox.classList.remove("active");
-      setTimeout(() => lightbox.remove(), 300);
+      closeLightbox(false);
     }
   };
   document.body.appendChild(lightbox);
@@ -1596,7 +1623,7 @@ async function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
     
     card.addEventListener("click", () => {
       if (typeof openMomentsCarousel === "function") {
-        openMomentsCarousel(friendId, snap.url);
+        openMomentsCarousel(friendId, snap._id || snap.id);
       }
     });
     gridEl.appendChild(card);
@@ -1626,7 +1653,7 @@ function initProfileModal() {
   }
 }
 
-async function openProfileModal(defaultSection = "account", isUserClick = false) {
+async function openProfileModal(defaultSection = null, isUserClick = false) {
   document.body.classList.add("profile-page-active");
   const avatarBtn = document.getElementById("nav-avatar-btn");
   const chatBtn = document.getElementById("nav-chat-btn");
@@ -1677,17 +1704,51 @@ async function openProfileModal(defaultSection = "account", isUserClick = false)
   initProfileModal();
   updateRequestsBadge();
 
-  if (window.innerWidth <= 768 && isUserClick) {
-    document.body.classList.remove("mobile-profile-value-active");
+  if (!defaultSection) {
+    // Clear active classes from buttons
     document.querySelectorAll(".profile-nav-btn").forEach(btn => btn.classList.remove("active"));
+    
+    // Render placeholder welcome panel inside #people-tab-content
+    const tabContent = document.getElementById("people-tab-content");
+    if (tabContent) {
+      tabContent.innerHTML = `
+        <div class="status-empty-panel">
+          <div class="status-empty-icon" style="background: rgba(147, 51, 234, 0.08); color: rgb(147, 51, 234); animation: none;">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <h3>Profile & Settings</h3>
+          <p>Select an option from the sidebar to manage your account, discover people, or view moments.</p>
+        </div>
+      `;
+    }
+
+    if (window.Router && window.State && window.State.currentUser) {
+      const username = window.State.currentUser.username || "me";
+      window.Router.navigate("/@" + username, { silent: true });
+    }
+
+    if (window.innerWidth <= 768) {
+      document.body.classList.remove("mobile-profile-value-active");
+    }
   } else {
-    switchProfileModalSection(defaultSection || "account");
+    if (window.innerWidth <= 768 && isUserClick) {
+      document.body.classList.remove("mobile-profile-value-active");
+      document.querySelectorAll(".profile-nav-btn").forEach(btn => btn.classList.remove("active"));
+    } else {
+      switchProfileModalSection(defaultSection);
+    }
   }
 }
 
 function closeProfileModal() {
   document.body.classList.remove("profile-page-active");
   document.body.classList.remove("mobile-profile-value-active");
+  if (window.Router) {
+    window.Router.navigate("/inbox", { silent: true });
+  }
   const chatBtn = document.getElementById("nav-chat-btn");
   if (chatBtn && typeof chatBtn.click === "function") {
     chatBtn.click();
@@ -1699,6 +1760,12 @@ async function switchProfileModalSection(sectionName) {
     btn.classList.toggle("active", btn.dataset.section === sectionName);
   });
   await renderPeopleTab(sectionName);
+
+  // Sync URL bar to /@username/:section
+  if (window.Router && window.State && window.State.currentUser) {
+    const username = window.State.currentUser.username || "me";
+    window.Router.navigate("/@" + username + "/" + sectionName, { silent: true });
+  }
 
   if (window.innerWidth <= 768) {
     document.body.classList.add("mobile-profile-value-active");
@@ -1935,6 +2002,9 @@ async function loadAndRenderLogs(container) {
     return;
   }
 
+  const friend = State.sharedLogsUsers ? State.sharedLogsUsers.find(u => (u.id || u._id || "").toString() === selectedUserId.toString()) : null;
+  const logOwnerUsername = friend ? friend.username : ((window.State && window.State.currentUser) ? window.State.currentUser.username : "me");
+
   photos.forEach((photo) => {
     const photoCard = document.createElement("div");
     photoCard.className = "log-photo-card";
@@ -1942,7 +2012,7 @@ async function loadAndRenderLogs(container) {
       <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
       <div class="log-card-overlay"><span class="log-time">${formatRelativeTime(new Date(photo.createdAt))}</span></div>
     `;
-    photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt));
+    photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt, photo._id || photo.id, logOwnerUsername));
     gallery.appendChild(photoCard);
   });
 }
@@ -2027,6 +2097,7 @@ function renderModalLogs(logsGallery) {
     logsGallery.innerHTML = `<div class="gallery-empty" style="grid-column: span 3;"><p>No security log photos yet.</p></div>`;
     return;
   }
+  const logOwnerUsername = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
   photos.forEach((photo) => {
     const photoCard = document.createElement("div");
     photoCard.className = "log-photo-card";
@@ -2034,7 +2105,7 @@ function renderModalLogs(logsGallery) {
       <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
       <div class="log-card-overlay"><span class="log-time">${formatRelativeTime(new Date(photo.createdAt))}</span></div>
     `;
-    photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt));
+    photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt, photo._id || photo.id, logOwnerUsername));
     logsGallery.appendChild(photoCard);
   });
 }

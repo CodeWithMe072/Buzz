@@ -460,7 +460,16 @@ function initChatWindow() {
             captionArea.value = "";
             adjustTextareaHeight(captionArea);
         }
+
+        // Clean up history stack if we pushed a dummy state
+        if (window.__mediaModalOpen) {
+            window.__mediaModalOpen = false;
+            window.__ignoreNextPopstate = true;
+            window.history.back();
+        }
     }
+
+    window.closeMediaUploadPreviewModal = closeMediaUploadPreviewModal;
 
     function addMoreFiles(files) {
         if (!files || files.length === 0) return;
@@ -476,7 +485,9 @@ function initChatWindow() {
         ];
 
         for (let file of files) {
-            if (!file.type.startsWith("image/") && !file.type.startsWith("video/") && !docTypes.includes(file.type)) {
+            const isDoc = docTypes.includes(file.type);
+            const isImageVideo = file.type.startsWith("image/") || file.type.startsWith("video/");
+            if (!isDoc && !isImageVideo) {
                 showToast(`Unsupported file: ${file.name}`, "error");
                 continue;
             }
@@ -493,9 +504,12 @@ function initChatWindow() {
             const modal = document.getElementById("media-upload-preview-modal");
             if (modal) {
                 modal.style.display = "flex";
+                if (!window.__mediaModalOpen) {
+                    window.history.pushState({ mediaModalOpen: true }, "", window.location.pathname);
+                    window.__mediaModalOpen = true;
+                }
                 const captionArea = document.getElementById("media-preview-caption");
                 if (captionArea) {
-                    captionArea.focus();
                     adjustTextareaHeight(captionArea);
                 }
             }

@@ -29,6 +29,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     console.timeEnd("NetworkMonitor");
 
+    // 2. Initialize Client-Side Router
+    if (window.Router) {
+        window.Router.init();
+    }
+
     // 3. Load component based on server and client configuration
     const config = window.APP_CONFIG || { isServerLogin: false, isShowDashboard: true, isPasswordLockEnabled: true };
     const rootEl = document.getElementById("app-root");

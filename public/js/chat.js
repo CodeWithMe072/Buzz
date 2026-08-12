@@ -184,6 +184,7 @@ function renderChatList(filter = "") {
     const item = document.createElement("div");
     item.className = `chat-item ${State.activeChat === conv.id ? "active" : ""}`;
     item.dataset.convId = conv.id;
+    item.dataset.id = conv.id;
     const isLetterAvatar = conv.avatar && conv.avatar.length === 1;
     const avatarHTML = isLetterAvatar
       ? `<span>${conv.avatar}</span>`
@@ -379,15 +380,30 @@ document.addEventListener("click", (e) => {
 // =============================================================================
 // OPEN CHAT
 // =============================================================================
-function openChat(chatId) {
+function openChat(chatId, options = {}) {
+  const { updateUrl = true } = options;
+  if (!chatId) return;
+
+  const conv = State.conversations.find(c => c.id === chatId || c.username === chatId);
+  if (!conv) return;
+
+  chatId = conv.id;
+  State.activeChat = chatId;
+
+  if (updateUrl && window.Router && !window.Router.isNavigatingFromRouter) {
+    window.Router.navigate(`/inbox/${chatId}`, { silent: true });
+  }
+
+  // Update active class in sidebar chat list
+  document.querySelectorAll(".chat-item").forEach(item => {
+    item.classList.toggle("active", item.dataset.convId === chatId || item.dataset.id === chatId);
+  });
+
   if (window.liveVoiceState && window.liveVoiceState.isListening && window.liveVoiceState.targetId !== chatId) {
     if (typeof window.stopListeningToVoice === "function") {
       window.stopListeningToVoice();
     }
   }
-  State.activeChat = chatId;
-  const conv = State.conversations.find(c => c.id === chatId);
-  if (!conv) return;
 
   conv.unread = 0;
   renderChatList(document.getElementById("chat-search").value.trim().toLowerCase());
@@ -436,6 +452,7 @@ function openChat(chatId) {
   // Query and cache friend's moments
   if (typeof getFriendMoments === "function") {
     getFriendMoments(chatId).then(res => {
+      if (State.activeChat !== chatId) return;
       if (res.code === 200) {
         const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
         if (res.Data?.allowed) {
@@ -469,6 +486,7 @@ function openChat(chatId) {
   // Query and check live voice permission
   if (typeof checkLiveVoiceAllowed === "function") {
     checkLiveVoiceAllowed(chatId).then(res => {
+      if (State.activeChat !== chatId) return;
       const liveVoiceBtn = document.getElementById("chat-live-voice-btn");
       const chatOptionLiveVoice = document.getElementById("chatOption-LiveVoice");
       if (res.code === 200 && res.Data?.allowed) {
@@ -2479,17 +2497,20 @@ function initMobileNavigation() {
   chatWindow.addEventListener("touchend", e => {
     const dx = e.changedTouches[0].screenX - startX;
     if (dx > 80 && !State.isSwiping) {
-      document.getElementById("chat-list-sidebar").classList.remove("hidden");
-      chatWindow.classList.remove("active");
-      State.activeChat = null;
-      // Show navbar on mobile when swiped back
-      const navbar = document.querySelector(".app-navbar");
-      if (navbar) navbar.style.display = "flex";
+      if (window.Router) {
+        window.Router.navigate("/inbox");
+      } else {
+        document.getElementById("chat-list-sidebar").classList.remove("hidden");
+        chatWindow.classList.remove("active");
+        State.activeChat = null;
+        const navbar = document.querySelector(".app-navbar");
+        if (navbar) navbar.style.display = "flex";
+      }
     }
   }, { passive: true });
 }
 
-function openMomentsCarousel(friendId, clickedSnapUrl = null) {
+function openMomentsCarousel(friendId, clickedSnapIdOrUrl = null) {
   const moments = State.friendMoments[friendId] || [];
   if (!moments.length) return;
 
@@ -2498,6 +2519,29 @@ function openMomentsCarousel(friendId, clickedSnapUrl = null) {
 
   const lightbox = document.createElement("div");
   lightbox.className = "moments-lightbox";
+
+  // Find starting index
+  let currentIndex = 0;
+  if (clickedSnapIdOrUrl) {
+    const idx = moments.findIndex(m => m.url === clickedSnapIdOrUrl || m._id?.toString() === clickedSnapIdOrUrl || m.id === clickedSnapIdOrUrl);
+    if (idx >= 0) currentIndex = idx;
+  }
+
+  const currentUserId = (window.State && window.State.currentUser) ? (window.State.currentUser.id || window.State.currentUser._id || "").toString() : "";
+  const isMe = friendId === "me" || friendId.toString() === currentUserId;
+  let username = "me";
+  if (isMe) {
+    username = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
+  } else {
+    const friend = State.contacts.find(c => (c.user.id || c.user._id || "").toString() === friendId.toString());
+    username = friend ? friend.user.username : "friend";
+  }
+
+  const activeMoment = moments[currentIndex];
+  const activeMomentId = activeMoment ? (activeMoment._id || activeMoment.id) : "";
+
+  window.__momentsLightboxActive = true;
+  window.history.pushState({ momentsLightboxOpen: true }, "", `/@${username}/moment/${activeMomentId}`);
 
   const slidesHtml = moments.map((m) => {
     const timeStr = typeof formatRelativeTime === "function"
@@ -2544,12 +2588,6 @@ function openMomentsCarousel(friendId, clickedSnapUrl = null) {
 
   const track = lightbox.querySelector(".moments-carousel-track");
   const slides = lightbox.querySelectorAll(".moments-slide");
-  let currentIndex = 0;
-
-  if (clickedSnapUrl) {
-    const idx = moments.findIndex(m => m.url === clickedSnapUrl);
-    if (idx >= 0) currentIndex = idx;
-  }
 
   const updateSlide = () => {
     track.style.transform = `translateX(-${currentIndex * 100}%)`;
@@ -2558,6 +2596,13 @@ function openMomentsCarousel(friendId, clickedSnapUrl = null) {
     if (prevBtn && nextBtn) {
       prevBtn.style.display = currentIndex === 0 ? "none" : "flex";
       nextBtn.style.display = currentIndex === slides.length - 1 ? "none" : "flex";
+    }
+
+    // Update URL without polluting history stack!
+    const activeMoment = moments[currentIndex];
+    if (activeMoment) {
+      const activeMomentId = activeMoment._id || activeMoment.id;
+      window.history.replaceState({ momentsLightboxOpen: true }, "", `/@${username}/moment/${activeMomentId}`);
     }
 
     // Play active slide's video and pause all others
@@ -2604,21 +2649,29 @@ function openMomentsCarousel(friendId, clickedSnapUrl = null) {
   };
   document.addEventListener("keydown", handleKeyDown);
 
-  const closeLightbox = () => {
+  const closeLightbox = (fromPopstate = false) => {
     lightbox.classList.remove("active");
     document.removeEventListener("keydown", handleKeyDown);
     lightbox.querySelectorAll("video").forEach(v => v.pause());
     setTimeout(() => lightbox.remove(), 300);
+    window.__momentsLightboxActive = false;
+    window.closeMomentsLightbox = null;
+    if (!fromPopstate && window.history.state && window.history.state.momentsLightboxOpen) {
+      window.__ignoreNextPopstate = true;
+      window.history.back();
+    }
   };
+
+  window.closeMomentsLightbox = closeLightbox;
 
   lightbox.querySelector(".moments-lightbox-close").onclick = (e) => {
     e.stopPropagation();
-    closeLightbox();
+    closeLightbox(false);
   };
 
   lightbox.onclick = (e) => {
     if (e.target === lightbox || e.target.classList.contains("moments-slide")) {
-      closeLightbox();
+      closeLightbox(false);
     }
   };
 
@@ -3365,6 +3418,7 @@ function initAppNavigation() {
   }
 
   chatBtn.onclick = async () => {
+    if (window.Router) window.Router.navigate("/inbox", { silent: true });
     document.body.classList.remove("profile-page-active");
     document.body.classList.remove("mobile-profile-value-active");
     chatBtn.classList.add("active");
@@ -3405,6 +3459,7 @@ function initAppNavigation() {
   };
 
   statusBtn.onclick = async () => {
+    if (window.Router) window.Router.navigate("/status", { silent: true });
     document.body.classList.remove("profile-page-active");
     document.body.classList.remove("mobile-profile-value-active");
     statusBtn.classList.add("active");
@@ -3453,8 +3508,10 @@ function initAppNavigation() {
 
   if (avatarBtn) {
     avatarBtn.onclick = () => {
+      const username = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
+      if (window.Router) window.Router.navigate("/@" + username, { silent: true });
       if (typeof openProfileModal === "function") {
-        openProfileModal("account", true);
+        openProfileModal(null, true);
       }
     };
   }
@@ -3894,6 +3951,9 @@ function openContactInfoSidebar() {
   const contactSidebar = document.getElementById("contact-info-sidebar");
   if (!contactSidebar || !State.activeChat) return;
 
+  window.__contactInfoSidebarActive = true;
+  window.history.pushState({ contactInfoOpen: true }, "");
+
   const activeConv = State.conversations.find(c => c.id === State.activeChat) || {};
   const headerUsernameEl = document.getElementById("chat-username");
   const headerStatusEl = document.getElementById("online-status");
@@ -3984,11 +4044,14 @@ function openContactInfoSidebar() {
   contactSidebar.classList.remove("hidden");
 }
 
-function closeContactInfoSidebar() {
+function closeContactInfoSidebar(fromPopstate = false) {
   const contactSidebar = document.getElementById("contact-info-sidebar");
   if (contactSidebar) {
     contactSidebar.classList.add("hidden");
   }
+
+  let popCount = 0;
+
   // Also reset gallery panel if it was open
   const galleryPanel = document.getElementById("media-gallery-panel");
   if (galleryPanel && !galleryPanel.classList.contains("hidden")) {
@@ -3997,6 +4060,24 @@ function closeContactInfoSidebar() {
     const contactHeader = document.querySelector(".contact-info-header");
     if (contactBody) contactBody.style.display = "";
     if (contactHeader) contactHeader.style.display = "";
+    window.__mediaGalleryActive = false;
+    if (!fromPopstate && window.history.state && window.history.state.mediaGalleryOpen) {
+      popCount++;
+    }
+  }
+
+  window.__contactInfoSidebarActive = false;
+  if (!fromPopstate && window.history.state && window.history.state.contactInfoOpen) {
+    popCount++;
+  }
+
+  if (popCount > 0) {
+    if (popCount === 1) {
+      window.__ignoreNextPopstate = true;
+    } else {
+      window.__ignorePopstatesCount = popCount;
+    }
+    window.history.go(-popCount);
   }
 }
 
@@ -4222,6 +4303,9 @@ function openMediaGalleryPanel() {
     const galleryPanel = document.getElementById("media-gallery-panel");
     if (!galleryPanel) return;
 
+    window.__mediaGalleryActive = true;
+    window.history.pushState({ mediaGalleryOpen: true }, "");
+
     if (contactBody) contactBody.style.display = "none";
     if (contactHeader) contactHeader.style.display = "none";
     galleryPanel.classList.remove("hidden");
@@ -4262,7 +4346,7 @@ function openMediaGalleryPanel() {
   });
 }
 
-function closeMediaGalleryPanel() {
+function closeMediaGalleryPanel(fromPopstate = false) {
   const contactBody = document.querySelector(".contact-info-body");
   const contactHeader = document.querySelector(".contact-info-header");
   const galleryPanel = document.getElementById("media-gallery-panel");
@@ -4271,6 +4355,12 @@ function closeMediaGalleryPanel() {
   galleryPanel.classList.add("hidden");
   if (contactBody) contactBody.style.display = "";
   if (contactHeader) contactHeader.style.display = "";
+
+  window.__mediaGalleryActive = false;
+  if (!fromPopstate && window.history.state && window.history.state.mediaGalleryOpen) {
+    window.__ignoreNextPopstate = true;
+    window.history.back();
+  }
 }
 
 async function loadMediaGalleryData() {
@@ -4477,18 +4567,54 @@ function renderGalleryDocsTab(contentEl) {
     const date = m.createdAt ? new Date(m.createdAt).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }) : "";
     const size = m.size && m.size !== "0 B" ? ` · ${m.size}` : "";
 
+    const msgId = m.id || m._id || m.tempId;
+    const isPresent = !!document.querySelector(`.message[data-message-id="${msgId}"]`);
+
     const docDiv = document.createElement("div");
     docDiv.className = "media-gallery-doc-item";
+    docDiv.style.cursor = "default";
+    docDiv.style.alignItems = "flex-start";
     docDiv.innerHTML = `
       <div class="media-gallery-doc-icon ${extClass}">${label}</div>
-      <div class="media-gallery-doc-info">
+      <div class="media-gallery-doc-info" style="flex: 1; min-width: 0;">
         <div class="media-gallery-doc-name" title="${filename}">${filename}</div>
-        <div class="media-gallery-doc-date">${date}${size}</div>
+        <div class="media-gallery-doc-date" style="margin-bottom: 4px;">${date}${size}</div>
+        <div class="media-gallery-doc-actions" style="display: flex; gap: 8px; margin-top: 8px; width: 100%;">
+          <button type="button" class="doc-btn doc-open go-to-msg-btn" ${isPresent ? "" : "disabled"} title="${isPresent ? "Scroll to message in chat" : "Message is not loaded in current chat history"}" style="padding: 5px 10px; font-size: 12px; height: 32px;">
+            <i class="ti ti-message"></i>
+            <span>Go to message</span>
+          </button>
+          <button type="button" class="doc-btn doc-save save-as-btn" style="padding: 5px 10px; font-size: 12px; height: 32px;">
+            <i class="ti ti-download"></i>
+            <span>Save as</span>
+          </button>
+        </div>
       </div>`;
 
-    docDiv.onclick = () => {
+    docDiv.querySelector(".go-to-msg-btn").onclick = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const targetEl = document.querySelector(`.message[data-message-id="${msgId}"]`);
+      if (targetEl) {
+        closeMediaGalleryPanel();
+        closeContactInfoSidebar();
+        targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        targetEl.classList.add("highlight-pulse");
+        setTimeout(() => targetEl.classList.remove("highlight-pulse"), 1500);
+      } else {
+        if (typeof showToast === "function") {
+          showToast("Message not found in current history", "info");
+        }
+      }
+    };
+
+    docDiv.querySelector(".save-as-btn").onclick = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
       const url = m.content || "";
-      if (url) window.open(url, "_blank");
+      if (url && typeof forceDownload === "function") {
+        forceDownload(url, filename, msgId, e.currentTarget);
+      }
     };
 
     contentEl.appendChild(docDiv);
