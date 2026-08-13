@@ -2,7 +2,8 @@
     <div class="chat-layout">
         <!-- App Navbar (Vertical / Bottom Bar) -->
         <div class="app-navbar">
-            <div class="nav-top">
+            <div class="nav-top" style="position: relative;">
+                <div class="nav-active-indicator" id="nav-active-indicator" style="display: none;"></div>
                 <button type="button" class="nav-item active" id="nav-chat-btn" title="Chats">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
@@ -28,11 +29,12 @@
         <!-- Chat List Sidebar -->
         <aside class="chat-list-sidebar" id="chat-list-sidebar">
             <div class="chat-list-header">
-                <div class="user-profile">
+                <!-- Desktop Header -->
+                <div class="user-profile desktop-only">
                     <div class="avatar" id="current-user-avatar"><span>U</span></div>
                     <span id="current-username">User</span>
                 </div>
-                <div class="header-actions">
+                <div class="header-actions desktop-only">
                     <!-- Add People Button with badge -->
                     <button class="icon-btn people-btn" id="add-people-btn" title="Account & People Hub">
                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -43,9 +45,44 @@
                         <span class="requests-badge" id="requests-badge" style="display:none">0</span>
                     </button>
                 </div>
+
+                <!-- Mobile Header -->
+                <div class="mobile-header-container mobile-only">
+                    <h2 class="mobile-messages-title">Messages</h2>
+                    <div class="mobile-header-actions-row">
+                        <button class="mobile-header-action-btn search-trigger-btn" id="mobile-search-btn" title="Search">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                        </button>
+                        <button class="mobile-header-action-btn requests-trigger-btn" id="mobile-requests-btn" title="Pending Requests">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                <polyline points="22,6 12,13 2,6"></polyline>
+                            </svg>
+                            <span class="requests-badge" id="mobile-requests-badge" style="display:none">0</span>
+                        </button>
+                        <button class="mobile-header-action-btn add-friends-btn" id="mobile-add-people-btn" title="Add Friends">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 4px; vertical-align: middle;">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <line x1="19" y1="8" x2="19" y2="14"></line>
+                                <line x1="16" y1="11" x2="22" y2="11"></line>
+                            </svg>
+                            Add Friends
+                        </button>
+                        <button class="mobile-header-action-btn start-chat-btn" id="mobile-new-chat-btn" title="Start New Chat">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <div class="chat-list-search">
+            <div class="chat-list-search desktop-only">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                     stroke-width="2">
                     <circle cx="11" cy="11" r="8" />
@@ -55,6 +92,33 @@
             </div>
 
             <div class="chat-list" id="chat-list"></div>
+
+            <!-- Mobile User Profile Status Bar -->
+            <div class="sidebar-profile-footer mobile-only">
+                <div class="footer-user-info" id="footer-user-info">
+                    <div class="footer-user-avatar-wrap">
+                        <div class="avatar" id="footer-user-avatar" style="width: 100%; height: 100%;">
+                            <span>U</span>
+                        </div>
+                        <div class="footer-status-dot"></div>
+                    </div>
+                    <div class="footer-user-details">
+                        <div class="footer-username-container">
+                            <span id="footer-username">User</span>
+                            <svg class="chevron-down" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                        <span class="footer-status">Online</span>
+                    </div>
+                </div>
+                <button class="footer-bell-btn" id="footer-settings-btn" title="Notifications">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                </button>
+            </div>
         </aside>
 
         <!-- Status Sidebar (NEW!) -->

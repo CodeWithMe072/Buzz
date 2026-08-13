@@ -3,19 +3,40 @@
  */
 
 // =============================================================================
+// GLOBAL AVATAR HELPER — person icon + blurple for no-photo users
+// =============================================================================
+const PERSON_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" style="opacity:0.9;width:55%;height:55%;"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`;
+
+/** Returns innerHTML for any avatar element — real photo with person-icon fallback, or just the icon. */
+window.makeAvatarHTML = function(avatarUrl) {
+  if (avatarUrl && avatarUrl.length > 2) {
+    return `<img src="${avatarUrl}" onerror="this.style.display='none';this.nextSibling&&(this.nextSibling.style.display='flex');" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;"/><span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;">${PERSON_ICON_SVG}</span>`;
+  }
+  return PERSON_ICON_SVG;
+};
+
+/** Returns the CSS background for an avatar container — empty string for photo, blurple for no photo. */
+window.avatarBg = function(avatarUrl) {
+  return (avatarUrl && avatarUrl.length > 2) ? '' : '#5865f2';
+};
+
+// =============================================================================
 // GLOBAL USER AVATAR & NAME SYNC
 // =============================================================================
 function updateGlobalUserAvatarUI() {
   const user = State.currentUser || {};
-  const firstLetter = (user.username || "U").charAt(0).toUpperCase();
+  const personIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="white" style="opacity:0.9;"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`;
+  const personIconFallbackSpan = `<span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${personIcon}</span>`;
 
-  // 1. Sidebar profile avatar
+  // 1. Sidebar profile avatar (desktop)
   const currentUserAvatar = document.getElementById("current-user-avatar");
   if (currentUserAvatar) {
     if (user.avatar) {
-      currentUserAvatar.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span style="display: none;">${firstLetter}</span>`;
+      currentUserAvatar.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;" />${personIconFallbackSpan}`;
+      currentUserAvatar.style.background = "";
     } else {
-      currentUserAvatar.innerHTML = `<span>${firstLetter}</span>`;
+      currentUserAvatar.innerHTML = personIcon;
+      currentUserAvatar.style.background = "#5865f2";
     }
   }
 
@@ -23,9 +44,11 @@ function updateGlobalUserAvatarUI() {
   const navAvatarBtn = document.getElementById("nav-avatar-btn");
   if (navAvatarBtn) {
     if (user.avatar) {
-      navAvatarBtn.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span id="nav-avatar-text" style="display: none;">${firstLetter}</span>`;
+      navAvatarBtn.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;" />${personIconFallbackSpan}`;
+      navAvatarBtn.style.background = "";
     } else {
-      navAvatarBtn.innerHTML = `<span id="nav-avatar-text">${firstLetter}</span>`;
+      navAvatarBtn.innerHTML = personIcon;
+      navAvatarBtn.style.background = "#5865f2";
     }
   }
 
@@ -33,9 +56,9 @@ function updateGlobalUserAvatarUI() {
   const avatarWrap = document.querySelector(".profile-modal-avatar-wrap");
   if (avatarWrap) {
     if (user.avatar) {
-      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><img src="${user.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: white;">${firstLetter}</div>`;
+      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><img src="${user.avatar}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;" /><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${personIcon}</div>`;
     } else {
-      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: white;">${firstLetter}</div>`;
+      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;">${personIcon}</div>`;
     }
   }
 
@@ -50,6 +73,23 @@ function updateGlobalUserAvatarUI() {
   const emailEl = document.getElementById("profile-modal-email");
   if (nameEl) nameEl.textContent = user.username || "User";
   if (emailEl) emailEl.textContent = user.email || "";
+
+  // 6. Mobile sidebar footer user profile info
+  const footerUserAvatar = document.getElementById("footer-user-avatar");
+  if (footerUserAvatar) {
+    const personIconFooter = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="white" style="opacity:0.9;"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`;
+    if (user.avatar) {
+      footerUserAvatar.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;" /><span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${personIconFooter}</span>`;
+      footerUserAvatar.style.background = "";
+    } else {
+      footerUserAvatar.innerHTML = personIconFooter;
+      footerUserAvatar.style.background = "#5865f2";
+    }
+  }
+  const footerUsername = document.getElementById("footer-username");
+  if (footerUsername) {
+    footerUsername.textContent = user.username || "User";
+  }
 }
 window.updateGlobalUserAvatarUI = updateGlobalUserAvatarUI;
 
@@ -84,9 +124,7 @@ async function bootstrapAfterLogin() {
       id: c.user.id,
       connectionId: c.connectionId,
       username: c.user.username,
-      avatar: (c.user.avatar && c.user.avatar.length > 2)
-        ? c.user.avatar
-        : c.user.username.charAt(0).toUpperCase(),
+      avatar: (c.user.avatar && c.user.avatar.length > 2) ? c.user.avatar : null,
       lastSeen: c.user.lastSeen,
       timestamp: 0,
       lastMessage: "Loading...",
@@ -300,6 +338,11 @@ function updateRequestsBadge() {
     modalBadge.textContent = count;
     modalBadge.style.display = count > 0 ? "inline-flex" : "none";
   }
+  const mobileBadge = document.getElementById("mobile-requests-badge");
+  if (mobileBadge) {
+    mobileBadge.textContent = count;
+    mobileBadge.style.display = count > 0 ? "flex" : "none";
+  }
 }
 
 // =============================================================================
@@ -330,6 +373,57 @@ function initPeoplePanel() {
     };
   }
 
+  // Bind mobile header buttons
+  const mobileSearchBtn = document.getElementById("mobile-search-btn");
+  if (mobileSearchBtn) {
+    mobileSearchBtn.onclick = () => {
+      const searchContainer = document.querySelector(".chat-list-search");
+      if (searchContainer) {
+        searchContainer.classList.toggle("mobile-show-search");
+        if (searchContainer.classList.contains("mobile-show-search")) {
+          const searchInput = document.getElementById("chat-search");
+          if (searchInput) searchInput.focus();
+        }
+      }
+    };
+  }
+
+  const mobileRequestsBtn = document.getElementById("mobile-requests-btn");
+  if (mobileRequestsBtn) {
+    mobileRequestsBtn.onclick = () => {
+      openProfileModal("requests");
+    };
+  }
+
+  const mobileAddPeopleBtn = document.getElementById("mobile-add-people-btn");
+  if (mobileAddPeopleBtn) {
+    mobileAddPeopleBtn.onclick = () => {
+      openProfileModal("search");
+    };
+  }
+
+  const mobileNewChatBtn = document.getElementById("mobile-new-chat-btn");
+  if (mobileNewChatBtn) {
+    mobileNewChatBtn.onclick = () => {
+      openProfileModal("contacts");
+    };
+  }
+
+  // Bind footer profile actions
+  const footerSettingsBtn = document.getElementById("footer-settings-btn");
+  if (footerSettingsBtn) {
+    footerSettingsBtn.onclick = () => {
+      openProfileModal("account");
+    };
+  }
+
+  const footerUserInfo = document.getElementById("footer-user-info");
+  if (footerUserInfo) {
+    footerUserInfo.onclick = () => {
+      openProfileModal("account");
+    };
+  }
+
   // Initialize the profile modal events
   initProfileModal();
 }
@@ -349,7 +443,7 @@ async function runSearch(q) {
     const item = document.createElement("div");
     item.className = "people-item premium-card";
     item.innerHTML = `
-      <div class="people-avatar">${user.username.charAt(0).toUpperCase()}</div>
+      <div class="people-avatar" style="background:${window.avatarBg(user.avatar)};display:flex;align-items:center;justify-content:center;">${window.makeAvatarHTML(user.avatar)}</div>
       <div class="people-info">
         <span class="people-name">${sanitizeInput(user.username)}</span>
       </div>
@@ -492,7 +586,7 @@ async function renderPeopleTab(tab) {
       const item = document.createElement("div");
       item.className = "people-item premium-card";
       item.innerHTML = `
-        <div class="people-avatar">${req.from.username.charAt(0).toUpperCase()}</div>
+        <div class="people-avatar" style="background:${window.avatarBg(req.from.avatar)};display:flex;align-items:center;justify-content:center;">${window.makeAvatarHTML(req.from.avatar)}</div>
         <div class="people-info">
           <span class="people-name">${sanitizeInput(req.from.username)}</span>
           <span class="people-meta">wants to connect</span>
@@ -553,7 +647,7 @@ async function renderPeopleTab(tab) {
       item.className = "people-item premium-card";
       const conv = State.conversations.find(cv => cv.id === c.user.id);
       item.innerHTML = `
-        <div class="people-avatar ${conv?.online ? "online" : ""}">${c.user.username.charAt(0).toUpperCase()}</div>
+        <div class="people-avatar ${conv?.online ? 'online' : ''}" style="background:${window.avatarBg(c.user.avatar)};display:flex;align-items:center;justify-content:center;">${window.makeAvatarHTML(c.user.avatar)}</div>
         <div class="people-info">
           <span class="people-name">${sanitizeInput(c.user.username)}</span>
           <span class="people-meta">${conv?.online ? "Online" : "Connected"}</span>
@@ -604,8 +698,8 @@ async function renderPeopleTab(tab) {
 
     // ── Avatar HTML helper ─────────────────────────────────────────────────
     const avatarInner = user.avatar
-      ? `<img id="settings-avatar-img" src="${user.avatar}" style="width:100%;height:100%;object-fit:cover;" />`
-      : `<div class="profile-modal-avatar-letter" id="settings-avatar-letter" style="font-size:24px;font-weight:700;color:white;">${(user.username || "U").charAt(0).toUpperCase()}</div>`;
+      ? `<img id="settings-avatar-img" src="${user.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />`
+      : `<div id="settings-avatar-letter" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#5865f2;border-radius:50%;">${PERSON_ICON_SVG}</div>`;
 
     container.innerHTML = `
       <div class="profile-section-title-wrap" style="margin-bottom:20px;">
@@ -1640,7 +1734,13 @@ function openPeoplePanel() {
 function initProfileModal() {
   document.querySelectorAll(".profile-nav-btn").forEach(btn => {
     btn.onclick = () => {
-      switchProfileModalSection(btn.dataset.section);
+      const section = btn.dataset.section;
+      switchProfileModalSection(section);
+      // Update URL to reflect the active profile section
+      if (window.Router && State.currentUser) {
+        const username = State.currentUser.username;
+        window.Router.navigate(`/@${username}/${section}`, { replace: true });
+      }
     };
   });
 
@@ -1655,6 +1755,16 @@ function initProfileModal() {
 
 async function openProfileModal(defaultSection = null, isUserClick = false) {
   document.body.classList.add("profile-page-active");
+
+  // Update URL to reflect profile page
+  if (window.Router && State.currentUser) {
+    const username = State.currentUser.username;
+    const targetPath = defaultSection
+      ? `/@${username}/${defaultSection}`
+      : `/@${username}`;
+    window.Router.navigate(targetPath, { replace: true });
+  }
+
   const avatarBtn = document.getElementById("nav-avatar-btn");
   const chatBtn = document.getElementById("nav-chat-btn");
   const statusBtn = document.getElementById("nav-status-btn");
@@ -1813,6 +1923,10 @@ function ensureMobileProfileHeader(sectionName) {
 
   header.querySelector("#profile-mobile-back-btn").onclick = () => {
     document.body.classList.remove("mobile-profile-value-active");
+    // Update URL back to /@username when going back to profile main page
+    if (window.Router && State.currentUser) {
+      window.Router.navigate(`/@${State.currentUser.username}`, { replace: true });
+    }
   };
 
   container.insertBefore(header, container.firstChild);
@@ -1834,7 +1948,7 @@ function renderModalWhitelist(whitelistList) {
     const isWhitelisted = allowed.includes(c.user.id?.toString());
     row.innerHTML = `
       <div class="whitelist-user">
-        <div class="whitelist-avatar">${c.user.username.charAt(0).toUpperCase()}</div>
+        <div class="whitelist-avatar" style="background:${window.avatarBg(c.user.avatar)};display:flex;align-items:center;justify-content:center;">${window.makeAvatarHTML(c.user.avatar)}</div>
         <span class="whitelist-username">${sanitizeInput(c.user.username)}</span>
       </div>
       <label class="switch mini-switch">
@@ -1881,7 +1995,7 @@ function renderModalVoiceWhitelist(whitelistList) {
     const isWhitelisted = allowed.includes(c.user.id?.toString());
     row.innerHTML = `
       <div class="whitelist-user">
-        <div class="whitelist-avatar">${c.user.username.charAt(0).toUpperCase()}</div>
+        <div class="whitelist-avatar" style="background:${window.avatarBg(c.user.avatar)};display:flex;align-items:center;justify-content:center;">${window.makeAvatarHTML(c.user.avatar)}</div>
         <span class="whitelist-username">${sanitizeInput(c.user.username)}</span>
       </div>
       <label class="switch mini-switch">
@@ -1928,7 +2042,7 @@ function renderModalSecurityLogWhitelist(whitelistList) {
     const isWhitelisted = allowed.includes(c.user.id?.toString());
     row.innerHTML = `
       <div class="whitelist-user">
-        <div class="whitelist-avatar">${c.user.username.charAt(0).toUpperCase()}</div>
+        <div class="whitelist-avatar" style="background:${window.avatarBg(c.user.avatar)};display:flex;align-items:center;justify-content:center;">${window.makeAvatarHTML(c.user.avatar)}</div>
         <span class="whitelist-username">${sanitizeInput(c.user.username)}</span>
       </div>
       <label class="switch mini-switch">
@@ -2027,7 +2141,7 @@ function renderLogSourcesTable(container) {
   myRow.style.borderBottom = "1px solid rgba(255,255,255,0.04)";
   myRow.innerHTML = `
     <td style="padding: 10px 12px; display: flex; align-items: center; gap: 8px;">
-      <div class="whitelist-avatar" style="width: 24px; height: 24px; font-size: 10px; margin: 0;">${State.currentUser.username.charAt(0).toUpperCase()}</div>
+      <div class="whitelist-avatar" style="width:24px;height:24px;margin:0;background:${window.avatarBg(State.currentUser?.avatar)};display:flex;align-items:center;justify-content:center;">${window.makeAvatarHTML(State.currentUser?.avatar)}</div>
       <span style="font-weight: 500;">You</span>
     </td>
     <td style="padding: 10px 12px; color: var(--text-secondary);">Personal Logs</td>
@@ -2045,7 +2159,7 @@ function renderLogSourcesTable(container) {
       row.style.borderBottom = "1px solid rgba(255,255,255,0.04)";
       row.innerHTML = `
         <td style="padding: 10px 12px; display: flex; align-items: center; gap: 8px;">
-          <div class="whitelist-avatar" style="width: 24px; height: 24px; font-size: 10px; margin: 0;">${u.username.charAt(0).toUpperCase()}</div>
+          <div class="whitelist-avatar" style="width:24px;height:24px;margin:0;background:${window.avatarBg(u.avatar)};display:flex;align-items:center;justify-content:center;">${window.makeAvatarHTML(u.avatar)}</div>
           <span style="font-weight: 500;">${sanitizeInput(u.username)}</span>
         </td>
         <td style="padding: 10px 12px; color: var(--text-secondary);">Shared Logs</td>

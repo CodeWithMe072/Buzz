@@ -591,6 +591,7 @@
             if (chatBtn) chatBtn.classList.add("active");
             if (statusBtn) statusBtn.classList.remove("active");
             if (avatarBtn) avatarBtn.classList.remove("active");
+            if (window.updateNavIndicator) window.updateNavIndicator();
 
             if (chatSidebar) {
                 chatSidebar.style.display = "flex";

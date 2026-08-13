@@ -212,10 +212,23 @@
 @media (max-width: 767px) {
     .chat-layout {
         margin-left: 0 !important;
-        margin-bottom: 64px !important; /* bottom rail space */
+        margin-bottom: 0 !important; /* Reset bottom rail space */
         width: 100% !important;
-        height: calc(100vh - 64px) !important;
-        height: calc(100dvh - 64px) !important;
+        height: 100% !important;
+        height: 100dvh !important;
+    }
+
+    body.profile-page-active #profile-page-sidebar {
+        display: flex !important;
+        left: 72px !important;
+        width: calc(100% - 72px) !important;
+        max-width: calc(100% - 72px) !important;
+        margin: 0 !important;
+        border-right: none !important;
+        height: 100% !important;
+        position: absolute !important;
+        transform: none !important;
+        z-index: 10 !important;
     }
 }
 

@@ -72,9 +72,9 @@ export const register = async (req, res) => {
       });
     }
 
-    /* --- Default avatar = first letter --- */
+    /* --- Default avatar = null (frontend renders person icon for no-photo users) --- */
     if (!avatar) {
-      avatar = username.trim().charAt(0).toUpperCase();
+      avatar = null;
     }
 
     /* --- Hash password --- */

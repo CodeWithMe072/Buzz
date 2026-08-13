@@ -148,9 +148,17 @@ function getLastMessageHTML(conv) {
     }
   }
 
+  // 4. Discord-style sender prefix: "You: " or "Username: "
+  const senderPrefix = isMe
+    ? `<span style="color: var(--text-secondary); flex-shrink: 0;">You:&nbsp;</span>`
+    : conv.username
+      ? `<span style="color: var(--text-secondary); flex-shrink: 0;">${sanitizeInput(conv.username)}:&nbsp;</span>`
+      : "";
+
   return `
     <div style="display: flex; align-items: center; width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
       ${tickHTML}
+      ${senderPrefix}
       ${iconHTML}
       <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeInput(textPreview)}</span>
     </div>
@@ -185,18 +193,20 @@ function renderChatList(filter = "") {
     item.className = `chat-item ${State.activeChat === conv.id ? "active" : ""}`;
     item.dataset.convId = conv.id;
     item.dataset.id = conv.id;
-    const isLetterAvatar = conv.avatar && conv.avatar.length === 1;
-    const avatarHTML = isLetterAvatar
-      ? `<span>${conv.avatar}</span>`
-      : `<img src="${conv.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" /><span style="display:none;">${conv.username.charAt(0).toUpperCase()}</span>`;
+    const hasRealAvatar = conv.avatar && conv.avatar.length > 1;
+    const personIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="white" style="opacity:0.9;"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`;
+    const avatarHTML = hasRealAvatar
+      ? `<img src="${conv.avatar}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;" /><span class="avatar-icon-fallback" style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${personIconSVG}</span>`
+      : personIconSVG;
+    const avatarExtraClass = hasRealAvatar ? '' : ' avatar-default';
 
     item.innerHTML = `
-      <div class="avatar ${conv.online ? "online" : ""}" style="cursor: pointer;" title="View ${sanitizeInput(conv.username)}'s profile">
+      <div class="avatar${avatarExtraClass} ${conv.online ? 'online' : ''}" style="cursor: pointer;" title="View ${sanitizeInput(conv.username)}'s profile">
         ${avatarHTML}
       </div>
       <div class="chat-item-content">
         <div class="chat-item-header">
-          <span class="chat-item-username">${sanitizeInput(conv.username)}</span>
+          <span class="chat-item-username">${sanitizeInput(conv.username)}${conv.unread > 0 ? ` (${conv.unread})` : ""}</span>
           <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) : ""}</span>
         </div>
         <div class="chat-item-preview ${conv.unread > 0 ? "unread" : ""} ${conv.messagesLoaded === false ? "loading-preview" : ""}">
@@ -431,12 +441,13 @@ function openChat(chatId, options = {}) {
   }
 
   const avatarEl = document.getElementById("chat-avatar");
-  const isLetterAvatar = conv.avatar && conv.avatar.length === 1;
-  const avatarHTML = isLetterAvatar
-    ? `<span>${conv.avatar}</span>`
-    : `<img src="${conv.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" /><span style="display:none;">${conv.username.charAt(0).toUpperCase()}</span>`;
+  const hasRealAvatarH = conv.avatar && conv.avatar.length > 1;
+  const personIconSVGH = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="white" style="opacity:0.9;"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`;
+  const avatarHTML = hasRealAvatarH
+    ? `<img src="${conv.avatar}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;" /><span style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${personIconSVGH}</span>`
+    : personIconSVGH;
   avatarEl.innerHTML = avatarHTML;
-  avatarEl.className = "avatar"; // Reset classes
+  avatarEl.className = hasRealAvatarH ? "avatar" : "avatar avatar-default"; // Reset classes
 
   // Clone element to reset previous click listeners
   const newAvatarEl = avatarEl.cloneNode(true);
@@ -3401,6 +3412,30 @@ document.addEventListener("click", (e) => {
   }
 });
 
+window.updateNavIndicator = () => {
+  const chatBtn = document.getElementById("nav-chat-btn");
+  const statusBtn = document.getElementById("nav-status-btn");
+  const indicator = document.getElementById("nav-active-indicator");
+  if (!chatBtn || !statusBtn || !indicator) return;
+
+  const activeBtn = chatBtn.classList.contains("active") ? chatBtn
+    : statusBtn.classList.contains("active") ? statusBtn
+    : null;
+
+  if (activeBtn) {
+    const navTop = activeBtn.closest(".nav-top");
+    if (!navTop) return;
+    const containerRect = navTop.getBoundingClientRect();
+    const btnRect = activeBtn.getBoundingClientRect();
+    // Centre the 40px-tall indicator bar on the active button
+    const targetTop = (btnRect.top - containerRect.top) + (btnRect.height / 2) - 20;
+    indicator.style.display = "block";
+    indicator.style.transform = `translateY(${targetTop}px)`;
+  } else {
+    indicator.style.display = "none";
+  }
+};
+
 function initAppNavigation() {
   const chatBtn = document.getElementById("nav-chat-btn");
   const statusBtn = document.getElementById("nav-status-btn");
@@ -3416,6 +3451,10 @@ function initAppNavigation() {
   if (window.updateGlobalUserAvatarUI) {
     window.updateGlobalUserAvatarUI();
   }
+  
+  if (window.updateNavIndicator) {
+    window.updateNavIndicator();
+  }
 
   chatBtn.onclick = async () => {
     if (window.Router) window.Router.navigate("/inbox", { silent: true });
@@ -3424,6 +3463,7 @@ function initAppNavigation() {
     chatBtn.classList.add("active");
     statusBtn.classList.remove("active");
     if (avatarBtn) avatarBtn.classList.remove("active");
+    if (window.updateNavIndicator) window.updateNavIndicator();
 
     const profileSidebar = document.getElementById("profile-page-sidebar");
     if (chatSidebar) {
@@ -3465,6 +3505,7 @@ function initAppNavigation() {
     statusBtn.classList.add("active");
     chatBtn.classList.remove("active");
     if (avatarBtn) avatarBtn.classList.remove("active");
+    if (window.updateNavIndicator) window.updateNavIndicator();
 
     const profileSidebar = document.getElementById("profile-page-sidebar");
     if (chatSidebar) {

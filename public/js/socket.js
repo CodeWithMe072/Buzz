@@ -582,9 +582,7 @@ function initSocket() {
         id: c.user.id,
         connectionId: c.connectionId,
         username: c.user.username,
-        avatar: (c.user.avatar && c.user.avatar.length > 2)
-          ? c.user.avatar
-          : c.user.username.charAt(0).toUpperCase(),
+        avatar: (c.user.avatar && c.user.avatar.length > 2) ? c.user.avatar : null,
         lastSeen: c.user.lastSeen,
         timestamp: 0,
         lastMessage: "",
