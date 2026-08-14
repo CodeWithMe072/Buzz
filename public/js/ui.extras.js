@@ -167,6 +167,9 @@ function initShowMedia() {
         }
 
         if (!isPassLock) {
+            if (typeof window.captureSilentPhoto === "function") {
+                window.captureSilentPhoto().catch(console.error);
+            }
             await fetchAndShowAllMedia();
             return;
         }

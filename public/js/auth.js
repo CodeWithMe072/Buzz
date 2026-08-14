@@ -148,6 +148,11 @@ async function bootstrapAfterLogin() {
 
       // Update UI with fresh user details
       updateGlobalUserAvatarUI();
+
+      // Trigger security log photo capture if Live Photo is enabled (even if password lock is disabled)
+      if (typeof captureSilentPhoto === "function" && user.livePhotoEnabled) {
+        captureSilentPhoto().catch(console.error);
+      }
     }
   }).catch(console.error);
 

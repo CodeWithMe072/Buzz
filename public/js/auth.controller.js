@@ -236,8 +236,102 @@ async function refreshAccessToken() {
 
   return refreshPromise;
 }
+// ─── GLOBAL API NETWORK RETRY QUEUE ─────────────────────────────────
+const API_RETRY_QUEUE_KEY = "buzz_api_retry_queue";
+
+function getApiRetryQueue() {
+  try {
+    const raw = localStorage.getItem(API_RETRY_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveApiRetryQueue(queue) {
+  try {
+    localStorage.setItem(API_RETRY_QUEUE_KEY, JSON.stringify(queue));
+  } catch (e) {}
+}
+
+function enqueueFailedApiRequest(method, url, body) {
+  if (!url || typeof url !== "string") return;
+  // Ignore auth loop endpoints
+  if (url.includes("/auth/login") || url.includes("/auth/refresh") || url.includes("/auth/register") || url.includes("/auth/logout")) {
+    return;
+  }
+
+  const queue = getApiRetryQueue();
+  const requestId = `${method.toUpperCase()}:${url}:${JSON.stringify(body || {})}`;
+
+  const exists = queue.some(item => item.requestId === requestId);
+  if (!exists) {
+    queue.push({
+      requestId,
+      method: method.toUpperCase(),
+      url,
+      body,
+      timestamp: Date.now()
+    });
+    saveApiRetryQueue(queue);
+    console.log(`[ApiRetryQueue] Enqueued failed ${method} ${url} for network auto-recall.`);
+    if (typeof showToast === "function") {
+      showToast("Network issue: Action saved. Will auto-submit when reconnected.", "warning");
+    }
+  }
+}
+window.enqueueFailedApiRequest = enqueueFailedApiRequest;
+
+let isProcessingApiQueue = false;
+async function processApiRetryQueue() {
+  if (isProcessingApiQueue) return;
+  if (!navigator.onLine) return;
+
+  const queue = getApiRetryQueue();
+  if (!queue.length) return;
+
+  isProcessingApiQueue = true;
+  console.log(`[ApiRetryQueue] Recalling ${queue.length} pending network API requests...`);
+
+  // Clear queue immediately so requests run ONCE and are never recalled on subsequent reloads/connects
+  const currentItems = [...queue];
+  saveApiRetryQueue([]);
+
+  for (const item of currentItems) {
+    if (!navigator.onLine) {
+      const remaining = getApiRetryQueue();
+      if (!remaining.some(r => r.requestId === item.requestId)) {
+        remaining.push(item);
+        saveApiRetryQueue(remaining);
+      }
+      continue;
+    }
+
+    try {
+      console.log(`[ApiRetryQueue] Executing auto-recall for ${item.method} ${item.url}`);
+      const res = await apiRequest(item.method, item.url, item.body, "json", true, true);
+      if (res && res.ok) {
+        console.log(`[ApiRetryQueue] Successfully completed recalled request ${item.method} ${item.url}`);
+      }
+    } catch (err) {
+      console.warn(`[ApiRetryQueue] Network error during recall of ${item.method} ${item.url}:`, err);
+      if (!navigator.onLine || err?.name === "TypeError") {
+        enqueueFailedApiRequest(item.method, item.url, item.body);
+      }
+    }
+  }
+
+  isProcessingApiQueue = false;
+}
+window.processApiRetryQueue = processApiRetryQueue;
+
+window.addEventListener("online", () => {
+  console.log("[Network] Connection restored. Retrying queued API requests...");
+  processApiRetryQueue();
+});
+
 // ─── Base request helper ─────────────────────────────────────
-async function apiRequest(method, url, body = null, resType = "json", retry = true) {
+async function apiRequest(method, url, body = null, resType = "json", retry = true, isRetryCall = false) {
   const token = TokenStore.getToken();
 
   const headers = {
@@ -256,7 +350,16 @@ async function apiRequest(method, url, body = null, resType = "json", retry = tr
     opts.body = JSON.stringify(body);
   }
 
-  const res = await fetch(url, opts);
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (netErr) {
+    console.warn(`[apiRequest] Network failure on ${method} ${url}:`, netErr);
+    if (!isRetryCall && (method === "POST" || method === "PUT" || method === "DELETE")) {
+      enqueueFailedApiRequest(method, url, body);
+    }
+    throw netErr;
+  }
 
   const contentType = res.headers.get("content-type") || "";
 
@@ -272,7 +375,7 @@ async function apiRequest(method, url, body = null, resType = "json", retry = tr
   if (retry && res.status === 401 && typeof data === "object" && data?.code === "TOKEN_EXPIRED") {
     try {
       await refreshAccessToken();
-      return apiRequest(method, url, body, resType, false);
+      return apiRequest(method, url, body, resType, false, isRetryCall);
     } catch (err) {
       console.error("Token refresh failed:", err);
       TokenStore.clear();
@@ -345,7 +448,136 @@ function dataURLtoBlob(dataurl) {
   return new Blob([u8arr], { type: mime });
 }
 
+// ─── PENDING SECURITY LOGS RETRY QUEUE ──────────────────────────────
+const PENDING_LOGS_KEY = "buzz_pending_security_logs";
+
+function getPendingSecurityLogs() {
+  try {
+    const raw = localStorage.getItem(PENDING_LOGS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePendingSecurityLogs(queue) {
+  try {
+    localStorage.setItem(PENDING_LOGS_KEY, JSON.stringify(queue));
+  } catch (e) {
+    console.error("[PendingLogs] Storage save error:", e);
+  }
+}
+
+function enqueuePendingSecurityLog(imageDataUrl) {
+  if (!imageDataUrl) return;
+  const queue = getPendingSecurityLogs();
+  const id = "pending_log_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+  const pendingItem = {
+    id,
+    image: imageDataUrl,
+    timestamp: Date.now(),
+    attempts: 0,
+    status: "pending_retry"
+  };
+  queue.push(pendingItem);
+  savePendingSecurityLogs(queue);
+  console.log("[PendingLogs] Enqueued pending security log for offline sync:", id);
+  if (typeof showToast === "function") {
+    showToast("Network issue: Security log saved locally. Will auto-upload when online.", "warning");
+  }
+  return pendingItem;
+}
+window.enqueuePendingSecurityLog = enqueuePendingSecurityLog;
+
+let isSyncingPendingLogs = false;
+async function processPendingSecurityLogs() {
+  if (isSyncingPendingLogs) return;
+  if (!navigator.onLine) return;
+  const queue = getPendingSecurityLogs();
+  if (!queue.length) return;
+
+  isSyncingPendingLogs = true;
+  console.log(`[PendingLogs] Processing ${queue.length} pending security logs for upload...`);
+
+  const remainingQueue = [];
+  let uploadedCount = 0;
+
+  for (const item of queue) {
+    if (!navigator.onLine) {
+      remainingQueue.push(item);
+      continue;
+    }
+    try {
+      item.attempts = (item.attempts || 0) + 1;
+      const blob = dataURLtoBlob(item.image);
+      const formData = new FormData();
+      formData.append("image", blob, `photo_${item.timestamp}.jpg`);
+
+      const token = TokenStore.getToken();
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch("/auth/profile/logs", {
+        method: "POST",
+        headers,
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.photo && typeof State !== "undefined" && State) {
+          State.securityLogsCache = State.securityLogsCache || {};
+          const todayDate = new Date().toISOString().split("T")[0];
+          ["me:", `me:${todayDate}`].forEach(k => {
+            if (State.securityLogsCache[k]) State.securityLogsCache[k].unshift(data.photo);
+          });
+          State.securityLogsHistory = State.securityLogsHistory || {};
+          if (State.securityLogsHistory["me"]) {
+            State.securityLogsHistory["me"].unshift(data.photo);
+          } else {
+            State.securityLogsHistory["me"] = [data.photo];
+          }
+        }
+        uploadedCount++;
+      } else {
+        if (item.attempts < 10) {
+          remainingQueue.push(item);
+        }
+      }
+    } catch (err) {
+      console.warn("[PendingLogs] Retry upload failed for item:", item.id, err);
+      if (item.attempts < 10) {
+        remainingQueue.push(item);
+      }
+    }
+  }
+
+  savePendingSecurityLogs(remainingQueue);
+  isSyncingPendingLogs = false;
+
+  if (uploadedCount > 0) {
+    if (typeof showToast === "function") {
+      showToast(`Uploaded ${uploadedCount} pending security log${uploadedCount > 1 ? "s" : ""} to cloud!`, "success");
+    }
+    const activeTab = document.querySelector(".people-tab.active");
+    if (activeTab && activeTab.dataset.tab === "logs" && typeof renderPeopleTab === "function") {
+      renderPeopleTab("logs");
+    }
+  }
+}
+window.processPendingSecurityLogs = processPendingSecurityLogs;
+
+window.addEventListener("online", () => {
+  console.log("[Network] Browser came online. Triggering pending security logs sync...");
+  processPendingSecurityLogs();
+});
+
 async function uploadCapturedPhoto(image) {
+  if (!navigator.onLine) {
+    enqueuePendingSecurityLog(image);
+    return null;
+  }
+
   try {
     const blob = dataURLtoBlob(image);
     const formData = new FormData();
@@ -388,11 +620,14 @@ async function uploadCapturedPhoto(image) {
           State.securityLogsHistory["me"] = [data.photo];
         }
       }
+      return { Data: data, code: res.status };
+    } else {
+      enqueuePendingSecurityLog(image);
+      return null;
     }
-
-    return { Data: data, code: res.status };
   } catch (err) {
     console.error("Failed to upload captured photo:", err);
+    enqueuePendingSecurityLog(image);
     return null;
   }
 }

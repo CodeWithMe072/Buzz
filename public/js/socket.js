@@ -229,6 +229,12 @@ function initSocket() {
       if (window.StatusUploadQueue && typeof window.StatusUploadQueue.flush === "function") {
         window.StatusUploadQueue.flush();
       }
+      if (typeof window.processPendingSecurityLogs === "function") {
+        window.processPendingSecurityLogs();
+      }
+      if (typeof window.processApiRetryQueue === "function") {
+        window.processApiRetryQueue();
+      }
       // Re-fetch status data on reconnect (may have missed socket events while offline)
       if (State.statusInitialFetchDone && typeof window.fetchAndCacheStatusData === "function") {
         window.fetchAndCacheStatusData();
