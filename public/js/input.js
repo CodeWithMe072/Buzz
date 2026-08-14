@@ -22,11 +22,32 @@ function initChatWindow() {
     
     
     
-    const snapshotBtn = document.getElementById("chat-capture-snapshot-btn");
-    if (snapshotBtn) {
-        snapshotBtn.addEventListener("click", () => {
-            const friendId = snapshotBtn.dataset.friendId;
-            if (!friendId) return;
+    // Wire delegated snapshot button click handler globally to support dynamic re-renders
+    if (!window.__snapshotButtonListenerBound) {
+        window.__snapshotButtonListenerBound = true;
+        document.addEventListener("click", (e) => {
+            const snapshotBtn = e.target.closest("#chat-capture-snapshot-btn");
+            if (!snapshotBtn) return;
+
+            e.stopPropagation();
+
+            const friendId = snapshotBtn.dataset.friendId || State.activeChat;
+            if (!friendId) {
+                showToast("No active chat selected", "error");
+                return;
+            }
+
+            // Check online/socket network connectivity explicitly
+            if (!navigator.onLine || (typeof socket !== "undefined" && !socket.connected)) {
+                showToast("Network error: Cannot reach server. Please check your internet connection.", "error");
+                return;
+            }
+
+            const conv = (State.conversations || []).find(c => c.id === friendId);
+            if (conv && !conv.online) {
+                showToast(`${conv.username || 'User'} is offline. Cannot request camera feed.`, "warning");
+                return;
+            }
 
             snapshotBtn.disabled = true;
             snapshotBtn.style.opacity = "0.4";
@@ -35,6 +56,14 @@ function initChatWindow() {
 
             showCameraSelector(
                 async (requestType, facingMode) => {
+                    if (!navigator.onLine || (typeof socket !== "undefined" && !socket.connected)) {
+                        showToast("Network error: Connection lost. Please try again.", "error");
+                        snapshotBtn.disabled = false;
+                        snapshotBtn.style.opacity = "1";
+                        snapshotBtn.innerHTML = originalHTML;
+                        return;
+                    }
+
                     if (typeof window.startCameraRequestTimeout === "function") {
                         window.startCameraRequestTimeout(friendId, requestType, () => {
                             snapshotBtn.disabled = false;
@@ -48,10 +77,11 @@ function initChatWindow() {
                         showToast("Requesting snapshot...", "info");
                     } else {
                         showToast("Requesting live video preview...", "info");
-                        const conv = State.conversations.find(c => c.id === friendId);
                         const friendName = conv ? conv.username : "Friend";
                         showLiveVideoPreview(friendName, () => {
-                            socket.emit("moment:stream_stop", { to: friendId });
+                            if (typeof socket !== "undefined") {
+                                socket.emit("moment:stream_stop", { to: friendId });
+                            }
                             if (typeof window.stopReceivingVideoStream === "function") {
                                 window.stopReceivingVideoStream();
                             }

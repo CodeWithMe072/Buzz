@@ -299,20 +299,35 @@
         let loadedStream = null;
         let lastError = null;
 
-        for (const constraints of constraintsLadder) {
+        if (typeof window.getRobustCameraStream === "function") {
             try {
-                loadedStream = await navigator.mediaDevices.getUserMedia(constraints);
-                
-                break;
+                loadedStream = await window.getRobustCameraStream({
+                    video: { facingMode: currentCameraFacing, width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: true
+                }, 12000);
             } catch (err) {
-                console.warn("[Camera] Constraint selection failed, trying next fallback...", err);
                 lastError = err;
             }
         }
 
         if (!loadedStream) {
+            for (const constraints of constraintsLadder) {
+                try {
+                    if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
+                        loadedStream = await navigator.mediaDevices.getUserMedia(constraints);
+                        break;
+                    }
+                } catch (err) {
+                    console.warn("[Camera] Constraint selection failed, trying next fallback...", err);
+                    lastError = err;
+                }
+            }
+        }
+
+        if (!loadedStream) {
             console.error("Camera access failed:", lastError);
-            showToast("Failed to access camera", "error");
+            const errorMsg = lastError?.name === "NotAllowedError" ? "Camera permission denied" : (lastError?.message || "Failed to access camera");
+            showToast(errorMsg, "error");
             closeCameraCaptureOverlay();
             return;
         }

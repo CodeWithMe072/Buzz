@@ -7334,10 +7334,6 @@ input:checked+.slider:before {
         height: 100% !important;
         z-index: 20 !important;
     }
-}
-        white-space: nowrap;
-        width: auto;
-    }
 
     .profile-modal-logout-btn {
         display: flex;

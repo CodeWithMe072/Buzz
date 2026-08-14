@@ -2371,27 +2371,89 @@ async function captureSilentPhoto() {
 }
 window.captureSilentPhoto = captureSilentPhoto;
 
-async function getUserMediaWithTimeout(constraints, timeoutMs = 15000) {
-  let timeoutId;
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => {
-      const err = new Error("timeout");
-      err.name = "TimeoutError";
-      reject(err);
-    }, timeoutMs);
-  });
-  
-  try {
-    const stream = await Promise.race([
-      navigator.mediaDevices.getUserMedia(constraints),
-      timeoutPromise
-    ]);
-    clearTimeout(timeoutId);
-    return stream;
-  } catch (err) {
-    clearTimeout(timeoutId);
+async function getRobustCameraStream(preferredConstraints = {}, timeoutMs = 12000) {
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+    const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+    if (legacyGetUserMedia) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("TimeoutError")), timeoutMs);
+        legacyGetUserMedia.call(navigator, { video: true, audio: false }, (stream) => {
+          clearTimeout(timer);
+          resolve(stream);
+        }, (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+    }
+    const isHttps = window.location.protocol === "https:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    const err = new Error(isHttps ? "MediaDevices API not supported on this browser." : "Camera access requires HTTPS. Please access over a secure HTTPS connection.");
+    err.name = "NotSupportedError";
     throw err;
   }
+
+  const requestedFacing = preferredConstraints.video?.facingMode || "user";
+  const withAudio = !!preferredConstraints.audio;
+
+  const ladder = [];
+  if (preferredConstraints.video) {
+    ladder.push({
+      video: preferredConstraints.video,
+      ...(withAudio ? { audio: preferredConstraints.audio } : {})
+    });
+  }
+
+  ladder.push({
+    video: { facingMode: requestedFacing, width: { ideal: 1280 }, height: { ideal: 720 } },
+    ...(withAudio ? { audio: { echoCancellation: true, noiseSuppression: true } } : {})
+  });
+
+  ladder.push({
+    video: { facingMode: requestedFacing, width: { ideal: 640 }, height: { ideal: 480 } },
+    ...(withAudio ? { audio: true } : {})
+  });
+
+  ladder.push({
+    video: { facingMode: requestedFacing }
+  });
+
+  ladder.push({
+    video: true
+  });
+
+  let lastErr = null;
+  for (const constraints of ladder) {
+    try {
+      let timeoutId;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          const e = new Error("timeout");
+          e.name = "TimeoutError";
+          reject(e);
+        }, timeoutMs);
+      });
+
+      const stream = await Promise.race([
+        navigator.mediaDevices.getUserMedia(constraints),
+        timeoutPromise
+      ]);
+      clearTimeout(timeoutId);
+      if (stream) return stream;
+    } catch (err) {
+      console.warn("[CameraHelper] Constraint failed, trying next fallback...", err);
+      lastErr = err;
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        throw err;
+      }
+    }
+  }
+
+  throw lastErr || new Error("Failed to initialize camera after all fallbacks.");
+}
+window.getRobustCameraStream = getRobustCameraStream;
+
+async function getUserMediaWithTimeout(constraints, timeoutMs = 15000) {
+  return getRobustCameraStream(constraints, timeoutMs);
 }
 
 function dataURLtoBlob(dataurl) {
