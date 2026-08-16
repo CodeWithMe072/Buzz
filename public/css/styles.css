@@ -8485,6 +8485,158 @@ input:checked+.slider:before {
     margin: 4px 8px;
 }
 
+/* ── Chat List Item Context Menu ── */
+.chat-item-context-menu {
+    position: fixed;
+    z-index: 10500;
+    background: #1c1c1e;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65), 0 2px 10px rgba(0, 0, 0, 0.4);
+    width: 230px;
+    box-sizing: border-box;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    animation: popupIn 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+    pointer-events: auto;
+}
+
+.chat-item-context-menu .context-menu-item {
+    font-size: 14px;
+    font-weight: 400;
+    padding: 8px 12px;
+    color: #e3e3e3;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    transition: background-color 0.1s ease;
+    box-sizing: border-box;
+}
+
+.chat-item-context-menu .context-menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.chat-item-context-menu .context-menu-item svg {
+    flex-shrink: 0;
+    color: #a8a8a8;
+}
+
+.chat-item-context-menu .context-menu-item.danger-opt {
+    color: #ff4d4d;
+}
+
+.chat-item-context-menu .context-menu-item.danger-opt svg {
+    color: #ff4d4d;
+}
+
+.chat-item-context-menu .context-menu-item.danger-opt:hover {
+    background-color: rgba(255, 77, 77, 0.15);
+}
+
+.chat-item-context-menu .context-menu-divider {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.08);
+    margin: 4px 6px;
+}
+
+}
+
+/* ── Mobile Chat Selection Top Bar & Selected Chat State ── */
+.mobile-chat-selection-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #18181b;
+    border-radius: 12px;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    box-sizing: border-box;
+    animation: fadeIn 0.15s ease;
+}
+
+.mobile-chat-selection-bar .selection-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mobile-chat-selection-bar .selection-count {
+    font-size: 18px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.mobile-chat-selection-bar .selection-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mobile-chat-selection-bar .icon-btn {
+    background: none;
+    border: none;
+    color: #e3e3e3;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mobile-chat-selection-bar .icon-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.mobile-chat-selection-bar .icon-btn.danger:hover {
+    color: #ff4d4d;
+    background: rgba(255, 77, 77, 0.15);
+}
+
+.chat-item.selected {
+    background: rgba(37, 211, 102, 0.12) !important;
+    border-left: 3px solid #25d366;
+}
+
+.chat-item.selected .avatar {
+    position: relative;
+}
+
+.chat-item.selected .avatar::after {
+    content: "✓";
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 20px;
+    height: 20px;
+    background: #25d366;
+    color: #000000;
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #121214;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
 /* Delete Message Modal styling */
 .delete-confirm-box {
     background: #1e1e1e;

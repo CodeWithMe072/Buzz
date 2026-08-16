@@ -161,8 +161,7 @@ function renderChatList(filter = "") {
   const chatList = document.getElementById("chat-list");
   chatList.innerHTML = "";
 
-  let convs = [...State.conversations];
-  // convs.sort((a, b) => b.timestamp - a.timestamp);
+  let convs = [...State.conversations].filter(c => c.userStatus !== "inactive" && c.status !== "inactive");
 
   // Apply filter
   if (filter) {
@@ -179,10 +178,15 @@ function renderChatList(filter = "") {
         </div>`;
     return;
   }
-  convs = convs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+  convs = convs.sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    return new Date(b.timestamp) - new Date(a.timestamp);
+  });
   convs.forEach(conv => {
     const item = document.createElement("div");
-    item.className = `chat-item ${State.activeChat === conv.id ? "active" : ""}`;
+    const isSelected = State.selectedChatIds && State.selectedChatIds.has(conv.id);
+    item.className = `chat-item ${State.activeChat === conv.id ? "active" : ""} ${isSelected ? "selected" : ""}`;
     item.dataset.convId = conv.id;
     item.dataset.id = conv.id;
     const isLetterAvatar = conv.avatar && conv.avatar.length === 1;
@@ -190,13 +194,17 @@ function renderChatList(filter = "") {
       ? `<span>${conv.avatar}</span>`
       : `<img src="${conv.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" /><span style="display:none;">${conv.username.charAt(0).toUpperCase()}</span>`;
 
+    const pinBadgeHTML = conv.isPinned ? `<span class="pin-badge" style="margin-left:4px; color:#a8a8a8;"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17l-5.5 5.5v-13h11v13z"/></svg></span>` : "";
+    const muteBadgeHTML = conv.isMuted ? `<span class="mute-badge" style="margin-left:4px; color:#888;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13.73 21a2 2 0 0 1-3.46 0M18.63 13A17.89 17.89 0 0 1 18 8A6 6 0 0 0 6 8c0 .7-.08 1.38-.24 2.03M2 2l20 20M10.3 4.3A6 6 0 0 1 18 8v5"/></svg></span>` : "";
+    const favBadgeHTML = conv.isFavourite ? `<span class="fav-badge" style="margin-left:4px; color:#eab308;"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : "";
+
     item.innerHTML = `
       <div class="avatar ${conv.online ? "online" : ""}" style="cursor: pointer;" title="View ${sanitizeInput(conv.username)}'s profile">
         ${avatarHTML}
       </div>
       <div class="chat-item-content">
         <div class="chat-item-header">
-          <span class="chat-item-username">${sanitizeInput(conv.username)}</span>
+          <span class="chat-item-username">${sanitizeInput(conv.username)}${pinBadgeHTML}${favBadgeHTML}${muteBadgeHTML}</span>
           <span class="chat-item-time">${conv.timestamp ? formatTime(conv.timestamp) : ""}</span>
         </div>
         <div class="chat-item-preview ${conv.unread > 0 ? "unread" : ""} ${conv.messagesLoaded === false ? "loading-preview" : ""}">
@@ -209,11 +217,93 @@ function renderChatList(filter = "") {
     if (avatarItemEl) {
       avatarItemEl.addEventListener("click", (e) => {
         e.stopPropagation();
+        if (window.innerWidth <= 768 && State.selectedChatIds && State.selectedChatIds.size > 0) {
+          toggleChatSelectionMobile(conv.id);
+          return;
+        }
         openContactProfilePreview(conv);
       });
     }
 
-    item.addEventListener("click", () => openChat(conv.id));
+    item.addEventListener("click", (e) => {
+      if (window.__isMobileChatLongPressing || item.dataset.longPressed === "true") {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (window.innerWidth <= 768 && State.selectedChatIds && State.selectedChatIds.size > 0) {
+        toggleChatSelectionMobile(conv.id);
+        return;
+      }
+      openChat(conv.id);
+    });
+
+    // Desktop: Right-Click Context Menu
+    item.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.innerWidth <= 768) {
+        toggleChatSelectionMobile(conv.id);
+        return;
+      }
+      showChatItemContextMenu(conv, e, e.clientX, e.clientY);
+    });
+
+    // Mobile: Touch Long-Press Context Menu (500ms)
+    let longPressTimer = null;
+    let startX = 0, startY = 0;
+
+    item.addEventListener("touchstart", (e) => {
+      if (e.touches.length > 1) return;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        item.dataset.longPressed = "true";
+        window.__isMobileChatLongPressing = true;
+        if (window.innerWidth <= 768) {
+          toggleChatSelectionMobile(conv.id);
+        } else {
+          showChatItemContextMenu(conv, e, startX, startY);
+        }
+      }, 500);
+    }, { passive: true });
+
+    item.addEventListener("touchmove", (e) => {
+      if (!longPressTimer) return;
+      const touch = e.touches[0];
+      if (Math.abs(touch.clientX - startX) > 10 || Math.abs(touch.clientY - startY) > 10) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    }, { passive: true });
+
+    item.addEventListener("touchend", (e) => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      if (item.dataset.longPressed === "true") {
+        e.preventDefault();
+        e.stopPropagation();
+        item.dataset.longPressed = "false";
+        setTimeout(() => {
+          window.__isMobileChatLongPressing = false;
+        }, 300);
+      }
+    });
+
+    item.addEventListener("touchcancel", () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      item.dataset.longPressed = "false";
+      window.__isMobileChatLongPressing = false;
+    });
+
     chatList.appendChild(item);
   });
 
@@ -227,6 +317,177 @@ function renderChatList(filter = "") {
       if (typeof openProfileModal === "function") {
         openProfileModal("account", true);
       }
+    });
+  }
+
+  // Bind mobile chat selection bar buttons
+  bindMobileChatSelectionBarEvents();
+  updateMobileChatSelectionBarUI();
+}
+
+State.selectedChatIds = State.selectedChatIds || new Set();
+
+function toggleChatSelectionMobile(convId) {
+  if (!convId) return;
+
+  if (State.selectedChatIds.has(convId)) {
+    State.selectedChatIds.delete(convId);
+    const itemEl = document.querySelector(`.chat-item[data-conv-id="${convId}"]`);
+    if (itemEl) itemEl.classList.remove("selected");
+  } else {
+    State.selectedChatIds.add(convId);
+    const itemEl = document.querySelector(`.chat-item[data-conv-id="${convId}"]`);
+    if (itemEl) itemEl.classList.add("selected");
+  }
+
+  safeVibrate(30);
+  updateMobileChatSelectionBarUI();
+}
+
+function safeVibrate(pattern) {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      if (navigator.userActivation && navigator.userActivation.hasBeenActive === false) {
+        return;
+      }
+      navigator.vibrate(pattern);
+    }
+  } catch (e) {}
+}
+window.safeVibrate = safeVibrate;
+
+function updateMobileChatSelectionBarUI() {
+  const bar = document.getElementById("mobile-chat-selection-bar");
+  const countEl = document.getElementById("mobile-chat-selection-count");
+  const userProfile = document.querySelector(".chat-list-header .user-profile");
+  const headerActions = document.querySelector(".chat-list-header .header-actions");
+
+  if (!State.selectedChatIds || State.selectedChatIds.size === 0) {
+    if (bar) bar.style.display = "none";
+    if (userProfile) {
+      userProfile.style.display = "flex";
+      userProfile.style.visibility = "visible";
+    }
+    if (headerActions) {
+      headerActions.style.display = "flex";
+      headerActions.style.visibility = "visible";
+    }
+    document.querySelectorAll(".chat-item.selected").forEach(el => el.classList.remove("selected"));
+    return;
+  }
+
+  if (bar) {
+    bar.style.display = "flex";
+    bar.style.width = "100%";
+    bar.style.justifyContent = "space-between";
+  }
+  if (userProfile) {
+    userProfile.style.display = "none";
+    userProfile.style.visibility = "hidden";
+  }
+  if (headerActions) {
+    headerActions.style.display = "none";
+    headerActions.style.visibility = "hidden";
+  }
+  if (countEl) countEl.textContent = State.selectedChatIds.size;
+}
+
+function clearMobileChatSelection() {
+  if (State.selectedChatIds) State.selectedChatIds.clear();
+  updateMobileChatSelectionBarUI();
+}
+window.clearMobileChatSelection = clearMobileChatSelection;
+
+function bindMobileChatSelectionBarEvents() {
+  const closeBtn = document.getElementById("close-chat-selection-btn");
+  if (closeBtn && !closeBtn.dataset.bound) {
+    closeBtn.dataset.bound = "true";
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      clearMobileChatSelection();
+    });
+  }
+
+  const clearBtn = document.getElementById("mobile-chat-clear-btn");
+  if (clearBtn && !clearBtn.dataset.bound) {
+    clearBtn.dataset.bound = "true";
+    clearBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!State.selectedChatIds || State.selectedChatIds.size === 0) return;
+      const count = State.selectedChatIds.size;
+      showCustomConfirmModal({
+        title: "Clear Selected Chat Messages?",
+        message: `Clear all messages in ${count} selected chat${count > 1 ? "s" : ""}?`,
+        confirmText: "Clear",
+        cancelText: "Cancel",
+        isDanger: true,
+        onConfirm: () => {
+          State.selectedChatIds.forEach(chatId => {
+            State.messages[chatId] = [];
+            const conv = (State.conversations || []).find(c => c.id === chatId);
+            if (conv) {
+              conv.chatState = "nochat";
+              conv.lastMessage = "";
+              conv.timestamp = 0;
+            }
+            if (State.activeChat === chatId) {
+              const listEl = document.getElementById("messages-list");
+              if (listEl) listEl.innerHTML = "";
+            }
+            if (typeof window.clearChatAPI === "function") {
+              window.clearChatAPI(chatId).catch(console.error);
+            }
+          });
+          showToast(`Cleared messages in ${count} chat${count > 1 ? "s" : ""}`, "info");
+          clearMobileChatSelection();
+          initChatList();
+        }
+      });
+    });
+  }
+
+  const deleteBtn = document.getElementById("mobile-chat-delete-btn");
+  if (deleteBtn && !deleteBtn.dataset.bound) {
+    deleteBtn.dataset.bound = "true";
+    deleteBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!State.selectedChatIds || State.selectedChatIds.size === 0) return;
+      const count = State.selectedChatIds.size;
+      showCustomConfirmModal({
+        title: `Delete ${count} Selected Chat${count > 1 ? "s" : ""}?`,
+        message: "This action cannot be undone.",
+        confirmText: "Delete",
+        cancelText: "Cancel",
+        isDanger: true,
+        onConfirm: () => {
+          const chatsToDelete = Array.from(State.selectedChatIds);
+          chatsToDelete.forEach(chatId => {
+            const conv = (State.conversations || []).find(c => c.id === chatId);
+            if (conv) {
+              conv.userStatus = "inactive";
+              conv.status = "inactive";
+              conv.chatState = "nochat";
+            }
+            State.conversations = State.conversations.filter(c => c.id !== chatId);
+            delete State.messages[chatId];
+            const itemEl = document.querySelector(`.chat-item[data-conv-id="${chatId}"]`);
+            if (itemEl) itemEl.remove();
+            if (State.activeChat === chatId) {
+              State.activeChat = null;
+              const activeChatWin = document.getElementById("active-chat");
+              const emptyState = document.getElementById("chat-empty-state");
+              if (activeChatWin) activeChatWin.style.display = "none";
+              if (emptyState) emptyState.style.display = "flex";
+            }
+            if (typeof deleteChat === "function") {
+              deleteChat(chatId).catch(console.error);
+            }
+          });
+          showToast(`Deleted ${count} chat${count > 1 ? "s" : ""}`, "info");
+          clearMobileChatSelection();
+          initChatList();
+        }
+      });
     });
   }
 }
@@ -417,7 +678,23 @@ function openChat(chatId, options = {}) {
   messageInput.value = "";
   messageInput.focus();
 
-  if (conv && conv.draft) {
+  if (window.IndexedDBQueueService && typeof window.IndexedDBQueueService.getInputDraft === "function") {
+    window.IndexedDBQueueService.getInputDraft(chatId).then(savedDraft => {
+      const draftText = savedDraft || (conv && conv.draft) || "";
+      if (draftText && messageInput) {
+        if (conv) conv.draft = draftText;
+        messageInput.value = draftText;
+        const sendBtn = document.getElementById("send-btn");
+        if (sendBtn) sendBtn.disabled = !draftText.trim();
+        if (typeof window.updateInputContainerState === "function") {
+          window.updateInputContainerState();
+        }
+        if (typeof window.adjustMessageInputHeight === "function") {
+          window.adjustMessageInputHeight();
+        }
+      }
+    }).catch(console.error);
+  } else if (conv && conv.draft) {
     messageInput.value = conv.draft;
     const sendBtn = document.getElementById("send-btn");
     if (sendBtn) sendBtn.disabled = !conv.draft.trim();
@@ -2458,13 +2735,12 @@ function sendMessage() {
 
   input.value = "";
   if (State.activeChat) {
-    const conv = State.conversations.find(c => c.id === State.activeChat);
+    const currentChatId = State.activeChat;
+    const conv = (State.conversations || []).find(c => c.id === currentChatId);
     if (conv) conv.draft = null;
-    // Cancel any pending debounced draft save — otherwise it fires after
-    // sendMessage and overwrites the cleared draft with the old text
-    clearTimeout(window._draftSyncTimeout);
-    apiRequest("POST", "/api/chat/draft", { partnerId: State.activeChat, draftText: "" })
-      .catch(err => console.error("[sendMessage] Failed to clear server draft:", err));
+    if (window.IndexedDBQueueService && typeof window.IndexedDBQueueService.deleteInputDraft === "function") {
+      window.IndexedDBQueueService.deleteInputDraft(currentChatId).catch(console.error);
+    }
   }
   if (typeof window.adjustMessageInputHeight === "function") {
     window.adjustMessageInputHeight();
@@ -3418,7 +3694,7 @@ function initAppNavigation() {
   }
 
   chatBtn.onclick = async () => {
-    if (window.Router) window.Router.navigate("/inbox", { silent: true });
+    if (window.Router) window.Router.navigate("/inbox");
     document.body.classList.remove("profile-page-active");
     document.body.classList.remove("mobile-profile-value-active");
     chatBtn.classList.add("active");
@@ -3459,7 +3735,7 @@ function initAppNavigation() {
   };
 
   statusBtn.onclick = async () => {
-    if (window.Router) window.Router.navigate("/status", { silent: true });
+    if (window.Router) window.Router.navigate("/status");
     document.body.classList.remove("profile-page-active");
     document.body.classList.remove("mobile-profile-value-active");
     statusBtn.classList.add("active");
@@ -3509,7 +3785,7 @@ function initAppNavigation() {
   if (avatarBtn) {
     avatarBtn.onclick = () => {
       const username = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
-      if (window.Router) window.Router.navigate("/@" + username, { silent: true });
+      if (window.Router) window.Router.navigate("/@" + username);
       if (typeof openProfileModal === "function") {
         openProfileModal(null, true);
       }
@@ -5064,4 +5340,277 @@ function showGroupMessageOptions(groupMessages, msgEl, event) {
   }, 150);
 }
 window.showGroupMessageOptions = showGroupMessageOptions;
+
+function showChatItemContextMenu(conv, event, clientX, clientY) {
+  if (!conv) return;
+
+  document.querySelectorAll(".chat-item-context-menu").forEach(el => el.remove());
+  safeVibrate(30);
+
+  const menu = document.createElement("div");
+  menu.className = "chat-item-context-menu";
+
+  const isArchived = !!conv.isArchived;
+  const isLocked = !!conv.isLocked;
+  const isMuted = !!conv.isMuted;
+  const isPinned = !!conv.isPinned;
+  const isUnread = (conv.unread > 0);
+  const isFavourite = !!conv.isFavourite;
+  const isBlocked = !!conv.isBlocked;
+
+  menu.innerHTML = `
+    <button class="context-menu-item archive-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>
+      <span>${isArchived ? "Unarchive chat" : "Archive chat"}</span>
+    </button>
+    <button class="context-menu-item lock-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span>${isLocked ? "Unlock chat" : "Lock chat"}</span>
+    </button>
+    <button class="context-menu-item mute-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13.73 21a2 2 0 0 1-3.46 0M18.63 13A17.89 17.89 0 0 1 18 8A6 6 0 0 0 6 8c0 .7-.08 1.38-.24 2.03M2 2l20 20M10.3 4.3A6 6 0 0 1 18 8v5"/></svg>
+      <span>${isMuted ? "Unmute notifications" : "Mute notifications"}</span>
+    </button>
+    <button class="context-menu-item pin-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.5-6H6.5zM9 11V4h6v7"/></svg>
+      <span>${isPinned ? "Unpin chat" : "Pin chat"}</span>
+    </button>
+    <button class="context-menu-item unread-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      <span>${isUnread ? "Mark as read" : "Mark as unread"}</span>
+    </button>
+    <button class="context-menu-item favourite-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="${isFavourite ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      <span>${isFavourite ? "Remove from favourites" : "Add to favourites"}</span>
+    </button>
+    <button class="context-menu-item addlist-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Add to list</span>
+    </button>
+    <div class="context-menu-divider"></div>
+    <button class="context-menu-item block-opt danger-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+      <span>${isBlocked ? "Unblock" : "Block"}</span>
+    </button>
+    <button class="context-menu-item clear-opt danger-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
+      <span>Clear chat</span>
+    </button>
+    <button class="context-menu-item delete-opt danger-opt">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+      <span>Delete chat</span>
+    </button>
+  `;
+
+  document.body.appendChild(menu);
+
+  const menuWidth = 230;
+  const menuHeight = menu.offsetHeight || 360;
+  let posX = clientX !== undefined ? clientX : (window.innerWidth / 2 - menuWidth / 2);
+  let posY = clientY !== undefined ? clientY : (window.innerHeight / 2 - menuHeight / 2);
+
+  if (posX + menuWidth > window.innerWidth - 10) {
+    posX = window.innerWidth - menuWidth - 14;
+  }
+  if (posX < 10) posX = 10;
+
+  if (posY + menuHeight > window.innerHeight - 10) {
+    posY = window.innerHeight - menuHeight - 14;
+  }
+  if (posY < 10) posY = 10;
+
+  menu.style.left = `${posX}px`;
+  menu.style.top = `${posY}px`;
+
+  menu.querySelector(".archive-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.remove();
+    conv.isArchived = !conv.isArchived;
+    showToast(conv.isArchived ? `Archived chat with ${conv.username}` : `Unarchived chat with ${conv.username}`, "info");
+    initChatList();
+  });
+
+  menu.querySelector(".lock-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.remove();
+    conv.isLocked = !conv.isLocked;
+    showToast(conv.isLocked ? `Locked chat with ${conv.username}` : `Unlocked chat with ${conv.username}`, "info");
+    initChatList();
+  });
+
+  menu.querySelector(".mute-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.remove();
+    conv.isMuted = !conv.isMuted;
+    showToast(conv.isMuted ? `Muted notifications for ${conv.username}` : `Unmuted notifications for ${conv.username}`, "info");
+    initChatList();
+  });
+
+  menu.querySelector(".pin-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.remove();
+    conv.isPinned = !conv.isPinned;
+    showToast(conv.isPinned ? `Pinned chat with ${conv.username}` : `Unpinned chat with ${conv.username}`, "info");
+    initChatList();
+  });
+
+  menu.querySelector(".unread-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.remove();
+    conv.unread = conv.unread > 0 ? 0 : 1;
+    showToast(conv.unread > 0 ? `Marked chat with ${conv.username} as unread` : `Marked chat as read`, "info");
+    initChatList();
+  });
+
+  menu.querySelector(".favourite-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.remove();
+    conv.isFavourite = !conv.isFavourite;
+    showToast(conv.isFavourite ? `Added ${conv.username} to favourites` : `Removed ${conv.username} from favourites`, "info");
+    initChatList();
+  });
+
+  menu.querySelector(".addlist-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.remove();
+    showToast(`Added ${conv.username} to list`, "info");
+  });
+
+  menu.querySelector(".block-opt").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    menu.remove();
+    conv.isBlocked = !conv.isBlocked;
+    showToast(conv.isBlocked ? `Blocked ${conv.username}` : `Unblocked ${conv.username}`, "warning");
+    initChatList();
+  });
+
+  menu.querySelector(".clear-opt").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.remove();
+    showCustomConfirmModal({
+      title: "Clear Chat Messages?",
+      message: `Clear all messages in chat with ${conv.username}?`,
+      confirmText: "Clear",
+      cancelText: "Cancel",
+      isDanger: true,
+      onConfirm: () => {
+        State.messages[conv.id] = [];
+        conv.chatState = "nochat";
+        conv.lastMessage = "";
+        conv.timestamp = 0;
+        showToast(`Cleared chat messages`, "info");
+        initChatList();
+        if (State.activeChat === conv.id) {
+          const listEl = document.getElementById("messages-list");
+          if (listEl) listEl.innerHTML = "";
+        }
+        if (typeof window.clearChatAPI === "function") {
+          window.clearChatAPI(conv.id).catch(console.error);
+        }
+      }
+    });
+  });
+
+  menu.querySelector(".delete-opt").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    menu.remove();
+    showCustomConfirmModal({
+      title: `Delete Chat with ${conv.username}?`,
+      message: "This action cannot be undone.",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      isDanger: true,
+      onConfirm: () => {
+        const chatIdToDelete = conv.id;
+        conv.userStatus = "inactive";
+        conv.status = "inactive";
+        conv.chatState = "nochat";
+        State.conversations = State.conversations.filter(c => c.id !== chatIdToDelete);
+        delete State.messages[chatIdToDelete];
+        const itemEl = document.querySelector(`.chat-item[data-conv-id="${chatIdToDelete}"]`);
+        if (itemEl) itemEl.remove();
+        if (State.activeChat === chatIdToDelete) {
+          State.activeChat = null;
+          document.getElementById("active-chat").style.display = "none";
+          document.getElementById("chat-empty-state").style.display = "flex";
+        }
+        showToast(`Deleted chat with ${conv.username}`, "info");
+        if (typeof deleteChat === "function") {
+          deleteChat(chatIdToDelete).catch(console.error);
+        }
+      }
+    });
+  });
+
+  const dismissHandler = (e) => {
+    if (!menu.contains(e.target)) {
+      menu.remove();
+      document.removeEventListener("click", dismissHandler);
+      document.removeEventListener("contextmenu", dismissHandler);
+      document.removeEventListener("touchstart", dismissHandler);
+    }
+  };
+
+  setTimeout(() => {
+    document.addEventListener("click", dismissHandler);
+    document.addEventListener("contextmenu", dismissHandler);
+    document.addEventListener("touchstart", dismissHandler);
+  }, 50);
+}
+window.showChatItemContextMenu = showChatItemContextMenu;
+
+function showCustomConfirmModal({
+  title = "Are you sure?",
+  message = "",
+  confirmText = "Confirm",
+  cancelText = "Cancel",
+  isDanger = false,
+  onConfirm
+}) {
+  const existing = document.querySelector(".custom-confirm-modal-overlay");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.className = "modal-overlay custom-confirm-modal-overlay";
+  modal.style.zIndex = "22000";
+  modal.style.display = "flex";
+  modal.style.alignItems = "center";
+  modal.style.justifyContent = "center";
+  modal.style.position = "fixed";
+  modal.style.top = "0";
+  modal.style.left = "0";
+  modal.style.width = "100vw";
+  modal.style.height = "100vh";
+  modal.style.background = "rgba(0, 0, 0, 0.65)";
+  modal.style.backdropFilter = "blur(8px)";
+  modal.style.webkitBackdropFilter = "blur(8px)";
+
+  const cleanTitle = title ? title.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+  const cleanMsg = message ? message.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+
+  modal.innerHTML = `
+    <div class="delete-confirm-box" style="background:#1c1c1e; border:1px solid rgba(255,255,255,0.14); border-radius:20px; padding:24px; width:340px; max-width:90%; box-shadow:0 20px 50px rgba(0,0,0,0.7); animation: popupIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);">
+      <h3 style="font-size:18px; font-weight:600; color:#ffffff; margin:0 0 8px 0;">${cleanTitle}</h3>
+      ${cleanMsg ? `<p style="font-size:14px; color:#a0a0a5; margin:0 0 20px 0; line-height:1.4;">${cleanMsg}</p>` : ''}
+      <div style="display:flex; align-items:center; justify-content:flex-end; gap:10px;">
+        <button type="button" class="confirm-cancel-btn" style="background:transparent; border:1px solid rgba(255,255,255,0.15); color:#e3e3e3; border-radius:24px; padding:8px 18px; font-size:14px; font-weight:500; cursor:pointer; transition:background 0.15s ease;">${cancelText}</button>
+        <button type="button" class="confirm-ok-btn" style="background:${isDanger ? "#ff4d4d" : "#25d366"}; border:none; color:${isDanger ? "#ffffff" : "#000000"}; border-radius:24px; padding:8px 20px; font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.15s ease;">${confirmText}</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const cancelBtn = modal.querySelector(".confirm-cancel-btn");
+  const okBtn = modal.querySelector(".confirm-ok-btn");
+
+  cancelBtn.onclick = () => modal.remove();
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+  okBtn.onclick = () => {
+    modal.remove();
+    if (typeof onConfirm === "function") onConfirm();
+  };
+}
+window.showCustomConfirmModal = showCustomConfirmModal;
 

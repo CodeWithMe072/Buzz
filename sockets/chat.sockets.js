@@ -240,6 +240,29 @@ export default function initSocket(io) {
             socket.emit("message_save_failed", { tempId });
           });
 
+        // Reactivate connection userStatus & userChatState for both users on new message
+        Connection.updateOne(
+          {
+            $or: [
+              { sender: userId, receiver: to },
+              { sender: to, receiver: userId },
+            ],
+          },
+          {
+            $set: {
+              [`userStatus.${userId}`]: "active",
+              [`userStatus.${to}`]: "active",
+              [`userChatState.${userId}`]: "active",
+              [`userChatState.${to}`]: "active",
+            },
+          }
+        )
+          .then(() => {
+            redis.del(`cache:connections:${userId}`).catch(() => {});
+            redis.del(`cache:connections:${to}`).catch(() => {});
+          })
+          .catch((err) => console.error("[Socket] Connection status reactivate error:", err));
+
 
         if (!isOnline) {
           const [receiver, sender] = await Promise.all([

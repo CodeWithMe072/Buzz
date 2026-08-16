@@ -177,12 +177,18 @@ const IndexedDBQueueService = {
   async saveInputDraft(chatId, text) {
     return new Promise((resolve, reject) => {
       try {
-        if (!this.db) { resolve(); return; }
+        if (!this.db || !chatId) { resolve(); return; }
         const transaction = this.db.transaction("chat_input_drafts", "readwrite");
         const store = transaction.objectStore("chat_input_drafts");
-        const request = store.put({ chatId, text });
-        request.onsuccess = () => resolve();
-        request.onerror = (e) => reject(e.target.error);
+        if (!text || !text.trim()) {
+          const request = store.delete(chatId);
+          request.onsuccess = () => resolve();
+          request.onerror = (e) => reject(e.target.error);
+        } else {
+          const request = store.put({ chatId, text, updatedAt: Date.now() });
+          request.onsuccess = () => resolve();
+          request.onerror = (e) => reject(e.target.error);
+        }
       } catch (err) {
         reject(err);
       }

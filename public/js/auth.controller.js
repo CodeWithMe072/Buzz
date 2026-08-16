@@ -678,6 +678,11 @@ async function deleteChat(userId) {
   const res = await apiRequest("DELETE", `/api/chat/${userId}`);
   return { Data: res?.data, code: res?.status };
 }
+async function clearChatAPI(userId) {
+  const res = await apiRequest("POST", `/api/chat/${userId}/clear`);
+  return { Data: res?.data, code: res?.status };
+}
+window.clearChatAPI = clearChatAPI;
 async function fetchMedia(activeChat, before = null, limit = 10) {
   let url = `/api/chat/${activeChat}/media?limit=${limit}`;
   if (before) {

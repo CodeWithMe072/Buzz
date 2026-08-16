@@ -201,6 +201,8 @@ function initChatWindow() {
 
     const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia("(pointer: coarse)").matches;
 
+    const draftDebounceMap = new Map();
+
     messageInput.addEventListener('input', () => {
         const val = messageInput.value;
         sendBtn.disabled = !val.trim();
@@ -209,17 +211,21 @@ function initChatWindow() {
         if (val.trim() && State.activeChat) handleTyping();
         
         if (State.activeChat) {
-            // Save locally instantly
-            const conv = State.conversations.find(c => c.id === State.activeChat);
+            const activeChatId = State.activeChat;
+            const conv = (State.conversations || []).find(c => c.id === activeChatId);
             if (conv) conv.draft = val;
 
-            // Debounce sync to MongoDB server (750ms delay)
-            clearTimeout(window._draftSyncTimeout);
-            const activeChatId = State.activeChat;
-            window._draftSyncTimeout = setTimeout(() => {
-                apiRequest("POST", "/api/chat/draft", { partnerId: activeChatId, draftText: val })
-                    .catch(err => console.error("[DraftSync] Failed to sync draft to server:", err));
-            }, 750);
+            // Debounce local IndexedDB write per-chat (keyed by activeChatId)
+            if (draftDebounceMap.has(activeChatId)) {
+                clearTimeout(draftDebounceMap.get(activeChatId));
+            }
+            const timer = setTimeout(() => {
+                draftDebounceMap.delete(activeChatId);
+                if (window.IndexedDBQueueService && typeof window.IndexedDBQueueService.saveInputDraft === "function") {
+                    window.IndexedDBQueueService.saveInputDraft(activeChatId, val).catch(console.error);
+                }
+            }, 200);
+            draftDebounceMap.set(activeChatId, timer);
         }
     });
 
@@ -681,12 +687,16 @@ function initChatWindow() {
     initVoiceRecording();
 
     backBtn.addEventListener('click', () => {
-        document.getElementById('chat-list-sidebar').classList.remove('hidden');
-        document.getElementById('chat-window').classList.remove('active');
-        State.activeChat = null;
-        // Show navbar on mobile when back to chat list
-        const navbar = document.querySelector(".app-navbar");
-        if (navbar) navbar.style.display = "flex";
+        if (window.Router) {
+            window.Router.navigate('/inbox');
+        } else {
+            document.getElementById('chat-list-sidebar').classList.remove('hidden');
+            document.getElementById('chat-window').classList.remove('active');
+            State.activeChat = null;
+            const navbar = document.querySelector(".app-navbar");
+            if (navbar) navbar.style.display = "flex";
+            if (window.history) window.history.pushState(null, "", "/inbox");
+        }
     });
 
     cancelReplyBtn.addEventListener('click', () => {

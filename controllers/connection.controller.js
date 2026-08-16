@@ -174,23 +174,32 @@ export const listConnections = async (req, res) => {
       .sort({ updatedAt: -1 })
       .lean();
 
-    // Normalise: always return the OTHER person, not me
-    const contacts = connections.map((c) => {
-      const isMe = c.sender._id.toString() === userId;
-      const other = isMe ? c.receiver : c.sender;
-      const draft = c.drafts ? (c.drafts instanceof Map ? c.drafts.get(userId) : c.drafts[userId]) || null : null;
-      return {
-        connectionId: c._id.toString(),
-        user: {
-          id: other._id.toString(),
-          username: other.username,
-          avatar: other.avatar,
-          lastSeen: other.lastSeen,
-        },
-        since: c.updatedAt,
-        draft: draft,
-      };
-    });
+    // Normalise: always return the OTHER person, not me, filtering out inactive userStatus
+    const contacts = connections
+      .filter((c) => {
+        const myStatus = c.userStatus ? (c.userStatus instanceof Map ? c.userStatus.get(userId) : c.userStatus[userId]) || "active" : "active";
+        return myStatus !== "inactive";
+      })
+      .map((c) => {
+        const isMe = c.sender._id.toString() === userId;
+        const other = isMe ? c.receiver : c.sender;
+        const draft = c.drafts ? (c.drafts instanceof Map ? c.drafts.get(userId) : c.drafts[userId]) || null : null;
+        const myStatus = c.userStatus ? (c.userStatus instanceof Map ? c.userStatus.get(userId) : c.userStatus[userId]) || "active" : "active";
+        const myChatState = c.userChatState ? (c.userChatState instanceof Map ? c.userChatState.get(userId) : c.userChatState[userId]) || "active" : "active";
+        return {
+          connectionId: c._id.toString(),
+          user: {
+            id: other._id.toString(),
+            username: other.username,
+            avatar: other.avatar,
+            lastSeen: other.lastSeen,
+          },
+          since: c.updatedAt,
+          draft: draft,
+          userStatus: myStatus,
+          chatState: myChatState,
+        };
+      });
 
     const responsePayload = { status: true, count: contacts.length, contacts };
 

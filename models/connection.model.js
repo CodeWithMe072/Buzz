@@ -44,6 +44,20 @@ const connectionSchema = new mongoose.Schema(
       of: String,
       default: {},
     },
+
+    // Per-user connection status: "active" | "inactive" (inactive = chat deleted by user until new message)
+    userStatus: {
+      type: Map,
+      of: String,
+      default: {},
+    },
+
+    // Per-user chat state: "active" | "nochat" (nochat = chat cleared by user, skip msg API until new message)
+    userChatState: {
+      type: Map,
+      of: String,
+      default: {},
+    },
   },
   { timestamps: true }
 );

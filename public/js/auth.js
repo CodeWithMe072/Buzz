@@ -89,11 +89,13 @@ async function bootstrapAfterLogin() {
         : c.user.username.charAt(0).toUpperCase(),
       lastSeen: c.user.lastSeen,
       timestamp: 0,
-      lastMessage: "Loading...",
+      lastMessage: c.chatState === "nochat" ? "" : "Loading...",
       unread: 0,
       online: (State.onlineUsers && State.onlineUsers.includes(c.user.id)) || false,
-      messagesLoaded: false,
+      messagesLoaded: c.chatState === "nochat" ? true : false,
       draft: c.draft || null,
+      userStatus: c.userStatus || "active",
+      chatState: c.chatState || "active",
     }));
   }
 
@@ -160,6 +162,11 @@ async function bootstrapAfterLogin() {
   State.apiMessagesLoaded = false;
   const messagePromises = State.conversations.map(async (conv) => {
     try {
+      if (conv.chatState === "nochat") {
+        State.messages[conv.id] = [];
+        conv.messagesLoaded = true;
+        return;
+      }
       const msgRes = await getMessages(conv.id, 50);
       if (msgRes.code === 200 && msgRes.Data?.messages?.length) {
         const msgs = msgRes.Data.messages;
@@ -1732,7 +1739,7 @@ async function openProfileModal(defaultSection = null, isUserClick = false) {
 
     if (window.Router && window.State && window.State.currentUser) {
       const username = window.State.currentUser.username || "me";
-      window.Router.navigate("/@" + username, { silent: true });
+      window.Router.navigate("/@" + username);
     }
 
     if (window.innerWidth <= 768) {
@@ -1752,7 +1759,7 @@ function closeProfileModal() {
   document.body.classList.remove("profile-page-active");
   document.body.classList.remove("mobile-profile-value-active");
   if (window.Router) {
-    window.Router.navigate("/inbox", { silent: true });
+    window.Router.navigate("/inbox");
   }
   const chatBtn = document.getElementById("nav-chat-btn");
   if (chatBtn && typeof chatBtn.click === "function") {
@@ -1769,7 +1776,7 @@ async function switchProfileModalSection(sectionName) {
   // Sync URL bar to /@username/:section
   if (window.Router && window.State && window.State.currentUser) {
     const username = window.State.currentUser.username || "me";
-    window.Router.navigate("/@" + username + "/" + sectionName, { silent: true });
+    window.Router.navigate("/@" + username + "/" + sectionName);
   }
 
   if (window.innerWidth <= 768) {
@@ -1818,6 +1825,10 @@ function ensureMobileProfileHeader(sectionName) {
 
   header.querySelector("#profile-mobile-back-btn").onclick = () => {
     document.body.classList.remove("mobile-profile-value-active");
+    if (window.Router && window.State && window.State.currentUser) {
+      const username = window.State.currentUser.username || "me";
+      window.Router.navigate("/@" + username);
+    }
   };
 
   container.insertBefore(header, container.firstChild);

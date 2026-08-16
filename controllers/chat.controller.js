@@ -77,7 +77,7 @@ export const getMessages = async (req, res) => {
 
 
 /* ═══════════════════════════════════════════════════════════
-   DELETE CHAT (delete for me)
+   DELETE CHAT (delete for me — sets userStatus: "inactive", userChatState: "nochat")
    DELETE /api/chat/:userId
    Protected: requires JWT
 ═══════════════════════════════════════════════════════════ */
@@ -100,11 +100,77 @@ export const deleteChat = async (req, res) => {
       { $addToSet: { deletedFor: myId } }
     );
 
+    await Connection.updateOne(
+      {
+        $or: [
+          { sender: myId, receiver: userId },
+          { sender: userId, receiver: myId },
+        ],
+      },
+      {
+        $set: {
+          [`userStatus.${myId}`]: "inactive",
+          [`userChatState.${myId}`]: "nochat",
+        },
+      }
+    );
+
+    await redis.del(`cache:connections:${myId}`);
+
     res.json({ status: true, message: "Chat deleted" });
 
   } catch (err) {
     console.error("[DeleteChat]", err);
     res.status(500).json({ status: false, message: "Failed to delete chat" });
+  }
+};
+
+
+/* ═══════════════════════════════════════════════════════════
+   CLEAR CHAT (clear messages for me — sets userChatState: "nochat")
+   POST /api/chat/:userId/clear
+   Protected: requires JWT
+═══════════════════════════════════════════════════════════ */
+export const clearChat = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const myId = req.user._id;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ status: false, message: "Invalid userId" });
+    }
+
+    await Message.updateMany(
+      {
+        $or: [
+          { from: myId, to: userId },
+          { from: userId, to: myId },
+        ],
+      },
+      { $addToSet: { deletedFor: myId } }
+    );
+
+    await Connection.updateOne(
+      {
+        $or: [
+          { sender: myId, receiver: userId },
+          { sender: userId, receiver: myId },
+        ],
+      },
+      {
+        $set: {
+          [`userChatState.${myId}`]: "nochat",
+        },
+      }
+    );
+
+    await redis.del(`cache:connections:${myId}`);
+
+    res.json({ status: true, message: "Chat cleared" });
+
+  } catch (err) {
+    console.error("[ClearChat]", err);
+    res.status(500).json({ status: false, message: "Failed to clear chat" });
   }
 };
 
@@ -413,52 +479,5 @@ export const deleteMessage = async (req, res) => {
   } catch (err) {
     console.error("[deleteMessage] error:", err);
     res.status(500).json({ status: false, message: "Failed to delete message" });
-  }
-};
-
-export const saveDraft = async (req, res) => {
-  try {
-    const { partnerId, draftText } = req.body;
-    const myId = req.user._id;
-
-    if (!partnerId) {
-      return res.status(400).json({ status: false, message: "partnerId is required" });
-    }
-
-    // Find connection between myId and partnerId
-    const conn = await Connection.findOne({
-      $or: [
-        { sender: myId, receiver: partnerId },
-        { sender: partnerId, receiver: myId }
-      ],
-      status: "accepted"
-    });
-
-    if (!conn) {
-      return res.status(404).json({ status: false, message: "Connection not found" });
-    }
-
-    if (!conn.drafts) {
-      conn.drafts = new Map();
-    }
-
-    const myIdStr = myId.toString();
-    if (draftText) {
-      conn.drafts.set(myIdStr, draftText);
-    } else {
-      conn.drafts.delete(myIdStr);
-    }
-
-    await conn.save();
-
-    // Invalidate Redis caches
-    await redis.del(`cache:connections:${myIdStr}`);
-    await redis.del(`cache:connections:${partnerId.toString()}`);
-
-    res.json({ status: true, message: "Draft saved successfully" });
-
-  } catch (err) {
-    console.error("[SaveDraft] error:", err);
-    res.status(500).json({ status: false, message: "Failed to save draft" });
   }
 };

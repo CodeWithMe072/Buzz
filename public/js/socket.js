@@ -373,6 +373,72 @@ function initSocket() {
     }
   });
 
+  // Helper to dynamically restore / reactivate conversation on new message
+  async function ensureConversationExistsAndActive(targetUserId, message) {
+    if (!targetUserId) return null;
+
+    let conv = State.conversations.find(c => c.id === targetUserId);
+    const textPreview = typeof formatLastMessage === "function" ? formatLastMessage(message) : (message.content || "Message");
+    const ts = message.timestamp || Date.now();
+
+    if (!conv || conv.userStatus === "inactive" || conv.status === "inactive") {
+      let contact = (State.contacts || []).find(ct => ct.user.id === targetUserId);
+      if (!contact && typeof getMyConnections === "function") {
+        try {
+          const connRes = await getMyConnections();
+          if (connRes.code === 200 && connRes.Data?.contacts) {
+            State.contacts = connRes.Data.contacts;
+            contact = State.contacts.find(ct => ct.user.id === targetUserId);
+          }
+        } catch (err) {
+          console.error("[EnsureConv] Failed to fetch connections:", err);
+        }
+      }
+
+      if (!conv && contact) {
+        conv = {
+          id: contact.user.id,
+          connectionId: contact.connectionId,
+          username: contact.user.username,
+          avatar: (contact.user.avatar && contact.user.avatar.length > 2)
+            ? contact.user.avatar
+            : contact.user.username.charAt(0).toUpperCase(),
+          lastSeen: contact.user.lastSeen,
+          timestamp: ts,
+          lastMessage: textPreview,
+          unread: targetUserId !== State.activeChat ? 1 : 0,
+          online: (State.onlineUsers && State.onlineUsers.includes(contact.user.id)) || false,
+          messagesLoaded: true,
+          userStatus: "active",
+          chatState: "active"
+        };
+        State.conversations.unshift(conv);
+      } else if (conv) {
+        conv.userStatus = "active";
+        conv.status = "active";
+        conv.chatState = "active";
+        conv.lastMessage = textPreview;
+        conv.timestamp = ts;
+        if (targetUserId !== State.activeChat) {
+          conv.unread = (conv.unread || 0) + 1;
+        }
+      }
+    } else {
+      conv.userStatus = "active";
+      conv.status = "active";
+      conv.chatState = "active";
+      conv.lastMessage = textPreview;
+      conv.timestamp = ts;
+      if (targetUserId !== State.activeChat) {
+        conv.unread = (conv.unread || 0) + 1;
+      }
+    }
+
+    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    return conv;
+  }
+  window.ensureConversationExistsAndActive = ensureConversationExistsAndActive;
+
   // ── Incoming private message ──────────────────────────────
   socket.on("private_message", (msg) => {
     // Normalize all IDs to strings
@@ -442,13 +508,7 @@ function initSocket() {
       socket.emit("chat:seen", { from: message.user });
     }
 
-    const conv = State.conversations.find(c => c.id === message.user);
-    if (conv) {
-      conv.lastMessage = formatLastMessage(message);
-      conv.timestamp   = message.timestamp;
-      conv.unread = message.user !== State.activeChat ? (conv.unread || 0) + 1 : 0;
-    }
-    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    ensureConversationExistsAndActive(message.user, message);
   });
 
   // ── Message ack / delivery / seen ────────────────────────
@@ -598,6 +658,8 @@ function initSocket() {
         online: (State.onlineUsers && State.onlineUsers.includes(c.user.id)) || false,
         messagesLoaded: true,
         draft: c.draft || null,
+        userStatus: c.userStatus || "active",
+        chatState: c.chatState || "active",
       }));
       safeRenderChatList();
     }
@@ -644,12 +706,7 @@ function initSocket() {
       insertMessageInOrder(message);
     }
 
-    const conv = State.conversations.find(c => c.id === chatPartner);
-    if (conv) {
-      conv.lastMessage = formatLastMessage(message);
-      conv.timestamp   = message.timestamp;
-    }
-    safeRenderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
+    ensureConversationExistsAndActive(chatPartner, message);
   });
 
   // ── Background job updates ───────────────────────────────
