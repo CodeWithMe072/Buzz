@@ -23,7 +23,9 @@ const State = {
   apiMessagesLoaded: false,
   onlineUsers:      [],
 
-  // ── Connections ──────────────────────────────────────────
+  // ── Moments Cache ──────────────────────────────────────────
+  cachedMomentsObj: null,
+  momentsInitialFetchDone: false,
   pendingRequests:  [],   // incoming { connectionId, from, sentAt }
   sentRequests:     [],   // outgoing { connectionId, to, sentAt }
   contacts:         [],   // accepted { connectionId, user, since }

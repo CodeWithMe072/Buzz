@@ -245,6 +245,8 @@ function initSocket() {
   socket.on("disconnect", () => {
     NetworkMonitor.isSocketConnected = false;
     updateConnectionBanner();
+    State.cachedMomentsObj = null;
+    State.momentsInitialFetchDone = false;
   });
 
   socket.on("reconnect", () => {
@@ -834,10 +836,25 @@ function initSocket() {
     if (!State.friendMoments) State.friendMoments = {};
     if (!State.friendMoments[userId]) State.friendMoments[userId] = [];
     
+    // Sync in-memory moments cache
+    if (!State.cachedMomentsObj) State.cachedMomentsObj = {};
+    if (!State.cachedMomentsObj[userId]) {
+      State.cachedMomentsObj[userId] = {
+        user: { id: userId, username, avatar, online: true },
+        moments: []
+      };
+    }
+
     // Check duplicates
-    const exists = State.friendMoments[userId].some(m => m.url === moment.url);
+    const exists = State.friendMoments[userId].some(m => m.url === moment.url || (m._id && m._id === moment._id));
     if (!exists) {
       State.friendMoments[userId].unshift(moment);
+      if (State.cachedMomentsObj[userId] && State.cachedMomentsObj[userId].moments) {
+        const cacheExists = State.cachedMomentsObj[userId].moments.some(m => m.url === moment.url || (m._id && m._id === moment._id));
+        if (!cacheExists) {
+          State.cachedMomentsObj[userId].moments.unshift(moment);
+        }
+      }
     }
     
     showToast(`${username} posted a new moment!`, "info");

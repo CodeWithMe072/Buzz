@@ -1456,20 +1456,29 @@ async function renderPeopleTab(tab) {
 }
 
 async function renderMomentsTab(container) {
-  container.innerHTML = `
-    <div class="moments-loading-container">
-      <div class="moments-spinner"></div>
-      <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px;">Fetching moments...</p>
-    </div>
-  `;
+  let momentsObj;
 
-  const res = await getAllFriendsMoments();
-  if (res?.code !== 200) {
-    container.innerHTML = `<div class="people-empty">Failed to load moments</div>`;
-    return;
+  if (State.momentsInitialFetchDone && State.cachedMomentsObj) {
+    momentsObj = State.cachedMomentsObj;
+  } else {
+    container.innerHTML = `
+      <div class="moments-loading-container">
+        <div class="moments-spinner"></div>
+        <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px;">Fetching moments...</p>
+      </div>
+    `;
+
+    const res = await getAllFriendsMoments();
+    if (res?.code !== 200) {
+      container.innerHTML = `<div class="people-empty">Failed to load moments</div>`;
+      return;
+    }
+
+    momentsObj = res.Data?.moments || {};
+    State.cachedMomentsObj = momentsObj;
+    State.momentsInitialFetchDone = true;
   }
 
-  const momentsObj = res.Data?.moments || {};
   const friendsSharing = Object.values(momentsObj);
 
   if (!State.friendMoments) State.friendMoments = {};
@@ -3180,9 +3189,12 @@ async function syncPendingMessagesFromDB() {
 
 function initCustomCalendar(calendarWrapper, inputId, activeDates = new Set(), onDateSelect = null) {
   const trigger = calendarWrapper.querySelector(".custom-calendar-trigger");
-  const popup = calendarWrapper.querySelector(".custom-calendar-popup");
+  let popup = calendarWrapper.querySelector(".custom-calendar-popup") || document.getElementById(`popup_${inputId}`);
   const input = calendarWrapper.querySelector(`#${inputId}`);
-  const triggerText = trigger.querySelector(".calendar-trigger-text");
+  const triggerText = trigger ? trigger.querySelector(".calendar-trigger-text") : null;
+  if (!trigger || !popup || !input) return;
+
+  popup.id = `popup_${inputId}`;
 
   let displayDate = new Date();
 
@@ -3203,6 +3215,9 @@ function initCustomCalendar(calendarWrapper, inputId, activeDates = new Set(), o
     popup.style.display = "none";
     const backdrop = document.getElementById("custom-calendar-backdrop");
     if (backdrop) backdrop.style.display = "none";
+    if (popup.parentNode === document.body && calendarWrapper) {
+      calendarWrapper.appendChild(popup);
+    }
   };
 
   const showCalendar = () => {
