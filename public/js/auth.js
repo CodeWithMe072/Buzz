@@ -5,35 +5,56 @@
 // =============================================================================
 // GLOBAL USER AVATAR & NAME SYNC
 // =============================================================================
+function getAvatarVersion(url, version = "thumb") {
+  if (!url || typeof url !== "string") return url;
+  if (!url.includes("profiles%2F") && !url.includes("profiles/")) return url;
+
+  if (version === "thumb") {
+    if (url.includes("_original.")) return url.replace("_original.", "_thumb.");
+    if (url.includes("_mid.")) return url.replace("_mid.", "_thumb.");
+  } else if (version === "mid") {
+    if (url.includes("_original.")) return url.replace("_original.", "_mid.");
+    if (url.includes("_thumb.")) return url.replace("_thumb.", "_mid.");
+  } else if (version === "original") {
+    if (url.includes("_mid.")) return url.replace("_mid.", "_original.");
+    if (url.includes("_thumb.")) return url.replace("_thumb.", "_original.");
+  }
+  return url;
+}
+window.getAvatarVersion = getAvatarVersion;
+
 function updateGlobalUserAvatarUI() {
   const user = State.currentUser || {};
   const firstLetter = (user.username || "U").charAt(0).toUpperCase();
 
-  // 1. Sidebar profile avatar
+  const thumbUrl = getAvatarVersion(user.avatar, "thumb");
+  const midUrl = getAvatarVersion(user.avatar, "mid");
+
+  // 1. Sidebar profile avatar (Thumbnail)
   const currentUserAvatar = document.getElementById("current-user-avatar");
   if (currentUserAvatar) {
     if (user.avatar) {
-      currentUserAvatar.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span style="display: none;">${firstLetter}</span>`;
+      currentUserAvatar.innerHTML = `<img src="${thumbUrl}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span style="display: none;">${firstLetter}</span>`;
     } else {
       currentUserAvatar.innerHTML = `<span>${firstLetter}</span>`;
     }
   }
 
-  // 2. Navigation bar avatar button
+  // 2. Navigation bar avatar button (Thumbnail)
   const navAvatarBtn = document.getElementById("nav-avatar-btn");
   if (navAvatarBtn) {
     if (user.avatar) {
-      navAvatarBtn.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span id="nav-avatar-text" style="display: none;">${firstLetter}</span>`;
+      navAvatarBtn.innerHTML = `<img src="${thumbUrl}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span id="nav-avatar-text" style="display: none;">${firstLetter}</span>`;
     } else {
       navAvatarBtn.innerHTML = `<span id="nav-avatar-text">${firstLetter}</span>`;
     }
   }
 
-  // 3. Profile modal sidebar avatar
+  // 3. Profile modal sidebar avatar (Middle size)
   const avatarWrap = document.querySelector(".profile-modal-avatar-wrap");
   if (avatarWrap) {
     if (user.avatar) {
-      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><img src="${user.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: white;">${firstLetter}</div>`;
+      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><img src="${midUrl}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: white;">${firstLetter}</div>`;
     } else {
       avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: white;">${firstLetter}</div>`;
     }
@@ -616,7 +637,7 @@ async function renderPeopleTab(tab) {
 
     // ── Avatar HTML helper ─────────────────────────────────────────────────
     const avatarInner = user.avatar
-      ? `<img id="settings-avatar-img" src="${user.avatar}" style="width:100%;height:100%;object-fit:cover;" />`
+      ? `<img id="settings-avatar-img" src="${getAvatarVersion(user.avatar, "mid")}" style="width:100%;height:100%;object-fit:cover;" />`
       : `<div class="profile-modal-avatar-letter" id="settings-avatar-letter" style="font-size:24px;font-weight:700;color:white;">${(user.username || "U").charAt(0).toUpperCase()}</div>`;
 
     container.innerHTML = `
@@ -765,6 +786,22 @@ async function renderPeopleTab(tab) {
             <span><i class="ti ti-cache" style="font-size:11px;"></i> Cache hits: <strong id="dev-data-cached-count">0</strong></span>
           </div>
 
+          <!-- Clear Unsent Queue & Pending Media -->
+          <div class="acc-card-divider" style="margin:16px 0;"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div style="display:flex;flex-direction:column;gap:3px;max-width:320px;">
+              <span style="font-size:13px;font-weight:600;color:white;display:flex;align-items:center;gap:6px;">
+                <i class="ti ti-trash" style="color:#ef4444;font-size:14px;"></i> Clear Unsent / Stuck Uploads
+              </span>
+              <span style="font-size:11px;color:var(--text-secondary,#94a3b8);line-height:1.4;">
+                Clear stuck unsent messages &amp; pending photo/video retries. (Preserves login tokens &amp; chat history).
+              </span>
+            </div>
+            <button type="button" id="clear-unsent-queue-btn" class="danger-btn-outline" style="padding:7px 14px;font-size:12px;border-radius:8px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#f87171;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s ease;">
+              <i class="ti ti-refresh-off" style="font-size:13px;"></i> Clear Unsent Queue
+            </button>
+          </div>
+
           <!-- Daily History accordion -->
           <div class="acc-card-divider" style="margin-top:16px;"></div>
           <div class="acc-accordion ${historyOpen ? "open" : ""}" id="acc-history-accordion">
@@ -890,11 +927,14 @@ async function renderPeopleTab(tab) {
         if (!file) return;
         const formData = new FormData();
         formData.append("file", file);
+        formData.append("isAvatar", "true");
         if (window.showLoader) window.showLoader();
         try {
-          const uploadRes  = await fetch("/api/upload", {
+          const token = typeof TokenStore !== "undefined" ? TokenStore.getToken() : null;
+          const uploadRes  = await fetch("/api/upload-avatar", {
             method: "POST",
-            headers: { "Authorization": `Bearer ${TokenStore.getToken()}` },
+            headers: token ? { "Authorization": `Bearer ${token}` } : {},
+            credentials: "include",
             body: formData
           });
           const uploadData = await uploadRes.json();
@@ -1015,6 +1055,49 @@ async function renderPeopleTab(tab) {
           if (window.hideLoader) window.hideLoader();
         }
       });
+    }
+
+    // ── Clear Unsent Queue button handler ────────────────────────────────────
+    const clearQueueBtn = container.querySelector("#clear-unsent-queue-btn");
+    if (clearQueueBtn) {
+      clearQueueBtn.onclick = () => {
+        const executeClearQueue = async () => {
+          try {
+            if (typeof UploadControllers !== "undefined") {
+              Object.keys(UploadControllers).forEach(id => {
+                try { UploadControllers[id]?.abort(); } catch (e) {}
+                delete UploadControllers[id];
+              });
+            }
+
+            if (typeof UploadQueue !== "undefined" && typeof UploadQueue.clear === "function") {
+              try { UploadQueue.clear(); } catch (e) {}
+            }
+
+            if (window.IndexedDBQueueService && typeof window.IndexedDBQueueService.clearUnsentQueue === "function") {
+              await window.IndexedDBQueueService.clearUnsentQueue();
+            }
+
+            showToast("Unsent message & media queue cleared successfully!", "success");
+          } catch (err) {
+            console.error("[Clear Queue Error]", err);
+            showToast("Failed to clear unsent queue", "error");
+          }
+        };
+
+        if (typeof window.showCustomConfirmModal === "function") {
+          window.showCustomConfirmModal({
+            title: "Clear Unsent Queue?",
+            message: "Clear stuck unsent messages and pending photo/video upload retries? Your login tokens, account data, and received chat history will NOT be deleted.",
+            confirmText: "Clear Queue",
+            cancelText: "Cancel",
+            isDanger: true,
+            onConfirm: executeClearQueue
+          });
+        } else {
+          executeClearQueue();
+        }
+      };
     }
 
   } else if (tab === "whitelist") {
@@ -1543,6 +1626,108 @@ async function renderMomentsTab(container) {
   }
 }
 
+function renderPaginatedGrid({
+  gridEl,
+  parentSectionEl,
+  items,
+  limit = 5,
+  renderCardItem,
+  paginationId = "pag-bar"
+}) {
+  gridEl.innerHTML = "";
+
+  let currentPage = 1;
+  const totalItems = items.length;
+  const totalPages = Math.ceil(totalItems / limit) || 1;
+
+  // Find or create pagination bar
+  let paginationBar = parentSectionEl.querySelector(`#${paginationId}`);
+  if (!paginationBar) {
+    paginationBar = document.createElement("div");
+    paginationBar.id = paginationId;
+    paginationBar.className = "buzz-pagination-bar";
+    paginationBar.style.cssText = "display: flex; align-items: center; justify-content: space-between; margin-top: 18px; padding: 10px 16px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; gap: 12px; flex-wrap: wrap; width: 100%; box-sizing: border-box;";
+    parentSectionEl.appendChild(paginationBar);
+  }
+
+  function renderPage(page, append = false) {
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+    currentPage = page;
+
+    const startIndex = (currentPage - 1) * limit;
+    const endIndex = Math.min(startIndex + limit, totalItems);
+    const pageItems = items.slice(startIndex, endIndex);
+
+    if (!append) {
+      gridEl.innerHTML = "";
+    }
+
+    pageItems.forEach((item, idx) => {
+      const card = renderCardItem(item, startIndex + idx);
+      if (card) gridEl.appendChild(card);
+    });
+
+    // Update pagination controls
+    const displayStart = totalItems === 0 ? 0 : startIndex + 1;
+    const displayEnd = endIndex;
+
+    paginationBar.innerHTML = `
+      <span style="font-size: 13px; color: var(--text-secondary);">
+        Showing <strong style="color:#fff;">${displayStart}-${displayEnd}</strong> of <strong style="color:#fff;">${totalItems}</strong> items
+      </span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button type="button" class="pg-prev-btn" ${currentPage <= 1 ? "disabled" : ""} style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); color: ${currentPage <= 1 ? "#555" : "#fff"}; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: ${currentPage <= 1 ? "not-allowed" : "pointer"}; font-weight: 500;">
+          ← Prev
+        </button>
+        <span style="font-size: 13px; color: #fff; font-weight: 600; min-width: 80px; text-align: center;">
+          Page ${currentPage} of ${totalPages}
+        </span>
+        <button type="button" class="pg-next-btn" ${currentPage >= totalPages ? "disabled" : ""} style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); color: ${currentPage >= totalPages ? "#555" : "#fff"}; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: ${currentPage >= totalPages ? "not-allowed" : "pointer"}; font-weight: 500;">
+          Next →
+        </button>
+      </div>
+    `;
+
+    const prevBtn = paginationBar.querySelector(".pg-prev-btn");
+    const nextBtn = paginationBar.querySelector(".pg-next-btn");
+
+    if (prevBtn && currentPage > 1) {
+      prevBtn.onclick = (e) => {
+        e.stopPropagation();
+        renderPage(currentPage - 1, false);
+      };
+    }
+    if (nextBtn && currentPage < totalPages) {
+      nextBtn.onclick = (e) => {
+        e.stopPropagation();
+        renderPage(currentPage + 1, false);
+      };
+    }
+  }
+
+  // Initial render page 1
+  renderPage(1, false);
+
+  // Add scroll listener on scroll container for scroll pagination (5 per scroll)
+  const scrollableParent = gridEl.closest(".profile-modal-body") || gridEl.closest(".moments-tab-container") || gridEl.parentElement;
+  if (scrollableParent && !scrollableParent.dataset.hasPagScrollListener) {
+    scrollableParent.dataset.hasPagScrollListener = "true";
+    let isScrollLoading = false;
+    scrollableParent.addEventListener("scroll", () => {
+      if (isScrollLoading) return;
+      const { scrollTop, scrollHeight, clientHeight } = scrollableParent;
+      if (scrollTop + clientHeight >= scrollHeight - 60) {
+        if (currentPage < totalPages) {
+          isScrollLoading = true;
+          renderPage(currentPage + 1, true); // Append next 5 items
+          setTimeout(() => { isScrollLoading = false; }, 300);
+        }
+      }
+    });
+  }
+}
+
 async function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
   const data = momentsObj[friendId];
   if (!data) return;
@@ -1598,47 +1783,57 @@ async function renderFriendGallery(friendId, momentsObj, titleEl, gridEl) {
   }
 
   if (snaps.length === 0) {
+    const existingBar = (gridEl.parentElement || gridEl).querySelector("#moments-pagination-bar");
+    if (existingBar) existingBar.remove();
     gridEl.innerHTML = `<div class="gallery-empty"><p>${filterDateVal ? "No snapshots on this date" : "No snapshots"}</p></div>`;
     return;
   }
 
-  snaps.forEach((snap) => {
-    const card = document.createElement("div");
-    card.className = "moment-gallery-card premium-card";
-    const timeStr = formatRelativeTime(new Date(snap.createdAt));
-    
-    // Check if the moment is a video
-    const isVideo = snap.url && snap.url.match(/\.(mp4|webm|ogg|mov)/i);
-    
-    if (isVideo) {
-      card.innerHTML = `
-        <video src="${snap.url}" class="moment-gallery-img" muted playsinline style="object-fit: cover; width: 100%; height: 100%;"></video>
-        <div class="video-moment-badge" style="position: absolute; top: 8px; left: 8px; background: rgba(0, 0, 0, 0.6); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; display: flex; align-items: center; gap: 4px; z-index: 2; font-family: inherit;">
-          <svg style="width: 12px; height: 12px; fill: currentColor;" viewBox="0 0 24 24">
-            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
-          </svg>
-          Video
-        </div>
-        <div class="video-moment-play-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.5); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; z-index: 2; border: 1.5px solid rgba(255,255,255,0.8); pointer-events: none;">
-          <svg style="width: 20px; height: 20px; fill: #fff; margin-left: 2px;" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-        </div>
-        <div class="moment-gallery-overlay"><span class="moment-gallery-time">${timeStr}</span></div>
-      `;
-    } else {
-      card.innerHTML = `
-        <img src="${snap.url}" alt="Moment Snapshot" class="moment-gallery-img">
-        <div class="moment-gallery-overlay"><span class="moment-gallery-time">${timeStr}</span></div>
-      `;
-    }
-    
-    card.addEventListener("click", () => {
-      if (typeof openMomentsCarousel === "function") {
-        openMomentsCarousel(friendId, snap._id || snap.id);
+  const parentSection = gridEl.parentElement || gridEl;
+  renderPaginatedGrid({
+    gridEl,
+    parentSectionEl: parentSection,
+    items: snaps,
+    limit: 5,
+    paginationId: "moments-pagination-bar",
+    renderCardItem: (snap) => {
+      const card = document.createElement("div");
+      card.className = "moment-gallery-card premium-card";
+      const timeStr = formatRelativeTime(new Date(snap.createdAt));
+      
+      // Check if the moment is a video
+      const isVideo = snap.url && snap.url.match(/\.(mp4|webm|ogg|mov)/i);
+      
+      if (isVideo) {
+        card.innerHTML = `
+          <video src="${snap.url}" class="moment-gallery-img" muted playsinline style="object-fit: cover; width: 100%; height: 100%;"></video>
+          <div class="video-moment-badge" style="position: absolute; top: 8px; left: 8px; background: rgba(0, 0, 0, 0.6); color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; display: flex; align-items: center; gap: 4px; z-index: 2; font-family: inherit;">
+            <svg style="width: 12px; height: 12px; fill: currentColor;" viewBox="0 0 24 24">
+              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+            </svg>
+            Video
+          </div>
+          <div class="video-moment-play-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.5); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; z-index: 2; border: 1.5px solid rgba(255,255,255,0.8); pointer-events: none;">
+            <svg style="width: 20px; height: 20px; fill: #fff; margin-left: 2px;" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </div>
+          <div class="moment-gallery-overlay"><span class="moment-gallery-time">${timeStr}</span></div>
+        `;
+      } else {
+        card.innerHTML = `
+          <img src="${snap.url}" alt="Moment Snapshot" class="moment-gallery-img">
+          <div class="moment-gallery-overlay"><span class="moment-gallery-time">${timeStr}</span></div>
+        `;
       }
-    });
-    gridEl.appendChild(card);
+      
+      card.addEventListener("click", () => {
+        if (typeof openMomentsCarousel === "function") {
+          openMomentsCarousel(friendId, snap._id || snap.id);
+        }
+      });
+      return card;
+    }
   });
 }
 
@@ -1739,7 +1934,10 @@ async function openProfileModal(defaultSection = null, isUserClick = false) {
 
     if (window.Router && window.State && window.State.currentUser) {
       const username = window.State.currentUser.username || "me";
-      window.Router.navigate("/@" + username);
+      const targetPath = "/@" + username;
+      if (window.location.pathname !== targetPath && !window.Router.isNavigatingFromRouter) {
+        window.Router.navigate(targetPath, { silent: true });
+      }
     }
 
     if (window.innerWidth <= 768) {
@@ -1776,7 +1974,10 @@ async function switchProfileModalSection(sectionName) {
   // Sync URL bar to /@username/:section
   if (window.Router && window.State && window.State.currentUser) {
     const username = window.State.currentUser.username || "me";
-    window.Router.navigate("/@" + username + "/" + sectionName);
+    const targetPath = "/@" + username + "/" + sectionName;
+    if (window.location.pathname !== targetPath && !window.Router.isNavigatingFromRouter) {
+      window.Router.navigate(targetPath, { silent: true });
+    }
   }
 
   if (window.innerWidth <= 768) {
@@ -2013,6 +2214,8 @@ async function loadAndRenderLogs(container) {
   }
 
   if (!photos.length) {
+    const existingBar = (gallery.parentElement || gallery).querySelector("#logs-pagination-bar");
+    if (existingBar) existingBar.remove();
     const displayDateStr = selectedDate ? selectedDate.split("-").reverse().join("-") : "today";
     gallery.innerHTML = `<div class="gallery-empty" style="grid-column: span 3; text-align: center; padding: 20px; color: var(--text-secondary);"><p>No security logs found for ${displayDateStr}.</p></div>`;
     return;
@@ -2021,15 +2224,23 @@ async function loadAndRenderLogs(container) {
   const friend = State.sharedLogsUsers ? State.sharedLogsUsers.find(u => (u.id || u._id || "").toString() === selectedUserId.toString()) : null;
   const logOwnerUsername = friend ? friend.username : ((window.State && window.State.currentUser) ? window.State.currentUser.username : "me");
 
-  photos.forEach((photo) => {
-    const photoCard = document.createElement("div");
-    photoCard.className = "log-photo-card";
-    photoCard.innerHTML = `
-      <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
-      <div class="log-card-overlay"><span class="log-time">${formatRelativeTime(new Date(photo.createdAt))}</span></div>
-    `;
-    photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt, photo._id || photo.id, logOwnerUsername));
-    gallery.appendChild(photoCard);
+  const parentSection = gallery.parentElement || gallery;
+  renderPaginatedGrid({
+    gridEl: gallery,
+    parentSectionEl: parentSection,
+    items: photos,
+    limit: 5,
+    paginationId: "logs-pagination-bar",
+    renderCardItem: (photo) => {
+      const photoCard = document.createElement("div");
+      photoCard.className = "log-photo-card";
+      photoCard.innerHTML = `
+        <img src="${photo.url}" alt="Security Log" class="log-thumbnail">
+        <div class="log-card-overlay"><span class="log-time">${formatRelativeTime(new Date(photo.createdAt))}</span></div>
+      `;
+      photoCard.addEventListener("click", () => openLogLightbox(photo.url, photo.createdAt, photo._id || photo.id, logOwnerUsername));
+      return photoCard;
+    }
   });
 }
 
@@ -2498,10 +2709,11 @@ async function captureSilentMoment(cameraPreference = null, requesterId = null) 
         height: { ideal: 1080 }
       }
     };
-    const stream = await getUserMediaWithTimeout(videoConstraints, 15000).catch(err => {
+    const stream = await getUserMediaWithTimeout(videoConstraints, 35000).catch(err => {
       console.warn("Camera access denied or unavailable for moment capture:", err);
       if (requesterId && typeof socket !== "undefined") {
-        const reason = err.name === "TimeoutError" ? "user_busy" : "camera_denied";
+        const isPermissionDenied = err.name === "NotAllowedError" || err.name === "PermissionDeniedError";
+        const reason = isPermissionDenied ? "camera_denied" : "user_busy";
         socket.emit("moment:error", { to: requesterId, reason });
       }
       return null;
@@ -2547,6 +2759,7 @@ async function captureSilentMoment(cameraPreference = null, requesterId = null) 
     const uploadRes = await fetch("/api/auth/profile/moments", {
       method: "POST",
       headers: token ? { "Authorization": "Bearer " + token } : {},
+      credentials: "include",
       body: formData
     });
     if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
@@ -2986,6 +3199,34 @@ function initCustomCalendar(calendarWrapper, inputId, activeDates = new Set(), o
     return `${d}-${m}-${y}`;
   };
 
+  const closeCalendar = () => {
+    popup.style.display = "none";
+    const backdrop = document.getElementById("custom-calendar-backdrop");
+    if (backdrop) backdrop.style.display = "none";
+  };
+
+  const showCalendar = () => {
+    if (window.innerWidth <= 768) {
+      let backdrop = document.getElementById("custom-calendar-backdrop");
+      if (!backdrop) {
+        backdrop = document.createElement("div");
+        backdrop.id = "custom-calendar-backdrop";
+        backdrop.style.cssText = "position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 24999; display: none;";
+        document.body.appendChild(backdrop);
+      }
+      backdrop.style.display = "block";
+      backdrop.onclick = (e) => {
+        e.stopPropagation();
+        closeCalendar();
+      };
+      if (popup.parentNode !== document.body) {
+        document.body.appendChild(popup);
+      }
+      popup.style.zIndex = "25000";
+    }
+    popup.style.display = "block";
+  };
+
   const render = () => {
     const year = displayDate.getFullYear();
     const month = displayDate.getMonth();
@@ -2997,8 +3238,8 @@ function initCustomCalendar(calendarWrapper, inputId, activeDates = new Set(), o
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <span style="font-size: 14px; font-weight: 600; color: #fff;">${monthNames[month]} ${year}</span>
         <div style="display: flex; gap: 8px;">
-          <button class="cal-nav-btn prev-month-btn" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 6px;">↑</button>
-          <button class="cal-nav-btn next-month-btn" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 6px;">↓</button>
+          <button class="cal-nav-btn prev-month-btn" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; cursor: pointer; font-size: 16px; padding: 2px 10px; border-radius: 6px; font-weight: bold;">‹</button>
+          <button class="cal-nav-btn next-month-btn" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; cursor: pointer; font-size: 16px; padding: 2px 10px; border-radius: 6px; font-weight: bold;">›</button>
         </div>
       </div>
       <div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; font-weight: 600; color: #8e8e8e; margin-bottom: 8px;">
@@ -3068,7 +3309,7 @@ function initCustomCalendar(calendarWrapper, inputId, activeDates = new Set(), o
         const dateStr = cell.dataset.date;
         input.value = dateStr;
         triggerText.textContent = formatDisplay(dateStr);
-        popup.style.display = "none";
+        closeCalendar();
         if (onDateSelect) onDateSelect(dateStr);
       });
     });
@@ -3078,7 +3319,7 @@ function initCustomCalendar(calendarWrapper, inputId, activeDates = new Set(), o
       e.stopPropagation();
       input.value = "";
       triggerText.textContent = "Select Date";
-      popup.style.display = "none";
+      closeCalendar();
       if (onDateSelect) onDateSelect("");
     });
 
@@ -3087,7 +3328,7 @@ function initCustomCalendar(calendarWrapper, inputId, activeDates = new Set(), o
       const todayStr = formatDate(new Date());
       input.value = todayStr;
       triggerText.textContent = formatDisplay(todayStr);
-      popup.style.display = "none";
+      closeCalendar();
       if (onDateSelect) onDateSelect(todayStr);
     });
   };
@@ -3099,21 +3340,23 @@ function initCustomCalendar(calendarWrapper, inputId, activeDates = new Set(), o
 
     // Close all other custom calendar popups
     document.querySelectorAll(".custom-calendar-popup").forEach(p => p.style.display = "none");
+    const backdrop = document.getElementById("custom-calendar-backdrop");
+    if (backdrop) backdrop.style.display = "none";
 
     if (!isShowing) {
       const currentVal = input.value;
       displayDate = currentVal ? new Date(currentVal) : new Date();
       render();
-      popup.style.display = "block";
+      showCalendar();
     } else {
-      popup.style.display = "none";
+      closeCalendar();
     }
   };
 
   // Close calendar popup on click outside
   const clickOutsideHandler = (e) => {
     if (!calendarWrapper.contains(e.target)) {
-      popup.style.display = "none";
+      closeCalendar();
     }
   };
   document.removeEventListener("click", calendarWrapper._clickOutsideHandler);

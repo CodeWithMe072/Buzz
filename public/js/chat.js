@@ -190,9 +190,10 @@ function renderChatList(filter = "") {
     item.dataset.convId = conv.id;
     item.dataset.id = conv.id;
     const isLetterAvatar = conv.avatar && conv.avatar.length === 1;
+    const thumbAvatar = typeof getAvatarVersion === "function" ? getAvatarVersion(conv.avatar, "thumb") : conv.avatar;
     const avatarHTML = isLetterAvatar
       ? `<span>${conv.avatar}</span>`
-      : `<img src="${conv.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" /><span style="display:none;">${conv.username.charAt(0).toUpperCase()}</span>`;
+      : `<img src="${thumbAvatar}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" /><span style="display:none;">${conv.username.charAt(0).toUpperCase()}</span>`;
 
     const pinBadgeHTML = conv.isPinned ? `<span class="pin-badge" style="margin-left:4px; color:#a8a8a8;"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17l-5.5 5.5v-13h11v13z"/></svg></span>` : "";
     const muteBadgeHTML = conv.isMuted ? `<span class="mute-badge" style="margin-left:4px; color:#888;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13.73 21a2 2 0 0 1-3.46 0M18.63 13A17.89 17.89 0 0 1 18 8A6 6 0 0 0 6 8c0 .7-.08 1.38-.24 2.03M2 2l20 20M10.3 4.3A6 6 0 0 1 18 8v5"/></svg></span>` : "";
@@ -521,7 +522,7 @@ function openContactProfilePreview(conv) {
   } else {
     if (avatarLetter) avatarLetter.style.display = "none";
     if (avatarImg) {
-      avatarImg.src = conv.avatar;
+      avatarImg.src = typeof getAvatarVersion === "function" ? getAvatarVersion(conv.avatar, "mid") : conv.avatar;
       avatarImg.style.display = "block";
     }
   }
@@ -596,7 +597,7 @@ function openFullProfilePhotoViewer(avatarUrl, username) {
   } else {
     if (letterEl) letterEl.style.display = "none";
     if (imgEl) {
-      imgEl.src = avatarUrl;
+      imgEl.src = typeof getAvatarVersion === "function" ? getAvatarVersion(avatarUrl, "original") : avatarUrl;
       imgEl.style.display = "block";
     }
   }
@@ -709,9 +710,10 @@ function openChat(chatId, options = {}) {
 
   const avatarEl = document.getElementById("chat-avatar");
   const isLetterAvatar = conv.avatar && conv.avatar.length === 1;
+  const thumbAvatar = typeof getAvatarVersion === "function" ? getAvatarVersion(conv.avatar, "thumb") : conv.avatar;
   const avatarHTML = isLetterAvatar
     ? `<span>${conv.avatar}</span>`
-    : `<img src="${conv.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" /><span style="display:none;">${conv.username.charAt(0).toUpperCase()}</span>`;
+    : `<img src="${thumbAvatar}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline';" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" /><span style="display:none;">${conv.username.charAt(0).toUpperCase()}</span>`;
   avatarEl.innerHTML = avatarHTML;
   avatarEl.className = "avatar"; // Reset classes
 
@@ -1705,6 +1707,7 @@ window.updateReplyPreviewBar = updateReplyPreviewBar;
   let touchStartX = 0;
   let touchStartY = 0;
   let optionsTriggered = false;
+  let justLongPressed = false;
   const isMediaMsg = (message.type === "image" || message.type === "video");
 
   // Prevent drag options conflicts on mobile with custom tap/longpress detection
@@ -1713,12 +1716,16 @@ window.updateReplyPreviewBar = updateReplyPreviewBar;
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     optionsTriggered = false;
+    justLongPressed = false;
 
     // Start long press timer
     State.longPressTimeout = setTimeout(() => {
       optionsTriggered = true;
+      justLongPressed = true;
+      msgEl.dataset.justLongPressed = "true";
+      window.__justLongPressedTime = Date.now();
       showMessageOptions(message, msgEl, e.touches[0]);
-    }, 600);
+    }, 500);
   }, { passive: true });
 
   msgEl.addEventListener("touchmove", (e) => {
@@ -1734,8 +1741,12 @@ window.updateReplyPreviewBar = updateReplyPreviewBar;
     const duration = Date.now() - touchStartTime;
 
     // If options were already triggered by the timeout, prevent any click
-    if (optionsTriggered) {
+    if (optionsTriggered || justLongPressed || msgEl.dataset.justLongPressed === "true") {
       e.preventDefault();
+      setTimeout(() => {
+        justLongPressed = false;
+        msgEl.dataset.justLongPressed = "false";
+      }, 400);
       return;
     }
 
@@ -1743,6 +1754,10 @@ window.updateReplyPreviewBar = updateReplyPreviewBar;
     if (State.selectedMessageIds && State.selectedMessageIds.size > 0 && duration < 500) {
       e.preventDefault();
       e.stopPropagation();
+      msgEl.dataset.touchHandledSelection = "true";
+      setTimeout(() => {
+        msgEl.dataset.touchHandledSelection = "false";
+      }, 400);
       window.toggleMessageSelection(message, msgEl);
       return;
     }
@@ -1768,6 +1783,19 @@ window.updateReplyPreviewBar = updateReplyPreviewBar;
 
   // General click handler (desktop/mouse)
   msgEl.addEventListener("click", (e) => {
+    if (optionsTriggered || justLongPressed || msgEl.dataset.justLongPressed === "true" || (Date.now() - (window.__justLongPressedTime || 0) < 400)) {
+      e.preventDefault();
+      e.stopPropagation();
+      msgEl.dataset.justLongPressed = "false";
+      optionsTriggered = false;
+      return;
+    }
+    if (msgEl.dataset.touchHandledSelection === "true") {
+      e.preventDefault();
+      e.stopPropagation();
+      msgEl.dataset.touchHandledSelection = "false";
+      return;
+    }
     if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
       e.preventDefault();
       e.stopPropagation();
@@ -1991,11 +2019,13 @@ function createGroupMessageElement(groupMessages) {
   // Touch / Hold events for mobile context menu & selection on media groups
   let groupTouchTimer = null;
   let groupOptionsTriggered = false;
+  let groupJustLongPressed = false;
   let groupStartX = 0;
   let groupStartY = 0;
 
   msgEl.addEventListener("touchstart", (e) => {
     groupOptionsTriggered = false;
+    groupJustLongPressed = false;
     const touch = e.touches[0];
     groupStartX = touch.clientX;
     groupStartY = touch.clientY;
@@ -2006,10 +2036,23 @@ function createGroupMessageElement(groupMessages) {
 
     groupTouchTimer = setTimeout(() => {
       groupOptionsTriggered = true;
+      groupJustLongPressed = true;
+      msgEl.dataset.justLongPressed = "true";
+      window.__justLongPressedTime = Date.now();
       if (typeof showGroupMessageOptions === "function") {
         showGroupMessageOptions(groupMessages, msgEl, e);
       }
     }, 450);
+  }, { passive: true });
+
+  msgEl.addEventListener("touchmove", (e) => {
+    const touch = e.touches[0];
+    if (touch && Math.hypot(touch.clientX - groupStartX, touch.clientY - groupStartY) > 10) {
+      if (groupTouchTimer) {
+        clearTimeout(groupTouchTimer);
+        groupTouchTimer = null;
+      }
+    }
   }, { passive: true });
 
   msgEl.addEventListener("touchend", (e) => {
@@ -2023,20 +2066,41 @@ function createGroupMessageElement(groupMessages) {
       groupTouchTimer = null;
     }
 
-    if (groupOptionsTriggered) {
+    if (groupOptionsTriggered || groupJustLongPressed || msgEl.dataset.justLongPressed === "true") {
       e.preventDefault();
+      setTimeout(() => {
+        groupJustLongPressed = false;
+        msgEl.dataset.justLongPressed = "false";
+      }, 400);
       return;
     }
 
     if (State.selectedMessageIds && State.selectedMessageIds.size > 0 && distance < 10) {
       e.preventDefault();
       e.stopPropagation();
+      msgEl.dataset.touchHandledSelection = "true";
+      setTimeout(() => {
+        msgEl.dataset.touchHandledSelection = "false";
+      }, 400);
       window.toggleMessageSelection(firstMsg, msgEl);
       return;
     }
   }, { passive: false });
 
   msgEl.addEventListener("click", (e) => {
+    if (groupOptionsTriggered || groupJustLongPressed || msgEl.dataset.justLongPressed === "true" || (Date.now() - (window.__justLongPressedTime || 0) < 400)) {
+      e.preventDefault();
+      e.stopPropagation();
+      msgEl.dataset.justLongPressed = "false";
+      groupOptionsTriggered = false;
+      return;
+    }
+    if (msgEl.dataset.touchHandledSelection === "true") {
+      e.preventDefault();
+      e.stopPropagation();
+      msgEl.dataset.touchHandledSelection = "false";
+      return;
+    }
     if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
       e.preventDefault();
       e.stopPropagation();
@@ -3382,10 +3446,13 @@ window.selectMessageMobile = function (message, msgEl) {
   // Close selection on clicking outside
   setTimeout(() => {
     window.activeOutsideClickSelectorHandler = (e) => {
+      if (Date.now() - (window.__justLongPressedTime || 0) < 400) {
+        return;
+      }
       if (State.selectedMessageIds && State.selectedMessageIds.size > 0) {
         const emojiBar = document.querySelector(".mobile-emoji-bar");
         const clickedInsideEmojiBar = emojiBar && emojiBar.contains(e.target);
-        const clickedInsideMessage = e.target.closest(".message, .media-group-message");
+        const clickedInsideMessage = e.target.closest(".message, .media-group-message, .message-bubble");
         const clickedInsideSelectionHeader = e.target.closest(".mobile-selection-header");
         const clickedInsideDropdown = e.target.closest(".selection-dropdown-menu");
 
@@ -3397,7 +3464,7 @@ window.selectMessageMobile = function (message, msgEl) {
       }
     };
     document.addEventListener("click", window.activeOutsideClickSelectorHandler, true);
-  }, 0);
+  }, 50);
 };
 
 // Wire up selection action listeners globally
@@ -3694,7 +3761,9 @@ function initAppNavigation() {
   }
 
   chatBtn.onclick = async () => {
-    if (window.Router) window.Router.navigate("/inbox");
+    if (window.location.pathname !== "/inbox" && window.Router && !window.Router.isNavigatingFromRouter) {
+      window.Router.navigate("/inbox", { silent: true });
+    }
     document.body.classList.remove("profile-page-active");
     document.body.classList.remove("mobile-profile-value-active");
     chatBtn.classList.add("active");
@@ -3735,7 +3804,9 @@ function initAppNavigation() {
   };
 
   statusBtn.onclick = async () => {
-    if (window.Router) window.Router.navigate("/status");
+    if (window.location.pathname !== "/status" && window.Router && !window.Router.isNavigatingFromRouter) {
+      window.Router.navigate("/status", { silent: true });
+    }
     document.body.classList.remove("profile-page-active");
     document.body.classList.remove("mobile-profile-value-active");
     statusBtn.classList.add("active");
@@ -3785,7 +3856,6 @@ function initAppNavigation() {
   if (avatarBtn) {
     avatarBtn.onclick = () => {
       const username = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
-      if (window.Router) window.Router.navigate("/@" + username);
       if (typeof openProfileModal === "function") {
         openProfileModal(null, true);
       }
@@ -3966,7 +4036,7 @@ function renderStatusSidebar() {
           avatarContainer.className = "avatar-container";
           avatarContainer.setAttribute("style", "position: relative; width: 48px; height: 48px; border-radius: 50%; background: var(--elevated-bg); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; flex-shrink: 0;");
           if (State.currentUser.avatar && State.currentUser.avatar.length > 2) {
-            avatarContainer.innerHTML = `<img src="${State.currentUser.avatar}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span style="display:none; font-weight: 700; color: white;">${State.currentUser.username.charAt(0).toUpperCase()}</span><span class="status-add-badge">+</span>`;
+            avatarContainer.innerHTML = `<img src="${State.currentUser.avatar}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span style="display:none; font-weight: 700; color: white;">${State.currentUser.username.charAt(0).toUpperCase()}</span><span class="status-add-badge">+</span>`;
           } else {
             avatarContainer.innerHTML = `<span style="font-weight: 700; color: white;">${State.currentUser.username.charAt(0).toUpperCase()}</span><span class="status-add-badge">+</span>`;
           }
@@ -4254,7 +4324,7 @@ function openContactInfoSidebar() {
         avatarWrap.onclick = null;
       }
     } else {
-      avatarEl.innerHTML = `<img src="${avatarLetter}" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span style="display: none;">${username.charAt(0).toUpperCase()}</span>`;
+      avatarEl.innerHTML = `<img src="${avatarLetter}" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline';" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" /><span style="display: none;">${username.charAt(0).toUpperCase()}</span>`;
       if (avatarWrap) {
         avatarWrap.style.cursor = "pointer";
         avatarWrap.onclick = (e) => {

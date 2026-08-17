@@ -1674,7 +1674,7 @@ window.startCameraRequestTimeout = function (friendId, type, resetCallback) {
         showCameraErrorModal(
             `${name} is busy somewhere, please try again after a few minutes.`
         );
-    }, 15000);
+    }, 45000); // 45 seconds to allow mobile camera access, image capture, and R2 cloud upload
     
     window.activeCameraRequests[key] = {
         timeoutId,

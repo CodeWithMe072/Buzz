@@ -343,6 +343,58 @@ async function generateAndUploadThumbnail(filePath, originalKey, isVideo) {
     }
 }
 
+async function generateAndUploadProfileVersions(filePath, originalFileName, mimeType) {
+    const fileId = crypto.randomUUID();
+    const ext = path.extname(originalFileName) || `.${mimeType.split("/")[1] || "jpg"}`;
+    const cleanName = path.basename(originalFileName, ext).replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    const originalKey = `profiles/${fileId}_${cleanName}_original${ext}`;
+    const midKey = `profiles/${fileId}_${cleanName}_mid.jpg`;
+    const thumbKey = `profiles/${fileId}_${cleanName}_thumb.jpg`;
+
+    const tempMidPath = path.join(os.tmpdir(), `prof_mid_${fileId}.jpg`);
+    const tempThumbPath = path.join(os.tmpdir(), `prof_thumb_${fileId}.jpg`);
+
+    try {
+        // 1. Upload original version to Cloudflare R2 profiles/ folder
+        const originalUrl = await uploadToR2(filePath, originalKey, mimeType);
+
+        // 2. Generate mid-size version (400x400 square cover crop)
+        await sharp(filePath)
+            .resize(400, 400, { fit: "cover" })
+            .jpeg({ quality: 85 })
+            .toFile(tempMidPath);
+        const midUrl = await uploadToR2(tempMidPath, midKey, "image/jpeg");
+
+        // 3. Generate thumbnail version (150x150 square cover crop)
+        await sharp(filePath)
+            .resize(150, 150, { fit: "cover" })
+            .jpeg({ quality: 80 })
+            .toFile(tempThumbPath);
+        const thumbUrl = await uploadToR2(tempThumbPath, thumbKey, "image/jpeg");
+
+        await Promise.all([
+            fse.remove(tempMidPath).catch(() => {}),
+            fse.remove(tempThumbPath).catch(() => {})
+        ]);
+
+        return {
+            type: "avatar",
+            original: originalUrl,
+            mid_270: midUrl,
+            thumb_50: thumbUrl,
+            avatar: originalUrl
+        };
+    } catch (err) {
+        console.error("[generateAndUploadProfileVersions] error:", err);
+        await Promise.all([
+            fse.remove(tempMidPath).catch(() => {}),
+            fse.remove(tempThumbPath).catch(() => {})
+        ]);
+        throw err;
+    }
+}
+
 // =============================================================================
 // Safe File Name
 // =============================================================================
@@ -372,6 +424,29 @@ const diskUpload = multer({
 });
 
 // =============================================================================
+// Upload Profile Avatar (3 Versions: Thumbnail, Mid-size, Original in profiles/ folder)
+// =============================================================================
+
+router.post("/api/upload-avatar", protect, diskUpload.single("file"), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+    }
+    const { mimetype, path: tmpPath, originalname } = req.file;
+    try {
+        const versions = await generateAndUploadProfileVersions(tmpPath, originalname, mimetype);
+        await fse.remove(tmpPath);
+        return res.json({
+            status: true,
+            ...versions
+        });
+    } catch (err) {
+        console.error("[upload-avatar] error:", err);
+        await fse.remove(tmpPath).catch(() => {});
+        return res.status(500).json({ error: "Failed to upload avatar" });
+    }
+});
+
+// =============================================================================
 // Upload Small File
 // =============================================================================
 
@@ -381,6 +456,19 @@ router.post("/api/upload", protect, diskUpload.single("file"), async (req, res) 
         return res.status(400).json({ error: "No file uploaded", });
     }
     const { mimetype, path: tmpPath, originalname, } = req.file;
+
+    if (req.body.isAvatar === "true" || req.body.type === "avatar" || req.body.uploadType === "avatar") {
+        try {
+            const versions = await generateAndUploadProfileVersions(tmpPath, originalname, mimetype);
+            await fse.remove(tmpPath);
+            return res.json(versions);
+        } catch (err) {
+            console.error("[upload] profile avatar error:", err);
+            await fse.remove(tmpPath).catch(() => {});
+            return res.status(500).json({ error: "Failed to upload profile avatar" });
+        }
+    }
+
     const isVideo = mimetype.startsWith("video/");
     const isAudio = mimetype.startsWith("audio/");
     const isDocument = [

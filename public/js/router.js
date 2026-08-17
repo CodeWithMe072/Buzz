@@ -425,10 +425,58 @@
                 }
             }
 
-            // Programmatically click the status nav button
+            const chatBtn = document.getElementById("nav-chat-btn");
             const statusBtn = document.getElementById("nav-status-btn");
-            if (statusBtn && typeof statusBtn.onclick === "function") {
-                await statusBtn.onclick();
+            const avatarBtn = document.getElementById("nav-avatar-btn");
+            const chatSidebar = document.getElementById("chat-list-sidebar");
+            const statusSidebar = document.getElementById("status-sidebar");
+            const profileSidebar = document.getElementById("profile-page-sidebar");
+
+            document.body.classList.remove("profile-page-active");
+            document.body.classList.remove("mobile-profile-value-active");
+
+            if (statusBtn) statusBtn.classList.add("active");
+            if (chatBtn) chatBtn.classList.remove("active");
+            if (avatarBtn) avatarBtn.classList.remove("active");
+
+            if (chatSidebar) {
+                chatSidebar.style.display = "none";
+                chatSidebar.classList.add("hidden");
+            }
+            if (statusSidebar) {
+                statusSidebar.style.display = "flex";
+                statusSidebar.classList.remove("hidden");
+            }
+            if (profileSidebar) {
+                profileSidebar.style.display = "none";
+                profileSidebar.classList.add("hidden");
+            }
+
+            const chatWindowEl = document.getElementById("chat-window");
+            if (chatWindowEl) {
+                chatWindowEl.innerHTML = `
+                    <div class="status-empty-panel">
+                        <div class="status-empty-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <circle cx="12" cy="12" r="6"></circle>
+                                <circle cx="12" cy="12" r="2"></circle>
+                            </svg>
+                        </div>
+                        <h3>Share status updates</h3>
+                        <p>Share photos, videos and text that disappear after 24 hours.</p>
+                    </div>
+                `;
+            }
+
+            if (typeof window.State !== "undefined") {
+                if (!window.State.statusInitialFetchDone) {
+                    if (typeof window.fetchAndCacheStatusData === "function") {
+                        await window.fetchAndCacheStatusData();
+                    }
+                } else if (typeof window.renderStatusSidebar === "function") {
+                    window.renderStatusSidebar();
+                }
             }
         },
 

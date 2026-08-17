@@ -223,6 +223,24 @@ const IndexedDBQueueService = {
         reject(err);
       }
     });
+  },
+
+  async clearUnsentQueue() {
+    return new Promise((resolve, reject) => {
+      try {
+        if (!this.db) { resolve(); return; }
+        const transaction = this.db.transaction("outgoing_messages", "readwrite");
+        const store = transaction.objectStore("outgoing_messages");
+        const request = store.clear();
+        request.onsuccess = () => {
+          console.log("[IndexedDB] Cleared outgoing_messages object store.");
+          resolve();
+        };
+        request.onerror = (e) => reject(e.target.error);
+      } catch (err) {
+        reject(err);
+      }
+    });
   }
 };
 

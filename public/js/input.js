@@ -510,23 +510,22 @@ function initChatWindow() {
     function addMoreFiles(files) {
         if (!files || files.length === 0) return;
         const oldLength = stagedFiles.length;
-        const docTypes = [
-            "application/pdf", "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/vnd.ms-excel",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.ms-powerpoint",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "text/plain", "text/csv"
-        ];
 
         for (let file of files) {
-            const isDoc = docTypes.includes(file.type);
-            const isImageVideo = file.type.startsWith("image/") || file.type.startsWith("video/");
-            if (!isDoc && !isImageVideo) {
-                showToast(`Unsupported file: ${file.name}`, "error");
-                continue;
+            let fileType = file.type || "";
+            if (!fileType && file.name) {
+                const ext = file.name.split(".").pop().toLowerCase();
+                if (["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "svg"].includes(ext)) {
+                    fileType = "image/" + (ext === "jpg" ? "jpeg" : ext);
+                } else if (["mp4", "webm", "mov", "m4v", "avi", "3gp", "mkv"].includes(ext)) {
+                    fileType = "video/" + ext;
+                } else if (["mp3", "wav", "ogg", "aac", "m4a", "flac", "opus"].includes(ext)) {
+                    fileType = "audio/" + ext;
+                } else {
+                    fileType = "application/octet-stream";
+                }
             }
+
             stagedFiles.push({
                 file: file,
                 localUrl: URL.createObjectURL(file)
@@ -739,10 +738,19 @@ function initChatWindow() {
 async function handelMedia(file, caption = null, groupId = null) {
     if (!State.activeChat) return;
 
+    let mime = file.type || "";
+    if (!mime && file.name) {
+        const ext = file.name.split(".").pop().toLowerCase();
+        if (["jpg", "jpeg", "png", "gif", "webp", "heic", "heif"].includes(ext)) mime = "image/jpeg";
+        else if (["mp4", "webm", "mov", "m4v", "3gp", "mkv"].includes(ext)) mime = "video/mp4";
+        else if (["mp3", "wav", "ogg", "aac", "m4a"].includes(ext)) mime = "audio/mpeg";
+        else mime = "application/octet-stream";
+    }
+
     const localUrl = URL.createObjectURL(file);
-    const mediaType = file.type.startsWith("image/") ? "image"
-        : file.type.startsWith("video/") ? "video"
-            : file.type.startsWith("audio/") ? "audio"
+    const mediaType = mime.startsWith("image/") ? "image"
+        : mime.startsWith("video/") ? "video"
+            : mime.startsWith("audio/") ? "audio"
                 : "document";
 
     const to = State.activeChat;
@@ -757,7 +765,7 @@ async function handelMedia(file, caption = null, groupId = null) {
         groupId: groupId,
         clientTime: Date.now(),
         replyTo: State.replyingTo,
-        user: State.currentUser.id || State.currentUser._id,
+        user: State.currentUser?.id || State.currentUser?._id,
         status: { sent: false, delivered: false, seen: false },
         timestamp: Date.now()
     };
@@ -769,12 +777,14 @@ async function handelMedia(file, caption = null, groupId = null) {
     if (groupId && (mediaType === "image" || mediaType === "video")) {
         if (typeof renderMessages === "function") renderMessages(to);
     } else {
-        document.getElementById('messages').appendChild(createMessageElement(message));
+        const msgContainer = document.getElementById('messages');
+        if (msgContainer) msgContainer.appendChild(createMessageElement(message));
     }
     if (typeof attactEventOnMedia === "function") attactEventOnMedia();
-    document.getElementById('messages-container').scrollTop = 99999;
+    const msgScrollContainer = document.getElementById('messages-container');
+    if (msgScrollContainer) msgScrollContainer.scrollTop = 99999;
 
-    const conv = State.conversations.find(c => c.id === to);
+    const conv = State.conversations?.find(c => c.id === to);
     if (conv) {
         conv.lastMessage = formatLastMessage(message);
         conv.timestamp = message.timestamp;
@@ -783,10 +793,15 @@ async function handelMedia(file, caption = null, groupId = null) {
         renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
     }
 
-    if (file.type.startsWith("image/")) {
-        file = await imageCompression(file, {
-            maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true
-        });
+    if (mime.startsWith("image/") && typeof imageCompression === "function") {
+        try {
+            const compressed = await imageCompression(file, {
+                maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: false
+            });
+            if (compressed) file = compressed;
+        } catch (compErr) {
+            console.warn("[handelMedia] Image compression fallback to original file:", compErr);
+        }
     }
 
     UploadManager.add(() => uploadMedia(message.tempId, to, file));
@@ -902,9 +917,10 @@ async function uploadFileInChunks(file, msgId) {
     // Query server for already uploaded chunks
     let serverChunks = [];
     try {
-        const token = TokenStore.getToken();
+        const token = typeof TokenStore !== "undefined" ? TokenStore.getToken() : null;
         const res = await fetch(`/api/upload-status/${fileId}`, {
-            headers: token ? { "Authorization": "Bearer " + token } : {}
+            headers: token ? { "Authorization": "Bearer " + token } : {},
+            credentials: "include"
         });
         if (res.ok) {
             const statusData = await res.json();
@@ -928,8 +944,6 @@ async function uploadFileInChunks(file, msgId) {
     const tasks = Array.from({ length: totalChunks }, (_, i) => i).filter(idx => !chunksAcked.includes(idx));
     let done = chunksAcked.length;
 
-    
-
     for (let i = 0; i < tasks.length; i += PARALLEL) {
         const batch = tasks.slice(i, i + PARALLEL);
         await Promise.all(batch.map(async (chunkIndex) => {
@@ -944,10 +958,11 @@ async function uploadFileInChunks(file, msgId) {
                     formData.append("chunkIndex", chunkIndex);
                     formData.append("totalChunks", totalChunks);
                     formData.append("fileName", file.name);
-                    const token = TokenStore.getToken();
+                    const token = typeof TokenStore !== "undefined" ? TokenStore.getToken() : null;
                     const res = await fetch("/api/upload-chunk", {
                         method: "POST",
                         headers: token ? { "Authorization": "Bearer " + token } : {},
+                        credentials: "include",
                         body: formData
                     });
                     if (!res.ok) throw new Error("failed");
@@ -972,14 +987,15 @@ async function uploadFileInChunks(file, msgId) {
         }));
     }
 
-    const token2 = TokenStore.getToken();
+    const token2 = typeof TokenStore !== "undefined" ? TokenStore.getToken() : null;
     const res = await fetch("/api/complete-upload", {
         method: "POST",
         headers: Object.assign({ "Content-Type": "application/json" }, token2 ? { "Authorization": "Bearer " + token2 } : {}),
+        credentials: "include",
         body: JSON.stringify({ 
             fileId, 
             fileName: file.name, 
-            mimeType: file.type,
+            mimeType: file.type || "application/octet-stream",
             muted: record?.isMuted || false
         })
     });
@@ -1268,10 +1284,11 @@ async function uploadAudio(msgId, receiver, audioBlob) {
             extension = "mp4";
         }
         formData.append("file", audioBlob, `voice.${extension}`);
-        const token3 = TokenStore.getToken();
+        const token3 = typeof TokenStore !== "undefined" ? TokenStore.getToken() : null;
         const res = await fetch("/api/upload", {
             method: "POST",
             headers: token3 ? { "Authorization": "Bearer " + token3 } : {},
+            credentials: "include",
             body: formData,
             signal: controller.signal
         });
