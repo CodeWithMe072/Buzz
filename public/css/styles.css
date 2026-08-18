@@ -763,6 +763,12 @@ body {
     position: relative;
 }
 
+@media (min-width: 769px) {
+    .chat-header {
+        padding: var(--spacing-md);
+    }
+}
+
 .back-btn {
     display: none;
 }
