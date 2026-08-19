@@ -26,6 +26,8 @@ import { startTrendingSongsJob } from "./jobs/trendingSongsJob.js";
 import "./jobs/songWorker.js";
 import webrtcRoutes from "./routes/webrtc.routes.js";
 import componentRoutes from "./routes/component.routes.js";
+import maintenanceRoutes from "./routes/maintenance.routes.js";
+import { checkMaintenanceMode } from "./middleware/maintenance.middleware.js";
 import { protect, readUserFromCookie } from "./middleware/auth.middleware.js";
 import { csrfOriginGuard, advancedSecurityLimiter } from "./middleware/security.middleware.js";
 import crypto from "crypto";
@@ -47,6 +49,14 @@ const io = new Server(server, {
   pingInterval: 20000,
 });
 
+// Socket.io Maintenance Guard
+io.use((socket, next) => {
+  if (process.env.MAINTENANCE_MODE === "true") {
+    return next(new Error("System is currently under maintenance"));
+  }
+  next();
+});
+
 // Configure Socket.io Redis Adapter with separate pub/sub connections
 const pubClient = redis.duplicate();
 const subClient = redis.duplicate();
@@ -57,12 +67,14 @@ const PORT = process.env.PORT || 5500;
 /* ---------- Database ---------- */
 await connectMongo();
 
-// Trigger auto-migration of song search keywords
-import("./utils/songHelpers.js").then(({ autoMigrateSongs }) => {
-  autoMigrateSongs();
-}).catch(err => {
-  console.error("[Startup] Failed to initialize song keyword auto-migration:", err);
-});
+if (process.env.MAINTENANCE_MODE !== "true") {
+  // Trigger auto-migration of song search keywords
+  import("./utils/songHelpers.js").then(({ autoMigrateSongs }) => {
+    autoMigrateSongs();
+  }).catch(err => {
+    console.error("[Startup] Failed to initialize song keyword auto-migration:", err);
+  });
+}
 
 /* ---------- Compression ---------- */
 app.use(compression());
@@ -91,6 +103,14 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(csrfOriginGuard(clientOrigins));
 
+/* ---------- View engine ---------- */
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
+
+/* ---------- Maintenance Mode Interceptor & Status Endpoint ---------- */
+app.use(maintenanceRoutes);
+app.use(checkMaintenanceMode);
+
 /* ---------- Static files with Cache-Control ---------- */
 app.use(express.static(path.join(__dirname, "public"), {
   maxAge: isProd ? "1d" : 0,
@@ -106,11 +126,6 @@ app.use(express.static(path.join(__dirname, "public"), {
     }
   }
 }));
-
-
-/* ---------- View engine ---------- */
-app.set("view engine", "ejs");
-app.set("views", path.join(__dirname, "views"));
 
 /* ---------- Page routes ---------- */
 // All pages are served from index.ejs — client-side JS handles screens and SPA routes
@@ -182,9 +197,14 @@ app.use((req, res) => {
 initSocket(io);
 
 /* ---------- Background jobs ---------- */
-startMessageStatusSyncJob(io);
-startAutoPruneExpiredStatusesJob();
-startTrendingSongsJob();
+if (process.env.MAINTENANCE_MODE !== "true") {
+  startMessageStatusSyncJob(io);
+  startAutoPruneExpiredStatusesJob();
+  startTrendingSongsJob();
+  console.log("[Background Jobs] Background maintenance and sync cron tasks initialized.");
+} else {
+  console.log("[Maintenance Mode] System is under MAINTENANCE_MODE=true. Background cron jobs, queue workers, and auto-migrations are suspended to minimize CPU/RAM usage.");
+}
 
 /* ---------- Start ---------- */
 if (isProd) {

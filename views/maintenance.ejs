@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Under Maintenance | <%= appName %></title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: #09090b;
+      color: #f4f4f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Ambient background glow accents */
+    .glow-1 {
+      position: absolute;
+      top: 15%;
+      width: 350px;
+      height: 350px;
+      background: radial-gradient(circle, rgba(234, 179, 8, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+      filter: blur(60px);
+      pointer-events: none;
+    }
+
+    .glow-2 {
+      position: absolute;
+      bottom: 15%;
+      right: 20%;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
+      filter: blur(80px);
+      pointer-events: none;
+    }
+
+    .maintenance-card {
+      background: rgba(24, 24, 27, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 48px 40px;
+      max-width: 520px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      position: relative;
+      z-index: 10;
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .icon-container {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: rgba(234, 179, 8, 0.1);
+      border: 1.5px solid rgba(234, 179, 8, 0.3);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #eab308;
+      box-shadow: 0 8px 24px rgba(234, 179, 8, 0.15);
+    }
+
+    .icon-container svg {
+      animation: spinGear 12s linear infinite;
+    }
+
+    @keyframes spinGear {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: rgba(234, 179, 8, 0.12);
+      border: 1px solid rgba(234, 179, 8, 0.25);
+      border-radius: 100px;
+      color: #facc15;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      background-color: #facc15;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #facc15;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.4); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    p {
+      color: #a1a1aa;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+    }
+
+    .status-box {
+      background: rgba(9, 9, 11, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #71717a;
+    }
+
+    .status-box span {
+      font-weight: 500;
+    }
+
+    .live-indicator {
+      width: 8px;
+      height: 8px;
+      background-color: #22c55e;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 8px #22c55e;
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 16px;
+      }
+      .maintenance-card {
+        padding: 32px 20px;
+        border-radius: 20px;
+      }
+      .icon-container {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 18px;
+        border-radius: 18px;
+      }
+      .icon-container svg {
+        width: 32px;
+        height: 32px;
+      }
+      h1 {
+        font-size: 22px;
+        margin-bottom: 10px;
+      }
+      p {
+        font-size: 13.5px;
+        line-height: 1.5;
+        margin-bottom: 24px;
+      }
+      .status-box {
+        padding: 12px 14px;
+        font-size: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="glow-1"></div>
+  <div class="glow-2"></div>
+
+  <div class="maintenance-card">
+    <div class="icon-container">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    </div>
+
+    <div class="badge">
+      <div class="pulse-dot"></div>
+      System Maintenance
+    </div>
+
+    <h1>We'll Be Back Shortly</h1>
+
+    <p><%= message %></p>
+
+    <div class="status-box">
+      <span class="live-indicator"></span>
+      <span id="status-text">Checking system status in real-time...</span>
+    </div>
+  </div>
+
+  <script>
+    // Real-time status polling script — automatically reloads app when maintenance completes
+    async function checkStatus() {
+      const statusText = document.getElementById('status-text');
+      try {
+        const res = await fetch('/api/maintenance/status');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.maintenance === false) {
+            statusText.style.color = '#22c55e';
+            statusText.textContent = 'Maintenance completed! Reloading application...';
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 1000);
+            return;
+          }
+        }
+      } catch (err) {
+        // Ignore fetch errors during maintenance
+      }
+      statusText.textContent = 'Auto-checking status... System under maintenance.';
+    }
+
+    checkStatus();
+    setInterval(checkStatus, 5000);
+  </script>
+</body>
+</html>
