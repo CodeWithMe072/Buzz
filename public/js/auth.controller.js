@@ -371,6 +371,17 @@ async function apiRequest(method, url, body = null, resType = "json", retry = tr
     data = await res.text();
   }
 
+  if (res.headers.get("X-Maintenance-Mode") === "true" || (typeof data === "object" && data?.maintenance)) {
+    window.isMaintenanceModeActive = true;
+    if (res.status === 503 && typeof data === "object" && data?.code === "MAINTENANCE_MODE") {
+      if (typeof window.showMaintenanceActionModal === "function") {
+        window.showMaintenanceActionModal(data.message || "This Action");
+      } else if (typeof showToast === "function") {
+        showToast(data.message || "Action paused due to system maintenance.", "warning");
+      }
+    }
+  }
+
   // Access token expired
   if (retry && res.status === 401 && typeof data === "object" && data?.code === "TOKEN_EXPIRED") {
     try {
@@ -415,11 +426,23 @@ async function getMyProfile() {
 }
 
 async function updateProfile(data) {
+  if (window.isMaintenanceModeActive) {
+    if (typeof window.showMaintenanceActionModal === "function") {
+      window.showMaintenanceActionModal("Profile Settings Editing");
+    }
+    return { Data: { status: false, message: "Profile editing is disabled during maintenance mode." }, code: 503 };
+  }
   const res = await apiRequest("PUT", "/auth/profile", data);
   return { Data: res?.data, code: res?.status };
 }
 
 async function changePassword(currentPassword, newPassword) {
+  if (window.isMaintenanceModeActive) {
+    if (typeof window.showMaintenanceActionModal === "function") {
+      window.showMaintenanceActionModal("Password Changing");
+    }
+    return { Data: { status: false, message: "Password changes are disabled during maintenance mode." }, code: 503 };
+  }
   const res = await apiRequest("PUT", "/auth/password", { currentPassword, newPassword });
   if (res?.ok && res.data.token) {
     TokenStore.save(res.data.token, TokenStore.getUser());

@@ -554,6 +554,14 @@ const CallManager = (() => {
 
   // ─── OPEN OUTGOING CALL ──────────────────────────────────
   async function open(mode) {
+    if (window.isMaintenanceModeActive) {
+      if (typeof window.showMaintenanceActionModal === "function") {
+        window.showMaintenanceActionModal(mode === "video" ? "Video Calls" : "Voice Calls");
+      } else if (typeof showToast === "function") {
+        showToast("Calls are disabled during maintenance mode.", "warning");
+      }
+      return;
+    }
     if (_callState !== "idle") { showToast("Already in a call", "error"); return; }
     const conv = State.conversations.find(c => c.id === State.activeChat);
     if (!conv) { showToast("Open a chat first", "error"); return; }

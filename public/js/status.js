@@ -74,6 +74,14 @@
 
     // Initialize Status Composer
     function openStatusComposer() {
+        if (window.isMaintenanceModeActive) {
+            if (typeof window.showMaintenanceActionModal === "function") {
+                window.showMaintenanceActionModal("Status Updates");
+            } else if (typeof showToast === "function") {
+                showToast("Posting status updates is disabled during maintenance mode.", "warning");
+            }
+            return;
+        }
         console.log("openStatusComposer CALLED! Modal element:", document.getElementById("status-composer-modal"));
         const modal = document.getElementById("status-composer-modal");
         const selectorView = document.getElementById("status-composer-selector-view");

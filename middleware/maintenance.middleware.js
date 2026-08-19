@@ -1,8 +1,9 @@
 /**
  * maintenance.middleware.js
- * Strictly enforces maintenance mode when process.env.MAINTENANCE_MODE === "true".
- * Blocks all API routes, database data, user info, HTML templates, and socket connections.
- * Serves ONLY the standalone maintenance page and maintenance status endpoint.
+ * Selectively enforces maintenance mode restrictions when process.env.MAINTENANCE_MODE === "true".
+ * 
+ * ALLOWED: Login, Signup, Dashboard, Password Lock Overlay, Chat Window, Message Reading, Media Viewing, Security Logs.
+ * BLOCKED: Sending Messages, Media/Avatar Uploads, WebRTC Calls, Profile Settings Modifications.
  */
 
 export const checkMaintenanceMode = (req, res, next) => {
@@ -12,7 +13,10 @@ export const checkMaintenanceMode = (req, res, next) => {
     return next();
   }
 
-  // Allowed endpoints during maintenance mode
+  // Always set header to notify client of maintenance state
+  res.setHeader("X-Maintenance-Mode", "true");
+
+  // Allowed system status & static favicon
   if (
     req.path === "/api/maintenance/status" ||
     req.path === "/maintenance" ||
@@ -21,26 +25,25 @@ export const checkMaintenanceMode = (req, res, next) => {
     return next();
   }
 
-  // If request is an API call, AJAX request, or JSON request: respond with 503 JSON (zero data leak)
-  if (
-    req.path.startsWith("/api") ||
-    req.path.startsWith("/auth") ||
-    req.path.startsWith("/connections") ||
-    req.path.startsWith("/chat") ||
-    req.path.startsWith("/upload") ||
-    req.headers.accept?.includes("application/json") ||
-    req.headers["x-requested-with"] === "XMLHttpRequest"
-  ) {
+  // Define BLOCKED action/mutation routes during maintenance mode
+  const isBlockedMutation =
+    req.method === "POST" &&
+    (req.path.startsWith("/chat/message") ||
+     req.path.startsWith("/status") ||
+     req.path.startsWith("/api/upload") ||
+     req.path.startsWith("/api/webrtc") ||
+     req.path.startsWith("/auth/profile/update") ||
+     req.path.startsWith("/auth/password/change"));
+
+  if (isBlockedMutation) {
     return res.status(503).json({
       status: false,
       maintenance: true,
-      message: "System is currently under maintenance. Please try again later."
+      code: "MAINTENANCE_MODE",
+      message: "This action is temporarily disabled due to scheduled system maintenance."
     });
   }
 
-  // For all page/browser requests: render ONLY the standalone maintenance page
-  return res.status(503).render("maintenance", {
-    appName: process.env.APP_NAME || "Buzz",
-    message: process.env.MAINTENANCE_MESSAGE || "We're currently performing scheduled system maintenance. We'll be back online shortly!"
-  });
+  // Allow ALL viewing, authentication, reading, dashboard, and lock screen endpoints
+  return next();
 };

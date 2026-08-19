@@ -31,6 +31,15 @@ function initChatWindow() {
 
             e.stopPropagation();
 
+            if (window.isMaintenanceModeActive) {
+                if (typeof window.showMaintenanceActionModal === "function") {
+                    window.showMaintenanceActionModal("Camera Snapshots");
+                } else if (typeof showToast === "function") {
+                    showToast("Camera snapshot requests are disabled during maintenance mode.", "warning");
+                }
+                return;
+            }
+
             const friendId = snapshotBtn.dataset.friendId || State.activeChat;
             if (!friendId) {
                 showToast("No active chat selected", "error");
@@ -113,6 +122,14 @@ function initChatWindow() {
     }
 
     function toggleLiveVoice(btnElement) {
+        if (window.isMaintenanceModeActive) {
+            if (typeof window.showMaintenanceActionModal === "function") {
+                window.showMaintenanceActionModal("Live Voice Streaming");
+            } else if (typeof showToast === "function") {
+                showToast("Live voice streaming is disabled during maintenance mode.", "warning");
+            }
+            return;
+        }
         const friendId = btnElement.dataset.friendId;
         if (!friendId) return;
 
@@ -204,6 +221,14 @@ function initChatWindow() {
     const draftDebounceMap = new Map();
 
     messageInput.addEventListener('input', () => {
+        if (window.isMaintenanceModeActive) {
+            messageInput.value = "";
+            messageInput.blur();
+            if (typeof window.showMaintenanceActionModal === "function") {
+                window.showMaintenanceActionModal("Sending Messages");
+            }
+            return;
+        }
         const val = messageInput.value;
         sendBtn.disabled = !val.trim();
         adjustTextareaHeight(messageInput);
@@ -229,10 +254,33 @@ function initChatWindow() {
         }
     });
 
-    messageInput.addEventListener('focus', () => {
+    const handleInputMaintenanceGuard = (e) => {
+        if (window.isMaintenanceModeActive) {
+            messageInput.blur();
+            messageInput.readOnly = true;
+            messageInput.placeholder = "System under maintenance — message sending disabled";
+            if (typeof window.showMaintenanceActionModal === "function") {
+                window.showMaintenanceActionModal("Sending Messages");
+            }
+            if (e) e.preventDefault();
+            return true;
+        }
+        return false;
+    };
+
+    messageInput.addEventListener('focus', (e) => {
+        if (handleInputMaintenanceGuard(e)) return;
         if (typeof window.updateInputContainerState === "function") {
             window.updateInputContainerState();
         }
+    });
+
+    messageInput.addEventListener('click', (e) => {
+        handleInputMaintenanceGuard(e);
+    });
+
+    messageInput.addEventListener('keydown', (e) => {
+        if (handleInputMaintenanceGuard(e)) return;
     });
 
     messageInput.addEventListener('blur', () => {
@@ -736,6 +784,14 @@ function initChatWindow() {
 // HANDLE MEDIA FILE
 // =============================================================================
 async function handelMedia(file, caption = null, groupId = null) {
+    if (window.isMaintenanceModeActive) {
+        if (typeof window.showMaintenanceActionModal === "function") {
+            window.showMaintenanceActionModal("Media File Uploads");
+        } else if (typeof showToast === "function") {
+            showToast("Media uploads are disabled during maintenance mode.", "warning");
+        }
+        return;
+    }
     if (!State.activeChat) return;
 
     let mime = file.type || "";

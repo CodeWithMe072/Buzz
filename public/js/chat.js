@@ -677,7 +677,21 @@ function openChat(chatId, options = {}) {
   if (typeof initContactInfoSidebar === "function") initContactInfoSidebar();
   const messageInput = document.getElementById("message-input");
   messageInput.value = "";
-  messageInput.focus();
+  if (window.isMaintenanceModeActive) {
+    messageInput.readOnly = true;
+    messageInput.placeholder = "System under maintenance — message sending disabled";
+    messageInput.blur();
+    const sendBtn = document.getElementById("send-btn");
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.style.opacity = "0.4";
+      sendBtn.style.cursor = "not-allowed";
+    }
+  } else {
+    messageInput.readOnly = false;
+    messageInput.placeholder = "Type a message...";
+    messageInput.focus();
+  }
 
   if (window.IndexedDBQueueService && typeof window.IndexedDBQueueService.getInputDraft === "function") {
     window.IndexedDBQueueService.getInputDraft(chatId).then(savedDraft => {
@@ -819,6 +833,9 @@ function openChat(chatId, options = {}) {
   statusEl.className = `online-status ${conv.online ? "online" : ""}`;
 
   renderMessages(chatId);
+  if (typeof window.applyHeaderMaintenanceStyles === "function") {
+    window.applyHeaderMaintenanceStyles();
+  }
 
   if (window.innerWidth < 768) {
     document.getElementById("chat-list-sidebar").classList.add("hidden");
@@ -2754,6 +2771,12 @@ function openForwardModal(message) {
 // SEND MESSAGE
 // =============================================================================
 function sendMessage() {
+  if (window.isMaintenanceModeActive) {
+    if (typeof window.showMaintenanceActionModal === "function") {
+      window.showMaintenanceActionModal("Sending Messages");
+    }
+    return;
+  }
   const input = document.getElementById("message-input");
   const content = input.value.trim();
   if (!content || !State.activeChat) return;
@@ -4709,12 +4732,29 @@ function closeMediaGalleryPanel(fromPopstate = false) {
   }
 }
 
+let _mediaGalleryPagination = {
+  chatId: null,
+  activeTab: "media",
+  limit: 10,
+  hasMoreMedia: true,
+  isLoading: false,
+  oldestCreatedAt: null
+};
+
 async function loadMediaGalleryData() {
   const contentEl = document.getElementById("media-gallery-content");
   if (!contentEl) return;
 
   contentEl.innerHTML = `<div class="media-gallery-loading">Loading...</div>`;
   _mediaGalleryCache = { media: [], docs: [], links: [] };
+  _mediaGalleryPagination = {
+    chatId: State.activeChat,
+    activeTab: "media",
+    limit: 10,
+    hasMoreMedia: true,
+    isLoading: false,
+    oldestCreatedAt: null
+  };
 
   try {
     if (typeof fetchMedia !== "function" || !State.activeChat) {
@@ -4722,9 +4762,13 @@ async function loadMediaGalleryData() {
       return;
     }
 
-    // ── 1. Fetch media + docs from database
-    const data = await fetchMedia(State.activeChat, null, 200);
+    // ── 1. Fetch initial batch of media items
+    const data = await fetchMedia(State.activeChat, null, _mediaGalleryPagination.limit);
     const allMessages = data.Data?.data || [];
+
+    if (allMessages.length < _mediaGalleryPagination.limit) {
+      _mediaGalleryPagination.hasMoreMedia = false;
+    }
 
     for (const m of allMessages) {
       if (m.type === "image" || m.type === "video" || m.type === "audio") {
@@ -4734,10 +4778,14 @@ async function loadMediaGalleryData() {
       }
     }
 
-    // ── 2. Fetch links from database via dedicated endpoint
+    if (_mediaGalleryCache.media.length > 0) {
+      _mediaGalleryPagination.oldestCreatedAt = _mediaGalleryCache.media[_mediaGalleryCache.media.length - 1].createdAt;
+    }
+
+    // ── 2. Fetch links from database
     if (typeof fetchLinks === "function") {
       try {
-        const linkData = await fetchLinks(State.activeChat, 200);
+        const linkData = await fetchLinks(State.activeChat, 50);
         const dbLinks = linkData.Data?.data || [];
         for (const l of dbLinks) {
           _mediaGalleryCache.links.push(l);
@@ -4745,19 +4793,19 @@ async function loadMediaGalleryData() {
       } catch (e) { console.warn("fetchLinks failed:", e); }
     }
 
-    // ── 3. Merge any extra items from in-memory cached messages
-    // (covers messages loaded but not yet committed to DB in some edge cases)
+    // ── 3. Merge extra items from in-memory cached messages
     const cachedMsgs = (State.messages && State.messages[State.activeChat]) || [];
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     for (const m of cachedMsgs) {
-      if ((m.type === "document" || m.type === "file") && !_mediaGalleryCache.docs.find(d => d.id === (m.id || m.tempId))) {
+      if ((m.type === "image" || m.type === "video" || m.type === "audio") && !_mediaGalleryCache.media.find(x => (x.id || x.tempId) === (m.id || m.tempId))) {
+        _mediaGalleryCache.media.push(m);
+      } else if ((m.type === "document" || m.type === "file") && !_mediaGalleryCache.docs.find(d => (d.id || d.tempId) === (m.id || m.tempId))) {
         _mediaGalleryCache.docs.push(m);
       }
       if (m.type === "text" && m.content) {
         const urls = m.content.match(urlRegex);
         if (urls) {
           for (const url of urls) {
-            // Avoid duplicates already fetched from DB
             if (!_mediaGalleryCache.links.find(l => l.url === url)) {
               _mediaGalleryCache.links.push({ url, createdAt: m.createdAt, from: m.from || m.sender || null });
             }
@@ -4773,14 +4821,77 @@ async function loadMediaGalleryData() {
   }
 }
 
+async function loadMoreGalleryMedia() {
+  if (!_mediaGalleryPagination.hasMoreMedia || _mediaGalleryPagination.isLoading || !State.activeChat) return;
+
+  _mediaGalleryPagination.isLoading = true;
+
+  const contentEl = document.getElementById("media-gallery-content");
+  let spinner = document.getElementById("media-gallery-scroll-spinner");
+  if (!spinner && contentEl) {
+    spinner = document.createElement("div");
+    spinner.id = "media-gallery-scroll-spinner";
+    spinner.style.cssText = "padding: 16px; text-align: center; color: rgba(255,255,255,0.5); font-size: 12px;";
+    spinner.innerHTML = `<div class="spinner-ring" style="width:18px;height:18px;border-width:2px;margin:0 auto 6px;"></div>Loading more media...`;
+    contentEl.appendChild(spinner);
+  }
+
+  try {
+    const data = await fetchMedia(State.activeChat, _mediaGalleryPagination.oldestCreatedAt, _mediaGalleryPagination.limit);
+    const newMessages = data.Data?.data || [];
+
+    if (newMessages.length < _mediaGalleryPagination.limit) {
+      _mediaGalleryPagination.hasMoreMedia = false;
+    }
+
+    const addedMedia = [];
+    for (const m of newMessages) {
+      if (m.type === "image" || m.type === "video" || m.type === "audio") {
+        if (!_mediaGalleryCache.media.some(x => (x.id || x.tempId) === (m.id || m.tempId))) {
+          _mediaGalleryCache.media.push(m);
+          addedMedia.push(m);
+        }
+      } else if (m.type === "document" || m.type === "file") {
+        if (!_mediaGalleryCache.docs.some(x => (x.id || x.tempId) === (m.id || m.tempId))) {
+          _mediaGalleryCache.docs.push(m);
+        }
+      }
+    }
+
+    if (addedMedia.length > 0) {
+      _mediaGalleryPagination.oldestCreatedAt = addedMedia[addedMedia.length - 1].createdAt;
+      if (_mediaGalleryPagination.activeTab === "media" && contentEl) {
+        await renderGalleryMediaTab(contentEl);
+      }
+    }
+  } catch (err) {
+    console.error("[MediaGallery] Scroll pagination error:", err);
+  } finally {
+    if (spinner) spinner.remove();
+    _mediaGalleryPagination.isLoading = false;
+  }
+}
+
 async function renderMediaGalleryTab(tab) {
   const contentEl = document.getElementById("media-gallery-content");
   if (!contentEl) return;
+
+  _mediaGalleryPagination.activeTab = tab;
 
   if (!_mediaGalleryLoaded) {
     contentEl.innerHTML = `<div class="media-gallery-loading">Loading...</div>`;
     return;
   }
+
+  // Scroll listener for infinite scroll pagination
+  contentEl.onscroll = () => {
+    if (_mediaGalleryPagination.activeTab !== "media") return;
+    if (!_mediaGalleryPagination.hasMoreMedia || _mediaGalleryPagination.isLoading) return;
+    const distanceToBottom = contentEl.scrollHeight - (contentEl.scrollTop + contentEl.clientHeight);
+    if (distanceToBottom < 150) {
+      loadMoreGalleryMedia();
+    }
+  };
 
   if (tab === "media") {
     await renderGalleryMediaTab(contentEl);

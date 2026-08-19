@@ -1636,6 +1636,93 @@ function showDeviceErrorModal(message, type = 'camera') {
 window.showDeviceErrorModal = showDeviceErrorModal;
 window.showCameraErrorModal = (msg) => showDeviceErrorModal(msg, 'camera');
 
+window.showMaintenanceActionModal = function (featureName) {
+  let modal = document.getElementById("maintenance-action-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "maintenance-action-modal";
+    modal.className = "custom-modal-overlay";
+    modal.style.cssText = "position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 35000; display: flex; align-items: center; justify-content: center; padding: 20px;";
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="custom-modal-container" style="background: #18181b; border: 1px solid rgba(255,255,255,0.18); border-radius: 20px; width: 100%; max-width: 440px; padding: 28px; color: #fff; box-shadow: 0 25px 70px rgba(0,0,0,0.85); text-align: center; animation: popupIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);">
+      <div style="width: 60px; height: 60px; margin: 0 auto 16px; background: rgba(234, 179, 8, 0.12); border: 1.5px solid rgba(234, 179, 8, 0.3); border-radius: 18px; display: flex; align-items: center; justify-content: center; color: #facc15;">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
+      </div>
+      <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #ffffff;">System Under Maintenance</h3>
+      <p style="font-size: 14px; color: #a1a1aa; line-height: 1.5; margin-bottom: 20px;">
+        <strong style="color: #facc15;">${featureName || "This action"}</strong> is temporarily disabled during scheduled maintenance.
+      </p>
+      <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px 16px; text-align: left; font-size: 12.5px; line-height: 1.6; margin-bottom: 24px; color: #d4d4d8;">
+        <div style="font-weight: 700; color: #4ade80; margin-bottom: 4px;">✅ Available Features:</div>
+        <div>• Reading Messages & Viewing Chat Media</div>
+        <div>• Password Lock & Dashboard Access</div>
+        <div>• Viewing Security Logs & Contact Profiles</div>
+        <div style="font-weight: 700; color: #f87171; margin-top: 10px; margin-bottom: 4px;">❌ Paused Features:</div>
+        <div>• Sending Messages, Photos & Audio/Video</div>
+        <div>• Voice/Video Calls & Camera Snapshots</div>
+        <div>• Profile Editing & Account Settings Changes</div>
+      </div>
+      <button onclick="document.getElementById('maintenance-action-modal').style.display='none';" style="width: 100%; padding: 12px; background: #0095f6; border: none; border-radius: 10px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;">Got It</button>
+    </div>
+  `;
+  modal.style.display = "flex";
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.style.display = "none";
+  };
+};
+
+window.applyHeaderMaintenanceStyles = function () {
+  if (!window.isMaintenanceModeActive) return;
+  const ids = ["audio-call-btn", "video-call-btn", "chat-capture-snapshot-btn", "chat-live-voice-btn", "chatOption-VideoCall", "chatOption-AudioCall", "chatOption-LiveVoice"];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.style.opacity = "0.35";
+      el.style.cursor = "not-allowed";
+      el.title = "This feature is disabled during system maintenance";
+    }
+  });
+};
+
+if (!window.__maintenanceHeaderClickBound) {
+  window.__maintenanceHeaderClickBound = true;
+  document.addEventListener("click", (e) => {
+    if (!window.isMaintenanceModeActive) return;
+    const callBtn = e.target.closest("#audio-call-btn, #video-call-btn, #chatOption-VideoCall, #chatOption-AudioCall");
+    if (callBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      if (typeof window.showMaintenanceActionModal === "function") {
+        window.showMaintenanceActionModal(callBtn.id.includes("video") || callBtn.id.includes("Video") ? "Video Calls" : "Voice Calls");
+      }
+      return;
+    }
+    const snapBtn = e.target.closest("#chat-capture-snapshot-btn");
+    if (snapBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      if (typeof window.showMaintenanceActionModal === "function") {
+        window.showMaintenanceActionModal("Camera Snapshots");
+      }
+      return;
+    }
+    const voiceBtn = e.target.closest("#chat-live-voice-btn, #chatOption-LiveVoice");
+    if (voiceBtn) {
+      e.stopPropagation();
+      e.preventDefault();
+      if (typeof window.showMaintenanceActionModal === "function") {
+        window.showMaintenanceActionModal("Live Voice Streaming");
+      }
+      return;
+    }
+  }, true);
+}
+
 window.startCameraRequestTimeout = function (friendId, type, resetCallback) {
     if (!window.activeCameraRequests) {
         window.activeCameraRequests = {};
