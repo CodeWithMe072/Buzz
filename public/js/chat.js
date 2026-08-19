@@ -4735,7 +4735,7 @@ function closeMediaGalleryPanel(fromPopstate = false) {
 let _mediaGalleryPagination = {
   chatId: null,
   activeTab: "media",
-  limit: 10,
+  limit: 20,
   hasMoreMedia: true,
   isLoading: false,
   oldestCreatedAt: null
@@ -4750,7 +4750,7 @@ async function loadMediaGalleryData() {
   _mediaGalleryPagination = {
     chatId: State.activeChat,
     activeTab: "media",
-    limit: 10,
+    limit: 20,
     hasMoreMedia: true,
     isLoading: false,
     oldestCreatedAt: null
