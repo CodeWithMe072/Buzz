@@ -3,18 +3,18 @@
  * Selectively enforces maintenance mode restrictions when process.env.MAINTENANCE_MODE === "true".
  * 
  * ALLOWED: Login, Signup, Dashboard, Password Lock Overlay, Chat Window, Message Reading, Media Viewing, Security Logs.
- * BLOCKED: Sending Messages, Media/Avatar Uploads, WebRTC Calls, Profile Settings Modifications.
+ * BLOCKED: Sending Messages, Status Creation, Media/Avatar Uploads, WebRTC Calls, Profile Settings Modifications.
  */
 
 export const checkMaintenanceMode = (req, res, next) => {
   const isMaintenance = process.env.MAINTENANCE_MODE === "true";
 
+  // Always set header to notify client of current maintenance state (true or false)
+  res.setHeader("X-Maintenance-Mode", isMaintenance ? "true" : "false");
+
   if (!isMaintenance) {
     return next();
   }
-
-  // Always set header to notify client of maintenance state
-  res.setHeader("X-Maintenance-Mode", "true");
 
   // Allowed system status & static favicon
   if (

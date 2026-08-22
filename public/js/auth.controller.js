@@ -371,7 +371,8 @@ async function apiRequest(method, url, body = null, resType = "json", retry = tr
     data = await res.text();
   }
 
-  if (res.headers.get("X-Maintenance-Mode") === "true" || (typeof data === "object" && data?.maintenance)) {
+  const maintHeader = res.headers.get("X-Maintenance-Mode");
+  if (maintHeader === "true" || (typeof data === "object" && data?.maintenance === true)) {
     window.isMaintenanceModeActive = true;
     if (res.status === 503 && typeof data === "object" && data?.code === "MAINTENANCE_MODE") {
       if (typeof window.showMaintenanceActionModal === "function") {
@@ -380,6 +381,8 @@ async function apiRequest(method, url, body = null, resType = "json", retry = tr
         showToast(data.message || "Action paused due to system maintenance.", "warning");
       }
     }
+  } else if (maintHeader === "false" || (typeof data === "object" && data?.maintenance === false)) {
+    window.isMaintenanceModeActive = false;
   }
 
   // Access token expired

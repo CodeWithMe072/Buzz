@@ -179,7 +179,7 @@ app.use(songRoutes);
 
 /* ---------- Version endpoint (for auto-reload) ---------- */
 const APP_VERSION = process.env.APP_VERSION;
-app.get("/api/version", protect, (req, res) => res.json({ data: APP_VERSION }));
+app.get("/api/version", (req, res) => res.json({ data: APP_VERSION }));
 
 /* ---------- 404 handler ---------- */
 app.use((req, res) => {

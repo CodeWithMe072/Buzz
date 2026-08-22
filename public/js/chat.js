@@ -690,6 +690,21 @@ function openChat(chatId, options = {}) {
   } else {
     messageInput.readOnly = false;
     messageInput.placeholder = "Type a message...";
+    const sendBtn = document.getElementById("send-btn");
+    if (sendBtn) {
+      sendBtn.disabled = !messageInput.value.trim();
+      sendBtn.style.opacity = "";
+      sendBtn.style.cursor = "";
+    }
+    const ids = ["audio-call-btn", "video-call-btn", "chat-capture-snapshot-btn", "chat-live-voice-btn", "chatOption-VideoCall", "chatOption-AudioCall", "chatOption-LiveVoice"];
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.style.opacity = "";
+        el.style.cursor = "";
+        el.title = "";
+      }
+    });
     messageInput.focus();
   }
 

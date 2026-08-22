@@ -1689,6 +1689,47 @@ window.applyHeaderMaintenanceStyles = function () {
   });
 };
 
+window.checkMaintenanceStatus = function () {
+  fetch("/api/maintenance/status")
+    .then(res => res.json())
+    .then(data => {
+      window.isMaintenanceModeActive = !!data.maintenance;
+      if (!window.isMaintenanceModeActive) {
+        const messageInput = document.getElementById("message-input");
+        if (messageInput && messageInput.readOnly) {
+          messageInput.readOnly = false;
+          messageInput.placeholder = "Type a message...";
+        }
+        const sendBtn = document.getElementById("send-btn");
+        if (sendBtn && sendBtn.style.cursor === "not-allowed") {
+          sendBtn.disabled = !messageInput?.value?.trim();
+          sendBtn.style.opacity = "";
+          sendBtn.style.cursor = "";
+        }
+        const ids = ["audio-call-btn", "video-call-btn", "chat-capture-snapshot-btn", "chat-live-voice-btn", "chatOption-VideoCall", "chatOption-AudioCall", "chatOption-LiveVoice"];
+        ids.forEach(id => {
+          const el = document.getElementById(id);
+          if (el && el.style.cursor === "not-allowed") {
+            el.style.opacity = "";
+            el.style.cursor = "";
+            el.title = "";
+          }
+        });
+      } else {
+        if (typeof window.applyHeaderMaintenanceStyles === "function") {
+          window.applyHeaderMaintenanceStyles();
+        }
+      }
+    })
+    .catch(() => {});
+};
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", window.checkMaintenanceStatus);
+} else {
+  window.checkMaintenanceStatus();
+}
+
 if (!window.__maintenanceHeaderClickBound) {
   window.__maintenanceHeaderClickBound = true;
   document.addEventListener("click", (e) => {
