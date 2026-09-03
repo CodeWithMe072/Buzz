@@ -185,12 +185,12 @@
     <div id="live-video-preview-frame-container"
         style="flex: 1; position: relative; background: #0b0b0b; overflow: hidden; width: 100%; display: flex; align-items: center; justify-content: center;">
         <img id="live-video-preview-frame"
-            style="width: 100%; height: 100%; object-fit: cover; display: none;" />
+            style="width: 100%; height: 100%; object-fit: cover; display: none; position: relative; z-index: 2;" />
         <video id="live-video-preview-element"
-            style="width: 100%; height: 100%; object-fit: cover; display: none;" autoplay playsinline
+            style="width: 100%; height: 100%; object-fit: cover; display: none; position: relative; z-index: 2; will-change: transform;" autoplay playsinline
             muted></video>
         <div id="live-video-preview-placeholder"
-            style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; color: var(--text-secondary); padding: 10px;">
+            style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; color: var(--text-secondary); padding: 10px; z-index: 1;">
             <div class="spinner-ring"
                 style="width: 18px; height: 18px; border-width: 2px; border-top-color: #a855f7;"></div>
             <span style="font-size: 10px; text-align: center;">Waiting for feed...</span>

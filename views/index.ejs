@@ -45,15 +45,15 @@
         <div class="camera-viewport">
             <!-- Live camera video stream -->
             <video id="camera-capture-video" autoplay playsinline muted
-                style="width: 100%; height: 100%; object-fit: cover;"></video>
+                style="width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; z-index: 2903; background: transparent; will-change: transform;"></video>
 
             <!-- Static image preview (captured photo) -->
             <img id="camera-capture-img-preview"
-                style="display: none; width: 100%; height: calc(100% - 180px); object-fit: contain; background: #000; position: absolute; top: 10px;" />
+                style="display: none; width: 100%; height: calc(100% - 180px); object-fit: contain; background: transparent; position: absolute; top: 10px; z-index: 2905;" />
 
             <!-- Video preview (recorded video) -->
             <video id="camera-capture-video-preview" loop playsinline autoplay
-                style="display: none; width: 100%; height: calc(100% - 180px); object-fit: contain; background: #000; position: absolute; top: 10px; cursor: pointer;"></video>
+                style="display: none; width: 100%; height: calc(100% - 180px); object-fit: contain; background: transparent; position: absolute; top: 10px; cursor: pointer; z-index: 2905; will-change: transform;"></video>
 
             <!-- Centered Play/Pause Icon Overlay for Video Preview -->
             <div id="video-preview-play-overlay" style="display: none; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.5); border-radius: 50%; width: 64px; height: 64px; align-items: center; justify-content: center; pointer-events: none; z-index: 2900;">
