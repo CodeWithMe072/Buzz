@@ -342,15 +342,27 @@
         const vTrack = stream.getVideoTracks()[0];
         if (vTrack) {
             vTrack.enabled = true;
+            try {
+                console.log("[Camera] Track settings:", vTrack.getSettings ? vTrack.getSettings() : {});
+                console.log("[Camera] Track state before wait — muted:", vTrack.muted, "readyState:", vTrack.readyState);
+            } catch (e) {}
+
             if (vTrack.muted) {
                 await new Promise(resolve => {
-                    const onUnmute = () => {
+                    let done = false;
+                    let timeoutId;
+                    const finish = () => {
+                        if (done) return;
+                        done = true;
                         vTrack.removeEventListener("unmute", onUnmute);
+                        clearTimeout(timeoutId);
                         resolve();
                     };
+                    const onUnmute = finish;
                     vTrack.addEventListener("unmute", onUnmute);
-                    setTimeout(resolve, 800);
+                    timeoutId = setTimeout(finish, 800);
                 });
+                console.log("[Camera] Track state after wait — muted:", vTrack.muted, "readyState:", vTrack.readyState);
             }
         }
 
@@ -367,6 +379,37 @@
         } catch (playErr) {
             console.warn("Camera video play failed:", playErr);
         }
+
+        // --- Watchdog to catch "granted but black" stream issues ---
+        setTimeout(() => {
+            if (!videoEl.srcObject || videoEl.srcObject !== stream) return;
+            if (videoEl.videoWidth === 0 || videoEl.videoHeight === 0) {
+                console.error("[Camera] Watchdog: video has zero dimensions after 1.5s — stream not delivering frames.", {
+                    muted: vTrack?.muted,
+                    readyState: vTrack?.readyState,
+                    settings: vTrack?.getSettings?.()
+                });
+                showToast("Camera preview failed to start — retrying...", "error");
+                startLiveCameraStream();
+                return;
+            }
+            try {
+                const c = document.createElement("canvas");
+                c.width = 8; c.height = 8;
+                const cx = c.getContext("2d");
+                cx.drawImage(videoEl, 0, 0, 8, 8);
+                const data = cx.getImageData(0, 0, 8, 8).data;
+                let total = 0;
+                for (let i = 0; i < data.length; i += 4) total += data[i] + data[i+1] + data[i+2];
+                if (total === 0) {
+                    console.error("[Camera] Watchdog: frame sampled as pure black despite non-zero video dimensions — likely a render/CSS/GPU compositing issue, not a stream issue.");
+                } else {
+                    console.log("[Camera] Watchdog: frame looks live. Sample brightness sum:", total);
+                }
+            } catch (e) {
+                console.warn("[Camera] Watchdog sample failed:", e);
+            }
+        }, 1500);
     }
 
     function stopLiveCameraStream() {
@@ -636,17 +679,33 @@
             }
         }
 
-        // Capture snapshot canvas frame
+        const rawW = videoEl.videoWidth || 640;
+        const rawH = videoEl.videoHeight || 480;
+
+        // Stage 1: Capture raw camera video frame to tempCanvas without ctx.filter (prevents Chromium HTMLVideoElement ctx.filter black bug)
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = rawW;
+        tempCanvas.height = rawH;
+        const tempCtx = tempCanvas.getContext("2d");
+        tempCtx.imageSmoothingEnabled = true;
+        tempCtx.imageSmoothingQuality = "high";
+
+        tempCtx.save();
+        if (currentCameraFacing === "user") {
+            tempCtx.translate(rawW, 0);
+            tempCtx.scale(-1, 1);
+        }
+        tempCtx.drawImage(videoEl, 0, 0, rawW, rawH);
+        tempCtx.restore();
+
+        // Stage 2: Draw tempCanvas onto target canvas with active filter CSS applied safely from canvas-to-canvas
         const canvas = document.createElement("canvas");
-        canvas.width = videoEl.videoWidth || 640;
-        canvas.height = videoEl.videoHeight || 480;
+        canvas.width = rawW;
+        canvas.height = rawH;
         const ctx = canvas.getContext("2d");
-        
-        // Enable high-quality image smoothing
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
-        
-        // Apply canvas context filter matching current selected filter
+
         const activeFilter = FILTERS.find(f => f.name === currentFilter);
         let filterCss = activeFilter ? activeFilter.css : "none";
         if (shouldFlash) {
@@ -656,16 +715,16 @@
                 filterCss += " brightness(1.2) contrast(1.05)";
             }
         }
-        ctx.filter = filterCss;
-
-        // Draw camera frame (mirrored if using front camera)
-        ctx.save();
-        if (currentCameraFacing === "user") {
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
+        
+        if (filterCss !== "none") {
+            try {
+                ctx.filter = filterCss;
+            } catch (e) {
+                console.warn("[Camera] Filter CSS application warning:", e);
+            }
         }
-        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
+        ctx.drawImage(tempCanvas, 0, 0, rawW, rawH);
+        ctx.filter = "none";
 
         if (shouldFlash) {
             await enableHardwareTorch(false);
