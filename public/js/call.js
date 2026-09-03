@@ -49,8 +49,16 @@ const CallManager = (() => {
   }
 
   document.addEventListener("visibilitychange", async () => {
-    if (document.visibilityState === "visible" && _callState === "connected") {
+    if (document.visibilityState === "visible" && (_callState === "connected" || _callState === "outgoing" || _callState === "answering")) {
       await _requestWakeLock();
+      const lv = $("local-video");
+      if (lv && !_camOff && lv.srcObject) {
+        lv.play().catch(() => {});
+      }
+      const rv = $("remote-video");
+      if (rv && rv.srcObject) {
+        rv.play().catch(() => {});
+      }
     }
   });
 
@@ -160,6 +168,51 @@ const CallManager = (() => {
     _dialCtx = null; _ringCtx = null;
   }
 
+  function bindVideoStream(videoEl, stream) {
+    if (!videoEl || !stream) return false;
+
+    videoEl.setAttribute("playsinline", "true");
+    videoEl.setAttribute("webkit-playsinline", "true");
+    videoEl.autoplay = true;
+
+    const vTracks = stream.getVideoTracks();
+    if (vTracks.length > 0) {
+      vTracks.forEach(t => { t.enabled = true; });
+    }
+
+    if (videoEl.srcObject !== stream || videoEl.readyState < 2) {
+      try {
+        videoEl.srcObject = null;
+      } catch (e) {}
+      videoEl.srcObject = stream;
+    }
+
+    videoEl.style.opacity = "1";
+
+    if (!videoEl._hasKeepAlive) {
+      videoEl._hasKeepAlive = true;
+      videoEl.onpause = () => {
+        if ((_callState === "connected" || _callState === "outgoing" || _callState === "answering") && videoEl.srcObject) {
+          const liveTrack = videoEl.srcObject.getVideoTracks().find(t => t.readyState === "live" && t.enabled);
+          if (liveTrack) {
+            videoEl.play().catch(() => {});
+          }
+        }
+      };
+    }
+
+    const p = videoEl.play();
+    if (p !== undefined) {
+      p.catch(err => {
+        console.warn("[MediaBinder] Play retry scheduled:", err.message);
+        setTimeout(() => {
+          if (videoEl.srcObject) videoEl.play().catch(() => {});
+        }, 150);
+      });
+    }
+    return true;
+  }
+
   // ─── CALL TIMER ──────────────────────────────────────────
   function _startTimer() {
     _seconds = 0; _callStartTime = Date.now();
@@ -170,6 +223,23 @@ const CallManager = (() => {
       const vs = $("video-call-status"), as = $("audio-call-status");
       if (vs) vs.textContent = label;
       if (as) as.textContent = label;
+
+      if (_mode === "video") {
+        const rv = $("remote-video");
+        if (rv && _remoteStream && _remoteStream.getVideoTracks().some(t => t.readyState === "live" && t.enabled)) {
+          if (rv.paused || rv.readyState < 2 || rv.srcObject !== _remoteStream) {
+            bindVideoStream(rv, _remoteStream);
+            rv.muted = false;
+          }
+        }
+        const lv = $("local-video");
+        if (lv && _localStream && !_camOff && _localStream.getVideoTracks().some(t => t.readyState === "live" && t.enabled)) {
+          if (lv.paused || lv.readyState < 2 || lv.srcObject !== _localStream) {
+            bindVideoStream(lv, _localStream);
+            lv.muted = true;
+          }
+        }
+      }
     }, 1000);
   }
   function _stopTimer() { clearInterval(_timerHandle); _timerHandle = null; }
@@ -200,41 +270,34 @@ const CallManager = (() => {
           video: false
         });
       } else {
-        const constraintsLadder = [
-          {
-            audio: audioConstraints,
-            video: {
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              frameRate: { ideal: 30 }
-            }
-          },
-          {
-            audio: audioConstraints,
-            video: {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              frameRate: { ideal: 30 }
-            }
-          },
-          {
-            audio: audioConstraints,
-            video: {
-              width: { ideal: 640 },
-              height: { ideal: 480 }
-            }
-          }
-        ];
-
         let loadedStream = null;
         let lastError = null;
-        for (const constraints of constraintsLadder) {
+
+        if (typeof window.getRobustCameraStream === "function") {
           try {
-            loadedStream = await navigator.mediaDevices.getUserMedia(constraints);
-            break;
+            loadedStream = await window.getRobustCameraStream({
+              audio: audioConstraints,
+              video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
+            }, 12000);
           } catch (err) {
-            console.warn("[WebRTC Call] Constraint ladder fallback:", err);
             lastError = err;
+          }
+        }
+
+        if (!loadedStream) {
+          const constraintsLadder = [
+            { audio: audioConstraints, video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
+            { audio: audioConstraints, video: { width: { ideal: 640 }, height: { ideal: 480 } } },
+            { audio: audioConstraints, video: true }
+          ];
+          for (const constraints of constraintsLadder) {
+            try {
+              loadedStream = await navigator.mediaDevices.getUserMedia(constraints);
+              break;
+            } catch (err) {
+              console.warn("[WebRTC Call] Constraint ladder fallback:", err);
+              lastError = err;
+            }
           }
         }
 
@@ -245,7 +308,6 @@ const CallManager = (() => {
               audio: audioConstraints,
               video: false
             });
-            // Switch current call state mode to audio
             _mode = "audio";
             showToast("Camera not found — starting voice call", "warning");
             $("video-call-screen").style.display = "none";
@@ -261,7 +323,10 @@ const CallManager = (() => {
       }
       if (_mode === "video" && video) {
         const lv = $("local-video");
-        if (lv) { lv.srcObject = _localStream; lv.style.opacity = "1"; lv.play().catch(() => {}); }
+        if (lv && _localStream) {
+          bindVideoStream(lv, _localStream);
+          lv.muted = true;
+        }
       }
       return true;
     } catch (err) {
@@ -272,10 +337,39 @@ const CallManager = (() => {
   }
 
   function _stopLocalStream() {
-    _localStream?.getTracks().forEach(t => t.stop());
-    _localStream = null;
+    if (_localStream) {
+      _localStream.getTracks().forEach(t => {
+        try {
+          t.enabled = false;
+          t.stop();
+        } catch (e) {}
+      });
+      _localStream = null;
+    }
+    if (_pc) {
+      try {
+        _pc.getSenders().forEach(sender => {
+          if (sender.track) {
+            try {
+              sender.track.enabled = false;
+              sender.track.stop();
+            } catch (e) {}
+          }
+        });
+      } catch (e) {}
+    }
     const lv = $("local-video");
-    if (lv) { lv.srcObject = null; lv.style.opacity = "0"; }
+    if (lv) {
+      try { lv.pause(); } catch(e) {}
+      lv.onpause = null;
+      lv.srcObject = null;
+      lv.style.opacity = "0";
+    }
+    const rv = $("remote-video");
+    if (rv) {
+      try { rv.pause(); } catch(e) {}
+      rv.srcObject = null;
+    }
   }
 
   // ─── PEER CONNECTION ──────────────────────────────────────
@@ -292,9 +386,22 @@ const CallManager = (() => {
       iceTransportPolicy: "all",
     });
 
-    // Add our tracks
+    // Add our tracks — wrap video in isolated MediaStream so #local-video & WebRTC sender have zero sink conflict!
     if (_localStream) {
-      _localStream.getTracks().forEach(t => _pc.addTrack(t, _localStream));
+      _localStream.getTracks().forEach(t => {
+        if (t.kind === "video") {
+          try {
+            const clonedTrack = t.clone();
+            clonedTrack.enabled = true;
+            const outboundStream = new MediaStream([clonedTrack]);
+            _pc.addTrack(clonedTrack, outboundStream);
+          } catch (e) {
+            _pc.addTrack(t, _localStream);
+          }
+        } else {
+          _pc.addTrack(t, _localStream);
+        }
+      });
     }
 
     // Send ICE to remote — filter mDNS .local (mobile can't resolve them)
@@ -350,30 +457,24 @@ const CallManager = (() => {
     };
 
     // ── Remote tracks ──────────────────────────────────────
-    // IMPORTANT: ontrack fires separately for audio and video tracks.
-    // We collect them into one MediaStream and ensure we call play()
-    // every time a track arrives so the media elements update rendering.
     _pc.ontrack = ({ track, streams }) => {
-      
-
-      const stream = streams?.[0] || _remoteStream || new MediaStream();
-      _remoteStream = stream;
-      if (stream.getTracks().indexOf(track) === -1) {
-        stream.addTrack(track);
+      if (!_remoteStream) {
+        _remoteStream = new MediaStream();
+      }
+      if (_remoteStream.getTracks().indexOf(track) === -1) {
+        _remoteStream.addTrack(track);
       }
 
-      if (_mode === "video") {
+      if (_mode === "video" || track.kind === "video") {
         const rv = $("remote-video");
         if (rv) {
-          if (rv.srcObject !== stream) {
-            rv.srcObject = stream;
-          }
-          // Always call play to force browser to render the newly added track (e.g. video after audio)
-          rv.play().catch(e => console.warn("[WebRTC] remote-video play failed:", e.message));
+          bindVideoStream(rv, _remoteStream);
+          rv.muted = false;
         }
-      } else {
+      }
+
+      if (track.kind === "audio") {
         _applyAudioRouting();
-        // Re-apply after 500ms stabilization delay to ensure mobile OS sets route to earpiece
         setTimeout(() => {
           if (_callState === "connected") {
             _applyAudioRouting();
@@ -896,37 +997,30 @@ const CallManager = (() => {
   async function _enableVideoTracks() {
     try {
       
-      const constraintsLadder = [
-        {
-          video: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 }
-          }
-        },
-        {
-          video: {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 }
-          }
-        },
-        {
-          video: {
-            width: { ideal: 640 },
-            height: { ideal: 480 }
-          }
-        }
-      ];
-
       let vs = null;
       let lastError = null;
-      for (const constraints of constraintsLadder) {
+      if (typeof window.getRobustCameraStream === "function") {
         try {
-          vs = await navigator.mediaDevices.getUserMedia(constraints);
-          break;
+          vs = await window.getRobustCameraStream({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
+          }, 12000);
         } catch (err) {
           lastError = err;
+        }
+      }
+      if (!vs) {
+        const constraintsLadder = [
+          { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
+          { video: { width: { ideal: 640 }, height: { ideal: 480 } } },
+          { video: true }
+        ];
+        for (const constraints of constraintsLadder) {
+          try {
+            vs = await navigator.mediaDevices.getUserMedia(constraints);
+            break;
+          } catch (err) {
+            lastError = err;
+          }
         }
       }
 
@@ -951,18 +1045,34 @@ const CallManager = (() => {
 
       const lv = $("local-video");
       if (lv) {
+        lv.setAttribute("playsinline", "true");
+        lv.setAttribute("webkit-playsinline", "true");
+        lv.muted = true;
+        lv.autoplay = true;
         lv.srcObject = _localStream;
         lv.style.opacity = "1";
-        lv.play().catch(() => {});
+        try {
+          await lv.play();
+        } catch (e) {}
       }
 
       if (_pc) {
         const senders = _pc.getSenders();
         const videoSender = senders.find(s => s.track?.kind === "video");
-        if (videoSender) {
-          await videoSender.replaceTrack(vt);
-        } else {
-          _pc.addTrack(vt, _localStream);
+        try {
+          const clonedVt = vt.clone();
+          clonedVt.enabled = true;
+          if (videoSender) {
+            await videoSender.replaceTrack(clonedVt);
+          } else {
+            _pc.addTrack(clonedVt, _localStream);
+          }
+        } catch (e) {
+          if (videoSender) {
+            await videoSender.replaceTrack(vt);
+          } else {
+            _pc.addTrack(vt, _localStream);
+          }
         }
       }
       return true;
@@ -1436,7 +1546,11 @@ const CallManager = (() => {
     window.addEventListener("pagehide", () => close(true));
   }
 
-  return { open, close, accept, reject, rejoin, wireSocket, initButtons, minimize, restore, getCallState };
+  function getLocalStream() {
+    return _localStream;
+  }
+
+  return { open, close, accept, reject, rejoin, wireSocket, initButtons, minimize, restore, getCallState, getLocalStream };
 
 })();
 

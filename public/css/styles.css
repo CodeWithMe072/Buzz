@@ -3637,11 +3637,16 @@ body {
 }
 
 /* ── People item ───────────────────────────────────────────── */
-#people-search-results,
-#people-tab-content {
+#people-search-results {
     overflow-y: auto;
     flex: 1;
     padding: 14px 0;
+}
+
+#people-tab-content {
+    overflow-y: auto;
+    flex: 1;
+    padding: 14px;
 }
 
 .people-item {

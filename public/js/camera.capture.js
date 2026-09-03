@@ -333,6 +333,27 @@
         }
 
         stream = loadedStream;
+        window.__cameraOverlayStream = stream;
+        videoEl.setAttribute("playsinline", "true");
+        videoEl.setAttribute("webkit-playsinline", "true");
+        videoEl.muted = true;
+        videoEl.autoplay = true;
+
+        const vTrack = stream.getVideoTracks()[0];
+        if (vTrack) {
+            vTrack.enabled = true;
+            if (vTrack.muted) {
+                await new Promise(resolve => {
+                    const onUnmute = () => {
+                        vTrack.removeEventListener("unmute", onUnmute);
+                        resolve();
+                    };
+                    vTrack.addEventListener("unmute", onUnmute);
+                    setTimeout(resolve, 800);
+                });
+            }
+        }
+
         videoEl.srcObject = stream;
         videoEl.style.display = "block";
         if (currentCameraFacing === "user") {
@@ -366,6 +387,7 @@
             } catch (err) {}
             stream.getTracks().forEach(track => track.stop());
             stream = null;
+            window.__cameraOverlayStream = null;
         }
         stopRecordingTimer();
     }
