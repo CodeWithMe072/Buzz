@@ -2746,6 +2746,11 @@ async function getRobustCameraStream(preferredConstraints = {}, timeoutMs = 1200
   });
 
   ladder.push({
+    video: true,
+    ...(withAudio ? { audio: true } : {})
+  });
+
+  ladder.push({
     video: true
   });
 
@@ -2770,15 +2775,27 @@ async function getRobustCameraStream(preferredConstraints = {}, timeoutMs = 1200
         const vTrack = stream.getVideoTracks()[0];
         if (vTrack) {
           vTrack.enabled = true;
+          try {
+            const settings = vTrack.getSettings ? vTrack.getSettings() : {};
+            console.log("[CameraHelper] Camera stream obtained. Settings:", settings, "Constraints:", constraints);
+          } catch (e) {}
+
           if (vTrack.muted) {
+            console.warn("[CameraHelper] Track muted initially, waiting for unmute...");
             await new Promise(res => {
               const onUnmute = () => {
                 vTrack.removeEventListener("unmute", onUnmute);
                 res();
               };
               vTrack.addEventListener("unmute", onUnmute);
-              setTimeout(res, 800);
+              setTimeout(res, 600);
             });
+          }
+
+          if (vTrack.muted) {
+            console.warn("[CameraHelper] Track remained muted (black stream). Discarding tier and trying next fallback...", constraints);
+            stream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} });
+            continue;
           }
         }
         return stream;
