@@ -330,84 +330,96 @@ window.addEventListener("online", () => {
   processApiRetryQueue();
 });
 
-// ─── Base request helper ─────────────────────────────────────
+/// ─── Base request helper with in-flight GET deduplication ───
+const inflightGetRequests = new Map();
+
 async function apiRequest(method, url, body = null, resType = "json", retry = true, isRetryCall = false) {
-  const token = TokenStore.getToken();
+  const isGet = (method || "").toUpperCase() === "GET";
+  const requestKey = isGet ? `${url}` : null;
 
-  const headers = {
-    "Content-Type": "application/json"
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  if (isGet && inflightGetRequests.has(requestKey)) {
+    return inflightGetRequests.get(requestKey);
   }
 
-  const opts = {
-    method, headers, credentials: "include"
-  };
+  const promise = (async () => {
+    const token = TokenStore.getToken();
 
-  if (body) {
-    opts.body = JSON.stringify(body);
-  }
+    const headers = {
+      "Content-Type": "application/json"
+    };
 
-  let res;
-  try {
-    res = await fetch(url, opts);
-  } catch (netErr) {
-    console.warn(`[apiRequest] Network failure on ${method} ${url}:`, netErr);
-    if (!isRetryCall && (method === "POST" || method === "PUT" || method === "DELETE")) {
-      enqueueFailedApiRequest(method, url, body);
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
-    throw netErr;
-  }
 
-  const contentType = res.headers.get("content-type") || "";
+    const opts = {
+      method, headers, credentials: "include"
+    };
 
-  let data;
+    if (body) {
+      opts.body = JSON.stringify(body);
+    }
 
-  if (contentType.includes("application/json")) {
-    data = await res.json();
-  } else {
-    data = await res.text();
-  }
+    let res;
+    try {
+      res = await fetch(url, opts);
+    } catch (netErr) {
+      console.warn(`[apiRequest] Network failure on ${method} ${url}:`, netErr);
+      if (!isRetryCall && (method === "POST" || method === "PUT" || method === "DELETE")) {
+        enqueueFailedApiRequest(method, url, body);
+      }
+      throw netErr;
+    }
 
-  const maintHeader = res.headers.get("X-Maintenance-Mode");
-  if (maintHeader === "true" || (typeof data === "object" && data?.maintenance === true)) {
-    window.isMaintenanceModeActive = true;
-    if (res.status === 503 && typeof data === "object" && data?.code === "MAINTENANCE_MODE") {
-      if (typeof window.showMaintenanceActionModal === "function") {
-        window.showMaintenanceActionModal(data.message || "This Action");
-      } else if (typeof showToast === "function") {
-        showToast(data.message || "Action paused due to system maintenance.", "warning");
+    const contentType = res.headers.get("content-type") || "";
+
+    let data;
+
+    if (contentType.includes("application/json")) {
+      data = await res.json();
+    } else {
+      data = await res.text();
+    }
+
+    const maintHeader = res.headers.get("X-Maintenance-Mode");
+    if (maintHeader === "true" || (typeof data === "object" && data?.maintenance === true)) {
+      window.isMaintenanceModeActive = true;
+      if (res.status === 503 && typeof data === "object" && data?.code === "MAINTENANCE_MODE") {
+        if (typeof window.showMaintenanceActionModal === "function") {
+          window.showMaintenanceActionModal(data.message || "This Action");
+        } else if (typeof showToast === "function") {
+          showToast(data.message || "Action paused due to system maintenance.", "warning");
+        }
+      }
+    } else if (maintHeader === "false" || (typeof data === "object" && data?.maintenance === false)) {
+      window.isMaintenanceModeActive = false;
+    }
+
+    // Access token expired
+    if (retry && res.status === 401 && typeof data === "object" && data?.code === "TOKEN_EXPIRED") {
+      try {
+        await refreshAccessToken();
+        return apiRequest(method, url, body, resType, false, isRetryCall);
+      } catch (err) {
+        console.error("Token refresh failed:", err);
+        TokenStore.clear();
+        localStorage.removeItem("SSC_USER");
+        window.location.reload();
+        return null;
       }
     }
-  } else if (maintHeader === "false" || (typeof data === "object" && data?.maintenance === false)) {
-    window.isMaintenanceModeActive = false;
+
+    return { data, status: res.status, ok: res.ok, contentType };
+  })();
+
+  if (isGet && requestKey) {
+    inflightGetRequests.set(requestKey, promise);
+    promise.finally(() => {
+      inflightGetRequests.delete(requestKey);
+    });
   }
 
-  // Access token expired
-  if (retry && res.status === 401 && typeof data === "object" && data?.code === "TOKEN_EXPIRED") {
-    try {
-      await refreshAccessToken();
-      return apiRequest(method, url, body, resType, false, isRetryCall);
-    } catch (err) {
-      console.error("Token refresh failed:", err);
-      TokenStore.clear();
-      localStorage.removeItem("SSC_USER");
-      window.location.reload();
-      return null;
-    }
-  }
-
-  // Invalid token
-  if (res.status === 401 && typeof data === "object" && data?.code === "TOKEN_INVALID") {
-    TokenStore.clear();
-    localStorage.removeItem("SSC_USER");
-    window.location.reload();
-    return null;
-  }
-
-  return { data, status: res.status, ok: res.ok, contentType };
+  return promise;
 }
 
 // ─── Auth ────────────────────────────────────────────────────

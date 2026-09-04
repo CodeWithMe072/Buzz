@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { User } from "../models/user.model.js";
+import { redis } from "../lib/redis.js";
 
 /* ═══════════════════════════════════════════════════════════════
    HTTP MIDDLEWARE — protects REST API routes
@@ -9,7 +10,7 @@ import { User } from "../models/user.model.js";
    Reads token from:
      1. Authorization: Bearer <token>   (API clients, Postman)
      2. Cookie: token=<token>           (browser, set via httpOnly cookie)
-═══════════════════════════════════════════════════════════════ */
+ ═══════════════════════════════════════════════════════════════ */
 export const protect = async (req, res, next) => {
   try {
     let token = null;
@@ -48,8 +49,24 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    // Fetch user (confirm still exists and is active)
-    const user = await User.findById(decoded.id).select("_id username email avatar isActive");
+    // Check Redis user cache first to avoid repeating MongoDB roundtrips
+    const cacheKey = `cache:user:protect:${decoded.id}`;
+    let user = null;
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        user = JSON.parse(cached);
+      }
+    } catch (e) {}
+
+    if (!user) {
+      user = await User.findById(decoded.id).select("_id username email avatar isActive").lean();
+      if (user) {
+        try {
+          await redis.setex(cacheKey, 120, JSON.stringify(user));
+        } catch (e) {}
+      }
+    }
 
     if (!user) {
       return res.status(401).json({
@@ -81,8 +98,8 @@ export const readUserFromCookie = async (req, res, next) => {
   try {
     const token = req.cookies?.refreshToken;
     if (!token) {
-      req.user = null
-      return next()
+      req.user = null;
+      return next();
     }
 
     const decoded = jwt.verify(
@@ -90,10 +107,26 @@ export const readUserFromCookie = async (req, res, next) => {
       process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET
     );
 
-    const user = await User.findById(decoded.id)
-      .select("_id username email avatar isActive showDashboard passwordLockEnabled");
-    req.user = user || null;
+    const cacheKey = `cache:user:cookie:${decoded.id}`;
+    let user = null;
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        user = JSON.parse(cached);
+      }
+    } catch (e) {}
 
+    if (!user) {
+      user = await User.findById(decoded.id)
+        .select("_id username email avatar isActive showDashboard passwordLockEnabled").lean();
+      if (user) {
+        try {
+          await redis.setex(cacheKey, 120, JSON.stringify(user));
+        } catch (e) {}
+      }
+    }
+
+    req.user = user || null;
     next();
   } catch (err) {
     req.user = null;
