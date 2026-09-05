@@ -533,7 +533,7 @@ body {
     font-weight: var(--font-weight-bold);
     font-size: 16px;
     flex-shrink: 0;
-    overflow: hidden;
+    /* overflow: hidden; */
     box-shadow: 0px 0px 16px #6e6b6b;
 }
 
@@ -8842,14 +8842,14 @@ input:checked+.slider:before {
     font-weight: 700;
 }
 
-/* ── Status Sidebar ── */
+/* ── Status Sidebar (Story Card Grid Layout) ── */
 .status-sidebar {
     width: 350px;
     height: 100%;
     display: none;
     flex-direction: column;
-    background: var(--primary-bg);
-    border-right: 1px solid var(--border-color);
+    background: #18191c !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
     flex-shrink: 0;
     box-sizing: border-box;
 }
@@ -8862,53 +8862,53 @@ input:checked+.slider:before {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: var(--spacing-md);
-    border-bottom: 1px solid var(--border-color);
+    padding: 18px 18px 14px 18px;
 }
 
 .status-sidebar-header h2 {
     margin: 0;
-    font-size: 20px;
+    font-size: 24px;
     font-weight: 700;
-    letter-spacing: 0.5px;
-    color: var(--text-primary);
+    letter-spacing: -0.4px;
+    color: #ffffff;
 }
 
 .my-status-section {
-    padding: var(--spacing-md);
-    border-bottom: 1px solid var(--border-color);
+    padding: 8px 16px 16px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .my-status-card {
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
+    gap: 14px;
     cursor: pointer;
     padding: 8px;
-    border-radius: var(--radius-md);
-    transition: background var(--transition-fast);
+    border-radius: 12px;
+    transition: background 0.15s ease;
 }
 
 .my-status-card:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(255, 255, 255, 0.04);
 }
 
 .status-add-badge {
     position: absolute;
-    bottom: -2px;
-    right: -2px;
-    background: var(--accent-blue, #0095f6);
-    width: 18px;
-    height: 18px;
+    bottom: 0px;
+    right: 0px;
+    background: #3b82f6; /* Blue badge per reference mockup */
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 12px;
-    font-weight: 900;
-    border: 1.5px solid var(--primary-bg);
-    color: white;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    font-size: 13px;
+    font-weight: 700;
+    border: 2px solid #18191c;
+    color: #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    z-index: 5;
 }
 
 @keyframes status-sending-spin {
@@ -8916,51 +8916,128 @@ input:checked+.slider:before {
     to   { transform: rotate(360deg); }
 }
 
-
 .my-status-info {
     flex: 1;
+    min-width: 0;
 }
 
 .my-status-name {
-    font-weight: 600;
-    font-size: 14px;
-    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 16px;
+    color: #ffffff;
 }
 
 .my-status-subtext {
-    font-size: 12px;
-    color: var(--text-light);
+    font-size: 13px;
+    color: #949ba4;
     margin-top: 2px;
 }
 
 .recent-updates-title {
-    padding: 16px var(--spacing-md) 8px var(--spacing-md);
+    grid-column: 1 / -1;
+    padding: 16px 16px 8px 16px;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--text-light);
+    letter-spacing: 0.04em;
+    color: #949ba4;
 }
 
 #status-sidebar-list {
     flex: 1;
     overflow-y: auto;
-    padding: 0 var(--spacing-md) var(--spacing-md) var(--spacing-md);
+    padding: 12px 16px 24px 16px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    align-content: start;
 }
 
-.status-item {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
-    padding: 10px 8px;
-    border-radius: var(--radius-md);
+/* ── Story Cards Grid ── */
+.status-card {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    border-radius: 16px;
+    overflow: hidden;
     cursor: pointer;
-    transition: background var(--transition-fast);
-    margin-bottom: 4px;
+    transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+    background: #2b2d31;
+    box-sizing: border-box;
 }
 
-.status-item:hover {
-    background: rgba(255, 255, 255, 0.03);
+.status-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.status-card.unviewed {
+    opacity: 1;
+}
+
+.status-card.viewed {
+    opacity: 0.55;
+}
+
+.status-card.viewed:hover {
+    opacity: 0.85;
+}
+
+.status-card-media {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.status-card-gradient-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.3) 50%, rgba(0, 0, 0, 0) 100%);
+    z-index: 2;
+    pointer-events: none;
+}
+
+.status-card-dot {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    width: 10px;
+    height: 10px;
+    background: #3b82f6; /* Blue dot per reference image */
+    border-radius: 50%;
+    z-index: 4;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.8);
+}
+
+.status-card-info {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    pointer-events: none;
+}
+
+.status-card-name {
+    font-weight: 700;
+    font-size: 15px;
+    color: #ffffff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.status-card-time {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.75);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 /* ── Mobile Adaptations ── */

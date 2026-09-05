@@ -417,7 +417,6 @@
         }
 
         // Bind left/right navigation and close clicks inside Status Viewer
-        const screenBackBtn = document.getElementById("status-viewer-screen-back");
         const screenCloseBtn = document.getElementById("status-viewer-screen-close");
         const arrowLeftBtn = document.getElementById("status-viewer-arrow-left");
         const arrowRightBtn = document.getElementById("status-viewer-arrow-right");
@@ -425,7 +424,6 @@
         const navRight = document.getElementById("status-viewer-nav-right");
         const viewerOverlay = document.getElementById("status-viewer-overlay");
 
-        if (screenBackBtn) screenBackBtn.onclick = closeStatusViewer;
         if (screenCloseBtn) screenCloseBtn.onclick = closeStatusViewer;
         if (arrowLeftBtn) {
             arrowLeftBtn.onclick = (e) => {
@@ -456,10 +454,6 @@
                 if (e.target === viewerOverlay) closeStatusViewer();
             };
         }
-
-        // Play/Pause button
-        const playPauseBtn = document.getElementById("status-viewer-play-pause-btn");
-        if (playPauseBtn) playPauseBtn.onclick = togglePlayPause;
 
         // Mute button
         const muteBtn = document.getElementById("status-viewer-mute-btn");
@@ -701,6 +695,13 @@
         if (captionBar) {
             captionBar.style.display = "none";
             captionBar.textContent = "";
+        }
+
+        // Conditional Volume/Mute Icon: render only for video/audio statuses or statuses with background music
+        const muteBtn = document.getElementById("status-viewer-mute-btn");
+        if (muteBtn) {
+            const hasAudio = (resolvedType === "video" || resolvedType === "audio" || !!(moment.songRef && (moment.songRef.audioUrl || moment.songRef.youtubeVideoId || moment.songRef.title)));
+            muteBtn.style.display = hasAudio ? "flex" : "none";
         }
 
         // Set header details
@@ -1265,8 +1266,23 @@
         } else if (resolvedType === "text") {
             if (textCanvas) {
                 textCanvas.style.display = "flex";
-                textCanvas.textContent = moment.textContent;
+                const textStr = moment.textContent || moment.caption || "";
+                textCanvas.textContent = textStr;
                 textCanvas.style.background = moment.backgroundColor || "#3f51b5";
+
+                if (moment.font) {
+                    textCanvas.style.fontFamily = moment.font;
+                } else {
+                    textCanvas.style.fontFamily = "'Outfit', 'Inter', sans-serif";
+                }
+
+                if (textStr.length > 80) {
+                    textCanvas.style.fontSize = "20px";
+                } else if (textStr.length > 40) {
+                    textCanvas.style.fontSize = "24px";
+                } else {
+                    textCanvas.style.fontSize = "28px";
+                }
             }
             currentSegmentDurationMs = 5000;
             startSegmentProgressAnimation(currentSegmentDurationMs);

@@ -40,13 +40,30 @@ function updateGlobalUserAvatarUI() {
     }
   }
 
-  // 2. Navigation bar avatar button
+  // 2. Navigation bar avatar button & profile button
   const navAvatarBtn = document.getElementById("nav-avatar-btn");
-  if (navAvatarBtn) {
-    if (user.avatar) {
+  const navProfileImg = document.getElementById("nav-profile-img");
+  const navProfileFallback = document.getElementById("nav-profile-fallback");
+  if (user.avatar && user.avatar.length > 2) {
+    if (navProfileImg) {
+      navProfileImg.src = user.avatar;
+      navProfileImg.style.display = "block";
+    }
+    if (navProfileFallback) {
+      navProfileFallback.style.display = "none";
+    }
+    if (navAvatarBtn) {
       navAvatarBtn.innerHTML = `<img src="${user.avatar}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;" />${personIconFallbackSpan}`;
       navAvatarBtn.style.background = "";
-    } else {
+    }
+  } else {
+    if (navProfileImg) {
+      navProfileImg.style.display = "none";
+    }
+    if (navProfileFallback) {
+      navProfileFallback.style.display = "flex";
+    }
+    if (navAvatarBtn) {
       navAvatarBtn.innerHTML = personIcon;
       navAvatarBtn.style.background = "#5865f2";
     }

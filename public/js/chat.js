@@ -3415,11 +3415,13 @@ document.addEventListener("click", (e) => {
 window.updateNavIndicator = () => {
   const chatBtn = document.getElementById("nav-chat-btn");
   const statusBtn = document.getElementById("nav-status-btn");
+  const profileBtn = document.getElementById("nav-profile-btn") || document.getElementById("nav-avatar-btn");
   const indicator = document.getElementById("nav-active-indicator");
-  if (!chatBtn || !statusBtn || !indicator) return;
+  if (!indicator) return;
 
-  const activeBtn = chatBtn.classList.contains("active") ? chatBtn
-    : statusBtn.classList.contains("active") ? statusBtn
+  const activeBtn = (chatBtn && chatBtn.classList.contains("active")) ? chatBtn
+    : (statusBtn && statusBtn.classList.contains("active")) ? statusBtn
+    : (profileBtn && profileBtn.classList.contains("active")) ? profileBtn
     : null;
 
   if (activeBtn) {
@@ -3439,6 +3441,7 @@ window.updateNavIndicator = () => {
 function initAppNavigation() {
   const chatBtn = document.getElementById("nav-chat-btn");
   const statusBtn = document.getElementById("nav-status-btn");
+  const profileBtn = document.getElementById("nav-profile-btn");
   const avatarBtn = document.getElementById("nav-avatar-btn");
   const avatarText = document.getElementById("nav-avatar-text");
 
@@ -3452,6 +3455,16 @@ function initAppNavigation() {
     window.updateGlobalUserAvatarUI();
   }
   
+  if (profileBtn) {
+    const isStatusActive = statusBtn.classList.contains("active");
+    const isProfileActive = document.body.classList.contains("profile-page-active") || profileBtn.classList.contains("active");
+    if (isStatusActive || isProfileActive) {
+      profileBtn.style.setProperty("display", "flex", "important");
+    } else {
+      profileBtn.style.setProperty("display", "none", "important");
+    }
+  }
+
   if (window.updateNavIndicator) {
     window.updateNavIndicator();
   }
@@ -3462,6 +3475,10 @@ function initAppNavigation() {
     document.body.classList.remove("mobile-profile-value-active");
     chatBtn.classList.add("active");
     statusBtn.classList.remove("active");
+    if (profileBtn) {
+      profileBtn.classList.remove("active");
+      profileBtn.style.setProperty("display", "none", "important");
+    }
     if (avatarBtn) avatarBtn.classList.remove("active");
     if (window.updateNavIndicator) window.updateNavIndicator();
 
@@ -3504,13 +3521,17 @@ function initAppNavigation() {
     document.body.classList.remove("mobile-profile-value-active");
     statusBtn.classList.add("active");
     chatBtn.classList.remove("active");
+    if (profileBtn) {
+      profileBtn.classList.remove("active");
+      profileBtn.style.setProperty("display", "flex", "important");
+    }
     if (avatarBtn) avatarBtn.classList.remove("active");
     if (window.updateNavIndicator) window.updateNavIndicator();
 
     const profileSidebar = document.getElementById("profile-page-sidebar");
     if (chatSidebar) {
       chatSidebar.style.display = "none";
-      chatSidebar.classList.add("hidden");
+      chatSidebar.classList.remove("hidden");
     }
     if (statusSidebar) {
       statusSidebar.style.display = "flex";
@@ -3547,15 +3568,24 @@ function initAppNavigation() {
     }
   };
 
-  if (avatarBtn) {
-    avatarBtn.onclick = () => {
-      const username = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
-      if (window.Router) window.Router.navigate("/@" + username, { silent: true });
-      if (typeof openProfileModal === "function") {
-        openProfileModal(null, true);
-      }
-    };
-  }
+  const handleProfileClick = () => {
+    const username = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
+    if (window.Router) window.Router.navigate("/@" + username, { silent: true });
+    if (profileBtn) {
+      profileBtn.classList.add("active");
+      profileBtn.style.setProperty("display", "flex", "important");
+    }
+    if (avatarBtn) avatarBtn.classList.add("active");
+    chatBtn.classList.remove("active");
+    statusBtn.classList.remove("active");
+    if (window.updateNavIndicator) window.updateNavIndicator();
+    if (typeof openProfileModal === "function") {
+      openProfileModal(null, true);
+    }
+  };
+
+  if (profileBtn) profileBtn.onclick = handleProfileClick;
+  if (avatarBtn) avatarBtn.onclick = handleProfileClick;
 
   // Bind status header plus / composer button
   const statusComposerBtn = document.getElementById("status-composer-trigger-btn");
@@ -3815,56 +3845,57 @@ function renderStatusSidebar() {
     window.allStatusGroups = [...recentGroups, ...viewedGroups];
 
     function createStatusItemElement(group, isUnseen) {
-      const friend = group.user;
+      const friend = group.user || {};
       const momentsList = group.moments || [];
+      if (momentsList.length === 0) return document.createElement("div");
 
-      const itemEl = document.createElement("div");
-      itemEl.className = "status-item";
+      const cardEl = document.createElement("div");
+      cardEl.className = `status-card ${isUnseen ? "unviewed" : "viewed"}`;
 
-      const letter = friend.username.charAt(0).toUpperCase();
       const latestMoment = momentsList[momentsList.length - 1];
       const relativeTime = typeof formatRelativeTime === "function"
         ? formatRelativeTime(new Date(latestMoment.createdAt))
-        : new Date(latestMoment.createdAt).toLocaleTimeString();
+        : new Date(latestMoment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // Determine status thumbnail preview
-      let thumbnailInner = "";
-      if (latestMoment.type === "image" || latestMoment.type === "photo") {
-        thumbnailInner = `<img src="${latestMoment.url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" />`;
-      } else if (latestMoment.type === "video") {
-        thumbnailInner = `<video src="${latestMoment.url}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; pointer-events: none;" muted playsinline></video>`;
-      } else if (latestMoment.type === "text") {
-        thumbnailInner = `<div style="width: 100%; height: 100%; border-radius: 50%; background: ${latestMoment.backgroundColor || '#3f51b5'}; display: flex; align-items: center; justify-content: center; font-size: 8px; color: white; padding: 4px; box-sizing: border-box; text-align: center; overflow: hidden; font-weight: 700; line-height: 1.1;">${latestMoment.textContent}</div>`;
+      // Determine status thumbnail preview / card media
+      let mediaContent = "";
+      if (latestMoment.type === "image" || latestMoment.type === "photo" || latestMoment.mediaType === "image" || latestMoment.mediaType === "photo") {
+        mediaContent = `<img class="status-card-media" src="${latestMoment.url || latestMoment.mediaUrl}" alt="Status" />`;
+      } else if (latestMoment.type === "video" || latestMoment.mediaType === "video") {
+        mediaContent = `<video class="status-card-media" src="${latestMoment.url || latestMoment.mediaUrl}" muted playsinline></video>`;
+      } else if (latestMoment.type === "text" || latestMoment.mediaType === "text") {
+        const bg = latestMoment.backgroundColor || "linear-gradient(135deg, #1e3c72, #2a5298)";
+        mediaContent = `<div class="status-card-media" style="background: ${bg}; display: flex; align-items: center; justify-content: center; padding: 12px; font-size: 11px; font-weight: 700; color: #ffffff; text-align: center; line-height: 1.3;">${latestMoment.textContent || ""}</div>`;
+      } else {
+        mediaContent = `<div class="status-card-media" style="background: linear-gradient(135deg, #2c3e50, #3498db);"></div>`;
       }
 
-      itemEl.innerHTML = `
-        <div class="status-avatar-ring" style="width: 48px; height: 48px; position: relative;">
-          ${getStatusRingHtml(momentsList, 48, false)}
-          <div class="avatar-inner" style="position: absolute; top: 4px; left: 4px; width: 40px; height: 40px; border: 2px solid var(--primary-bg, #000); border-radius: 50%; box-sizing: border-box; z-index: 2; overflow: hidden;">
-            ${thumbnailInner}
-          </div>
-          ${friend.online ? `<span style="position: absolute; bottom: 2px; right: 2px; width: 10px; height: 10px; background: var(--status-online, #44d362); border-radius: 50%; border: 1.5px solid var(--primary-bg); z-index: 3;"></span>` : ""}
-        </div>
-        <div style="flex: 1; min-width: 0; margin-left: 8px;">
-          <div style="font-weight: ${isUnseen ? "700" : "600"}; font-size: 14px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${sanitizeInput(friend.username)}</div>
-          <div style="font-size: 12px; color: var(--text-light); margin-top: 2px;">Today at ${relativeTime}</div>
+      const dotHtml = isUnseen ? `<div class="status-card-dot" title="Unviewed update"></div>` : "";
+
+      cardEl.innerHTML = `
+        ${dotHtml}
+        ${mediaContent}
+        <div class="status-card-gradient-overlay"></div>
+        <div class="status-card-info">
+          <div class="status-card-name">${sanitizeInput(friend.username || "User")}</div>
+          <div class="status-card-time">${relativeTime}</div>
         </div>
       `;
 
-      itemEl.onclick = () => {
+      cardEl.onclick = () => {
         if (typeof window.openStatusViewer === "function") {
           window.openStatusViewer(group);
         }
       };
 
-      return itemEl;
+      return cardEl;
     }
 
     // 1. Render Recent Updates
     if (recentGroups.length > 0) {
       const titleDiv = document.createElement("div");
       titleDiv.className = "recent-updates-title";
-      titleDiv.textContent = "Recent updates";
+      titleDiv.textContent = "RECENT UPDATES";
       listEl.appendChild(titleDiv);
 
       recentGroups.forEach((group) => {
@@ -3876,8 +3907,8 @@ function renderStatusSidebar() {
     if (viewedGroups.length > 0) {
       const titleDiv = document.createElement("div");
       titleDiv.className = "recent-updates-title";
-      titleDiv.setAttribute("style", "border-top: 1px solid rgba(255,255,255,0.05); margin-top: 12px; padding-top: 16px;");
-      titleDiv.textContent = "Viewed updates";
+      titleDiv.setAttribute("style", "border-top: 1px solid rgba(255,255,255,0.08); margin-top: 12px; padding-top: 16px;");
+      titleDiv.textContent = "VIEWED UPDATES";
       listEl.appendChild(titleDiv);
 
       viewedGroups.forEach((group) => {

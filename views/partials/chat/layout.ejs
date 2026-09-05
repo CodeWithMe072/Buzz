@@ -18,6 +18,15 @@
                     </svg>
                     <span class="nav-dot" id="nav-status-dot" style="display: none;"></span>
                 </button>
+                <button type="button" class="nav-item" id="nav-profile-btn" title="Profile & Settings" style="display: none !important;">
+                    <img id="nav-profile-img" src="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" style="width: 26px; height: 26px; object-fit: cover; border-radius: 50%; display: none;" />
+                    <span id="nav-profile-fallback" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                    </span>
+                </button>
             </div>
             <div class="nav-bottom">
                 <button type="button" id="nav-avatar-btn" title="Profile & Settings">
@@ -121,7 +130,7 @@
             </div>
         </aside>
 
-        <!-- Status Sidebar (NEW!) -->
+        <!-- Status Sidebar (Story Card Grid Layout) -->
         <aside class="status-sidebar hidden" id="status-sidebar">
             <div class="status-sidebar-header">
                 <h2>Status</h2>
@@ -148,18 +157,18 @@
             
             <div class="my-status-section">
                 <div class="my-status-card" id="my-status-item">
-                    <div class="avatar-container" style="position: relative; width: 48px; height: 48px; border-radius: 50%; background: var(--elevated-bg); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; flex-shrink: 0;">
+                    <div class="avatar-container" style="position: relative; width: 48px; height: 48px; border-radius: 50%; background: #2b2d31; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px; flex-shrink: 0;">
                         <span id="my-status-avatar-text">ME</span>
                         <span class="status-add-badge">+</span>
                     </div>
                     <div class="my-status-info">
-                        <div class="my-status-name">My Status</div>
-                        <div class="my-status-subtext">Click to add status update</div>
+                        <div class="my-status-name">My status</div>
+                        <div class="my-status-subtext">Tap to add status update</div>
                     </div>
                 </div>
             </div>
 
-            <div class="recent-updates-title" id="status-recent-title" style="display: none;">Recent Updates</div>
+            <div class="recent-updates-title" id="status-recent-title" style="display: none;">RECENT UPDATES</div>
             <div id="status-sidebar-list">
                 <!-- Status items populated dynamically -->
             </div>

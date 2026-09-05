@@ -447,13 +447,6 @@
         <!-- Blurred Backdrop Background -->
         <div id="status-viewer-blurred-bg" style="position: absolute; inset: 0; z-index: 3101; background-size: cover; background-position: center; filter: blur(50px) brightness(0.35); transform: scale(1.15); transition: background-image 0.3s ease;"></div>
 
-        <!-- Far Left Screen Back Button -->
-        <button type="button" id="status-viewer-screen-back" style="position: absolute; top: 24px; left: 24px; z-index: 3125; background: transparent; border: none; color: white; cursor: pointer; font-size: 22px; display: flex; align-items: center; justify-content: center; opacity: 0.85; transition: opacity 0.2s;">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-        </button>
 
         <!-- Far Right Screen Close Button -->
         <button type="button" id="status-viewer-screen-close" style="position: absolute; top: 24px; right: 24px; z-index: 3125; background: transparent; border: none; color: white; cursor: pointer; font-size: 26px; display: flex; align-items: center; justify-content: center; opacity: 0.85; transition: opacity 0.2s; line-height: 1;">&times;</button>
@@ -471,7 +464,7 @@
         </button>
 
         <!-- Centered Vertical Viewport Frame -->
-        <div id="status-viewer-viewport-wrapper" style="position: relative; width: 100%; max-width: 450px; height: calc(100% - 150px); max-height: 800px; display: flex; flex-direction: column; z-index: 3105; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.05); margin-bottom: 70px;">
+        <div id="status-viewer-viewport-wrapper" style="position: relative; width: 100%; max-width: 440px; height: 94vh; max-height: 920px; display: flex; flex-direction: column; z-index: 3105; background: #1c1d22; border-radius: 24px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.08); margin: 0 auto;">
             
             <!-- Segments progress bars at top -->
             <div id="status-viewer-progress-container" style="position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 4px; z-index: 3120;">
@@ -509,17 +502,6 @@
                 <div style="display: flex; align-items: center; gap: 12px; text-shadow: 0 1px 4px rgba(0,0,0,0.6);">
                     <!-- Remaining Seconds Countdown -->
                     <span id="status-viewer-remaining-time" style="font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.9); font-family: 'Outfit', 'Inter', sans-serif; min-width: 22px; text-align: right; user-select: none;"></span>
-                    <button type="button" id="status-viewer-play-pause-btn" style="background: transparent; border: none; color: white; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;">
-                        <!-- SVG Pause -->
-                        <svg id="status-pause-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0">
-                            <rect x="6" y="4" width="4" height="16" rx="1"></rect>
-                            <rect x="14" y="4" width="4" height="16" rx="1"></rect>
-                        </svg>
-                        <!-- SVG Play (Hidden by default) -->
-                        <svg id="status-play-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0" style="display: none;">
-                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                        </svg>
-                    </button>
                     <button type="button" id="status-viewer-mute-btn" style="background: transparent; border: none; color: white; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;">
                         <!-- SVG Speaker High (Unmuted) -->
                         <svg id="status-unmute-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -626,7 +608,7 @@
                 <!-- Video Viewport -->
                 <video id="status-viewer-video" style="display: none; width: 100%; height: 100%; object-fit: contain;" playsinline></video>
                 <!-- Text Viewport -->
-                <div id="status-viewer-text-canvas" style="display: none; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 40px; box-sizing: border-box; text-align: center; color: white; font-size: 22px; font-weight: 700; word-break: break-word; overflow-y: auto;"></div>
+                <div id="status-viewer-text-canvas" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; padding: 36px 24px; box-sizing: border-box; text-align: center; color: white; font-size: 26px; font-weight: 700; word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap; line-height: 1.4; overflow-y: auto;"></div>
 
                 <!-- Status Loader overlay -->
                 <div id="status-viewer-loader" style="display: none; position: absolute; inset: 0; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); z-index: 3106; border-radius: 12px;">
@@ -638,7 +620,7 @@
             <div id="status-viewer-caption-bar" style="position: absolute; bottom: 16px; left: 12px; right: 12px; text-align: center; color: white; font-size: 14px; z-index: 3120; text-shadow: 0 1px 4px rgba(0,0,0,0.85); background: rgba(0,0,0,0.55); padding: 8px 12px; border-radius: 6px; display: none;"></div>
 
             <!-- Eye Icon View Count Trigger at bottom of frame (Only visible for own statuses) -->
-            <div id="status-viewer-eye-container" style="display: none; position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 3120; align-items: center; justify-content: center; cursor: pointer; color: white; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 500; background: rgba(0,0,0,0.6); padding: 6px 14px; border-radius: 20px; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.15); gap: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.15)'" onmouseout="this.style.background='rgba(0,0,0,0.6)'">
+            <div id="status-viewer-eye-container" style="display: none; position: absolute; bottom: 74px; left: 50%; transform: translateX(-50%); z-index: 3120; align-items: center; justify-content: center; cursor: pointer; color: white; font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 500; background: rgba(0,0,0,0.6); padding: 6px 14px; border-radius: 20px; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.15); gap: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.15)'" onmouseout="this.style.background='rgba(0,0,0,0.6)'">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.95;">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                     <circle cx="12" cy="12" r="3"></circle>
@@ -646,73 +628,23 @@
                 <span id="status-viewer-eye-count">0</span>
             </div>
 
-            <!-- Viewed-by Overlay Card (Only visible for own statuses) -->
-            <div id="status-viewer-viewed-by-card" style="display: none; position: absolute; bottom: 0; left: 0; right: 0; height: 50%; max-height: 350px; background: rgba(22, 22, 26, 0); backdrop-filter: blur(16px); border-top: 1px solid rgba(255,255,255,0.12); border-radius: 20px 20px 0 0; z-index: 3122; flex-direction: column; color: white; box-shadow: 0 -12px 40px rgba(0,0,0,0.85); font-family: 'Outfit', sans-serif; box-sizing: border-box; overflow: hidden; transition: transform 0.3s ease;">
-                <!-- Header -->
-                <div style="display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-                    <button type="button" id="status-viewer-viewed-by-close" style="background: transparent; border: none; color: white; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; padding: 4px; margin-right: 12px; opacity: 0.85; transition: opacity 0.2s;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                    </button>
-                    <span id="status-viewer-viewed-by-title" style="font-weight: 600; font-size: 15px;">Viewed by 0</span>
+            <!-- Bottom Reply Bar Container (integrated inside bottom of viewport frame) -->
+            <div id="status-viewer-reply-container" style="position: absolute; bottom: 16px; left: 16px; right: 16px; display: flex; align-items: center; gap: 10px; z-index: 3125; box-sizing: border-box;">
+                <!-- Integrated Input Container -->
+                <div style="position: relative; flex: 1; display: flex; align-items: center;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 16px; color: rgba(255,255,255,0.6); pointer-events: none; z-index: 2;">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <input type="text" id="status-viewer-reply-input" placeholder="Reply to status..." style="width: 100%; padding: 12px 18px 12px 44px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.08); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); color: white; outline: none; font-size: 14px; box-sizing: border-box; font-family: 'Outfit', sans-serif;" />
                 </div>
-                <!-- Viewer List -->
-                <div id="status-viewer-viewed-by-list" style="flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; box-sizing: border-box;">
-                    <!-- Rendered dynamically -->
-                </div>
+                <!-- Discord Blurple Action/Send Button -->
+                <button type="button" id="status-viewer-reply-send-btn" style="width: 44px; height: 44px; border-radius: 50%; border: none; background: #5865F2; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease; flex-shrink: 0; box-shadow: 0 4px 14px rgba(88, 101, 242, 0.4);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
             </div>
-
-            <!-- Song Info Bottom Sheet -->
-            <div id="status-viewer-song-sheet" style="display: none; position: absolute; bottom: 0; left: 0; right: 0; background: rgba(22, 22, 26, 0.98); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-top: 1px solid rgba(255,255,255,0.12); border-radius: 20px 20px 0 0; padding: 20px 24px 30px; box-sizing: border-box; z-index: 3123; color: white; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.1, 0.76, 0.55, 0.94); font-family: 'Outfit', sans-serif;">
-                <!-- Drag handle or top indicator -->
-                <div style="width: 36px; height: 4px; background: rgba(255,255,255,0.25); border-radius: 2px; margin: 0 auto 16px;"></div>
-                
-                <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 20px;">
-                    <!-- Song Thumbnail -->
-                    <img id="status-viewer-sheet-thumb" src="/images/default-avatar.png" style="width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 1.5px solid rgba(255,255,255,0.15); background: #111;" />
-                    
-                    <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0;">
-                        <span id="status-viewer-sheet-title" style="font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.2; color: #fff;">Song Title</span>
-                        <span id="status-viewer-sheet-artist" style="font-size: 12.5px; color: rgba(255,255,255,0.65); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Artist Name</span>
-                    </div>
-                </div>
-                
-                <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                    <button type="button" id="status-viewer-sheet-youtube" style="background: rgba(255,255,255,0.12); border: none; color: white; border-radius: 18px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.2s;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color: #ff0000; display: block;">
-                            <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11C4.483 20.455 12 20.455 12 20.455s7.517 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                        </svg>
-                        Play on YouTube
-                    </button>
-                    <button type="button" id="status-viewer-sheet-close" style="background: #ffffff; border: none; color: #000; border-radius: 18px; padding: 8px 22px; font-size: 13px; font-weight: 700; cursor: pointer; transition: transform 0.1s;">
-                        Close
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Bottom Reply Bar Container (fixed below viewport wrapper) -->
-        <div id="status-viewer-reply-container" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 100%; max-width: 450px; display: flex; align-items: center; gap: 8px; z-index: 3125; padding: 0 12px; box-sizing: border-box;">
-            <!-- Emoji Smiley Face -->
-            <button type="button" id="status-viewer-reply-emoji" style="background: transparent; border: none; color: rgba(255,255,255,0.85); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px;">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
-                    <line x1="9" y1="9" x2="9.01" y2="9"></line>
-                    <line x1="15" y1="9" x2="15.01" y2="9"></line>
-                </svg>
-            </button>
-            <!-- Text Input -->
-            <input type="text" id="status-viewer-reply-input" placeholder="Type a reply..." style="flex: 1; padding: 12px 18px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.15); background: rgba(30, 30, 30, 0.7); backdrop-filter: blur(10px); color: white; outline: none; font-size: 14px; box-sizing: border-box; font-family: 'Outfit', sans-serif;" />
-            <!-- Send Button -->
-            <button type="button" id="status-viewer-reply-send-btn" style="width: 42px; height: 42px; border-radius: 50%; border: none; background: #dd2a7b; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.35);">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
-            </button>
         </div>
     </div>
 
