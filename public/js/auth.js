@@ -1756,7 +1756,7 @@ function initProfileModal() {
       // Update URL to reflect the active profile section
       if (window.Router && State.currentUser) {
         const username = State.currentUser.username;
-        window.Router.navigate(`/@${username}/${section}`, { replace: true });
+        window.Router.navigate(`/@${username}/${section}`, { replace: true, silent: true });
       }
     };
   });
@@ -1779,7 +1779,9 @@ async function openProfileModal(defaultSection = null, isUserClick = false) {
     const targetPath = defaultSection
       ? `/@${username}/${defaultSection}`
       : `/@${username}`;
-    window.Router.navigate(targetPath, { replace: true });
+    if (window.location.pathname !== targetPath) {
+      window.Router.navigate(targetPath, { replace: true, silent: true });
+    }
   }
 
   const avatarBtn = document.getElementById("nav-avatar-btn");
@@ -1942,7 +1944,7 @@ function ensureMobileProfileHeader(sectionName) {
     document.body.classList.remove("mobile-profile-value-active");
     // Update URL back to /@username when going back to profile main page
     if (window.Router && State.currentUser) {
-      window.Router.navigate(`/@${State.currentUser.username}`, { replace: true });
+      window.Router.navigate(`/@${State.currentUser.username}`, { replace: true, silent: true });
     }
   };
 

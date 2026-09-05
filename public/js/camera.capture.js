@@ -312,7 +312,19 @@
 
         if (!loadedStream) {
             console.error("Camera access failed:", lastError);
-            showToast("Failed to access camera", "error");
+            let errorMsg = "Failed to access camera";
+            if (lastError) {
+                if (lastError.name === "NotAllowedError" || lastError.name === "PermissionDeniedError") {
+                    errorMsg = "Camera access denied — please enable camera permissions in your browser settings";
+                } else if (lastError.name === "NotFoundError" || lastError.name === "DevicesNotFoundError") {
+                    errorMsg = "No camera device found on this system";
+                } else if (lastError.name === "NotReadableError" || lastError.name === "TrackStartError") {
+                    errorMsg = "Camera is currently in use by another application";
+                }
+            }
+            if (typeof showToast === "function") {
+                showToast(errorMsg, "error");
+            }
             closeCameraCaptureOverlay();
             return;
         }

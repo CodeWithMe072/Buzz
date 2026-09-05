@@ -341,6 +341,20 @@
             };
         }
 
+        // Camera status option
+        const cameraOpt = document.getElementById("status-composer-opt-camera");
+        if (cameraOpt) {
+            cameraOpt.onclick = async () => {
+                closeStatusComposer();
+                if (window.State) window.State.cameraMode = "status";
+                if (typeof window.openCameraCaptureOverlay === "function") {
+                    await window.openCameraCaptureOverlay();
+                } else if (typeof showToast === "function") {
+                    showToast("Camera module is loading...", "info");
+                }
+            };
+        }
+
         // Text status option
         if (textOpt) {
             textOpt.onclick = () => {
@@ -424,7 +438,12 @@
         const navRight = document.getElementById("status-viewer-nav-right");
         const viewerOverlay = document.getElementById("status-viewer-overlay");
 
-        if (screenCloseBtn) screenCloseBtn.onclick = closeStatusViewer;
+        if (screenCloseBtn) {
+            screenCloseBtn.onclick = (e) => {
+                if (e) e.stopPropagation();
+                closeStatusViewer(false);
+            };
+        }
         if (arrowLeftBtn) {
             arrowLeftBtn.onclick = (e) => {
                 e.stopPropagation();
@@ -451,7 +470,7 @@
         }
         if (viewerOverlay) {
             viewerOverlay.onclick = (e) => {
-                if (e.target === viewerOverlay) closeStatusViewer();
+                if (e.target === viewerOverlay) closeStatusViewer(false);
             };
         }
 
@@ -475,6 +494,372 @@
             replyInput.onfocus = () => {
                 if (!isPaused) togglePlayPause();
             };
+        }
+
+        // ── Discord-Style Status Viewer Emoji Reaction Modal ──
+        const DISCORD_EMOJI_DATASET = [
+            // Smileys & Emotion
+            { char: "😀", name: "grinning face", keywords: "smile happy grin joy face", cat: "smileys" },
+            { char: "😃", name: "grinning face big eyes", keywords: "happy joy smile face", cat: "smileys" },
+            { char: "😄", name: "grinning face smiling eyes", keywords: "happy joy laugh smile", cat: "smileys" },
+            { char: "😁", name: "beaming face", keywords: "teeth smile happy grin", cat: "smileys" },
+            { char: "😆", name: "grinning squinting face", keywords: "laugh XD lol happy", cat: "smileys" },
+            { char: "😅", name: "sweat smile", keywords: "nervous laugh sweat whew", cat: "smileys" },
+            { char: "😂", name: "joy crying laugh", keywords: "tears lol rofl laugh happy", cat: "smileys" },
+            { char: "🤣", name: "rofl rolling on floor", keywords: "lmao lol rofl laugh", cat: "smileys" },
+            { char: "😊", name: "smiling face", keywords: "blush happy sweet smile", cat: "smileys" },
+            { char: "😇", name: "innocent halo", keywords: "angel innocent halo smile", cat: "smileys" },
+            { char: "🥰", name: "smiling face hearts", keywords: "love heart adore affectionate", cat: "smileys" },
+            { char: "😍", name: "heart eyes", keywords: "love heart eyes adore wow", cat: "smileys" },
+            { char: "🤩", name: "star struck", keywords: "star amazed excited wow", cat: "smileys" },
+            { char: "😘", name: "kissing heart", keywords: "kiss love heart smooch", cat: "smileys" },
+            { char: "😋", name: "yum delicious", keywords: "silly yum food tongue taste", cat: "smileys" },
+            { char: "😛", name: "stuck out tongue", keywords: "silly tongue playful", cat: "smileys" },
+            { char: "😜", name: "winking tongue", keywords: "wink silly joke tongue", cat: "smileys" },
+            { char: "🤪", name: "zany face", keywords: "crazy goofy silly zany", cat: "smileys" },
+            { char: "😝", name: "squinting tongue", keywords: "silly joke tongue XD", cat: "smileys" },
+            { char: "🤑", name: "money mouth", keywords: "cash dollar rich money", cat: "smileys" },
+            { char: "🤗", name: "hugging face", keywords: "hug warm friendly affection", cat: "smileys" },
+            { char: "🤭", name: "hand over mouth", keywords: "giggle oops teehee whisper", cat: "smileys" },
+            { char: "🤫", name: "shushing face", keywords: "quiet silence hush secret", cat: "smileys" },
+            { char: "🤔", name: "thinking face", keywords: "hmm think ponder curious", cat: "smileys" },
+            { char: "🤐", name: "zipper mouth", keywords: "sealed secret quiet mute", cat: "smileys" },
+            { char: "🤨", name: "raised eyebrow", keywords: "suspicious skeptical eyebrow doubt", cat: "smileys" },
+            { char: "😐", name: "neutral face", keywords: "pokerface meh straight neutral", cat: "smileys" },
+            { char: "😑", name: "expressionless", keywords: "meh unamused blank face", cat: "smileys" },
+            { char: "😶", name: "no mouth face", keywords: "silent speechless blank", cat: "smileys" },
+            { char: "😏", name: "smirking face", keywords: "smirk sly coy flirty", cat: "smileys" },
+            { char: "😒", name: "unamused face", keywords: "bored annoyed unimpressed meh", cat: "smileys" },
+            { char: "🙄", name: "eye roll", keywords: "whatever roll eyes annoyed", cat: "smileys" },
+            { char: "😬", name: "grimacing face", keywords: "awkward yikes cringe teeth", cat: "smileys" },
+            { char: "😌", name: "relieved face", keywords: "peaceful calm relieved serene", cat: "smileys" },
+            { char: "😔", name: "pensive face", keywords: "sad thoughtful depressed pensive", cat: "smileys" },
+            { char: "😴", name: "sleeping face", keywords: "sleep zzz tired bedtime", cat: "smileys" },
+            { char: "😷", name: "medical mask", keywords: "sick mask virus flu doctor", cat: "smileys" },
+            { char: "🤒", name: "thermometer face", keywords: "sick fever ill temperature", cat: "smileys" },
+            { char: "🥵", name: "hot face", keywords: "heat summer sweaty thirsty", cat: "smileys" },
+            { char: "🥶", name: "cold face", keywords: "freezing ice cold winter frost", cat: "smileys" },
+            { char: "🤯", name: "exploding head", keywords: "mind blown explode shock omg", cat: "smileys" },
+            { char: "🥳", name: "partying face", keywords: "party celebrate hat horn birthday", cat: "smileys" },
+            { char: "😎", name: "sunglasses cool", keywords: "cool chill awesome shades", cat: "smileys" },
+            { char: "🤓", name: "nerd face", keywords: "geek glasses smart nerd", cat: "smileys" },
+            { char: "🧐", name: "monocle face", keywords: "fancy examine inspect monocle", cat: "smileys" },
+            { char: "😡", name: "pouting red angry", keywords: "mad angry furious rage", cat: "smileys" },
+            { char: "💀", name: "skull dead", keywords: "skeleton dead dying laugh I'm dead", cat: "smileys" },
+            { char: "💩", name: "poop hankey", keywords: "pooh poop funny turd", cat: "smileys" },
+            { char: "🤡", name: "clown face", keywords: "clown fool funny joke", cat: "smileys" },
+            { char: "👻", name: "ghost spooky", keywords: "halloween ghost boo phantom", cat: "smileys" },
+            { char: "👽", name: "alien space", keywords: "alien ufo extraterrestrial", cat: "smileys" },
+            { char: "🤖", name: "robot face", keywords: "bot robot ai machine", cat: "smileys" },
+
+            // Animals & Nature
+            { char: "🐶", name: "dog face", keywords: "puppy dog pet animal woof", cat: "animals" },
+            { char: "🐱", name: "cat face", keywords: "kitty cat pet meow animal", cat: "animals" },
+            { char: "🐭", name: "mouse face", keywords: "rat mouse rodent animal", cat: "animals" },
+            { char: "🐹", name: "hamster face", keywords: "hamster pet rodent cute", cat: "animals" },
+            { char: "🐰", name: "rabbit face", keywords: "bunny rabbit pet animal", cat: "animals" },
+            { char: "🦊", name: "fox face", keywords: "fox wild animal red", cat: "animals" },
+            { char: "🐻", name: "bear face", keywords: "bear wild animal teddy", cat: "animals" },
+            { char: "🐼", name: "panda face", keywords: "panda bear china cute", cat: "animals" },
+            { char: "🐨", name: "koala bear", keywords: "australia koala cute", cat: "animals" },
+            { char: "🐯", name: "tiger face", keywords: "tiger wild cat predator", cat: "animals" },
+            { char: "🦁", name: "lion face", keywords: "lion king predator safari", cat: "animals" },
+            { char: "🐮", name: "cow face", keywords: "cow cattle farm animal moo", cat: "animals" },
+            { char: "🐷", name: "pig face", keywords: "pig oink farm animal pork", cat: "animals" },
+            { char: "🐸", name: "frog face", keywords: "frog toad amphibian ribbit", cat: "animals" },
+            { char: "🐵", name: "monkey face", keywords: "monkey ape primate banana", cat: "animals" },
+            { char: "🐔", name: "chicken hen", keywords: "rooster chicken farm bird", cat: "animals" },
+            { char: "🐧", name: "penguin bird", keywords: "penguin ice arctic bird", cat: "animals" },
+            { char: "🐦", name: "bird tweet", keywords: "bird tweet fly animal", cat: "animals" },
+            { char: "🐤", name: "baby chick", keywords: "chick bird duck yellow", cat: "animals" },
+            { char: "🦄", name: "unicorn face", keywords: "unicorn magic fantasy pony", cat: "animals" },
+            { char: "🐝", name: "honeybee insect", keywords: "bee honey insect bug fly", cat: "animals" },
+            { char: "🦋", name: "butterfly insect", keywords: "butterfly bug nature pretty", cat: "animals" },
+            { char: "🐙", name: "octopus sea", keywords: "octopus ocean sea squid tentacle", cat: "animals" },
+            { char: "🐬", name: "dolphin ocean", keywords: "dolphin sea water mammal", cat: "animals" },
+            { char: "🦈", name: "shark ocean", keywords: "shark predator ocean sea jaw", cat: "animals" },
+            { char: "🌺", name: "hibiscus flower", keywords: "flower nature plant blossom", cat: "animals" },
+            { char: "🌸", name: "cherry blossom", keywords: "flower sakura spring pink", cat: "animals" },
+            { char: "🌲", name: "evergreen tree", keywords: "tree forest nature pine", cat: "animals" },
+            { char: "⭐", name: "star yellow", keywords: "star sky space shiny gold", cat: "animals" },
+            { char: "🔥", name: "fire flame", keywords: "fire hot flame lit energy", cat: "animals" },
+
+            // Food & Drink
+            { char: "🍏", name: "green apple", keywords: "apple fruit food healthy", cat: "food" },
+            { char: "🍎", name: "red apple", keywords: "apple fruit food red", cat: "food" },
+            { char: "🍊", name: "tangerine orange", keywords: "orange fruit citrus food", cat: "food" },
+            { char: "🍋", name: "lemon sour", keywords: "lemon fruit sour citrus", cat: "food" },
+            { char: "🍌", name: "banana fruit", keywords: "banana fruit monkey food", cat: "food" },
+            { char: "🍉", name: "watermelon fruit", keywords: "watermelon summer fruit melon", cat: "food" },
+            { char: "🍇", name: "grapes fruit", keywords: "grapes fruit wine berry", cat: "food" },
+            { char: "🍓", name: "strawberry fruit", keywords: "strawberry berry fruit sweet", cat: "food" },
+            { char: "🍒", name: "cherries fruit", keywords: "cherry fruit sweet red", cat: "food" },
+            { char: "🥑", name: "avocado food", keywords: "avocado fruit toast guacamole", cat: "food" },
+            { char: "🍔", name: "hamburger burger", keywords: "burger fastfood meat cheese", cat: "food" },
+            { char: "🍟", name: "french fries", keywords: "fries potato snack fastfood", cat: "food" },
+            { char: "🍕", name: "pizza slice", keywords: "pizza cheese Italian food", cat: "food" },
+            { char: "🌭", name: "hotdog sausage", keywords: "hotdog sausage mustard food", cat: "food" },
+            { char: "🌮", name: "taco mexican", keywords: "taco mexican food spicy", cat: "food" },
+            { char: "🌯", name: "burrito wrap", keywords: "burrito mexican food wrap", cat: "food" },
+            { char: "🍿", name: "popcorn movie", keywords: "popcorn cinema movie snack", cat: "food" },
+            { char: "🍩", name: "donut doughnut", keywords: "donut sweet dessert bakery", cat: "food" },
+            { char: "🍦", name: "soft ice cream", keywords: "ice cream dessert cone sweet", cat: "food" },
+            { char: "🍰", name: "strawberry shortcake", keywords: "cake dessert birthday sweet", cat: "food" },
+            { char: "🎂", name: "birthday cake", keywords: "cake birthday party candles", cat: "food" },
+            { char: "🍫", name: "chocolate bar", keywords: "chocolate sweet candy dessert", cat: "food" },
+            { char: "☕", name: "hot coffee tea", keywords: "coffee espresso tea drink morning", cat: "food" },
+            { char: "🧃", name: "beverage juice box", keywords: "juice drink straw beverage", cat: "food" },
+            { char: "🥤", name: "cup with straw", keywords: "soda drink cup beverage", cat: "food" },
+            { char: "🧋", name: "boba bubble tea", keywords: "boba tea drink tapioca milk", cat: "food" },
+            { char: "🍺", name: "beer mug", keywords: "beer drink pub alcohol cheers", cat: "food" },
+            { char: "🍻", name: "clinking beer mugs", keywords: "beers cheers pub drink party", cat: "food" },
+            { char: "🥂", name: "clinking glasses champagne", keywords: "toast celebration champagne drink", cat: "food" },
+            { char: "🍷", name: "wine glass", keywords: "wine drink alcohol red dinner", cat: "food" },
+
+            // Activities
+            { char: "⚽", name: "soccer ball", keywords: "soccer football sports ball game", cat: "activities" },
+            { char: "🏀", name: "basketball", keywords: "basketball sports ball NBA game", cat: "activities" },
+            { char: "🏈", name: "american football", keywords: "football NFL sports ball", cat: "activities" },
+            { char: "⚾", name: "baseball", keywords: "baseball MLB sports ball", cat: "activities" },
+            { char: "🎾", name: "tennis ball", keywords: "tennis sports racket ball", cat: "activities" },
+            { char: "🏐", name: "volleyball", keywords: "volleyball sports beach ball", cat: "activities" },
+            { char: "🏓", name: "ping pong table tennis", keywords: "ping pong paddle ball sport", cat: "activities" },
+            { char: "🎯", name: "bullseye dart target", keywords: "target dart hit bullseye game", cat: "activities" },
+            { char: "🎮", name: "video game controller", keywords: "gaming controller console game playstation xbox nintendo", cat: "activities" },
+            { char: "🎲", name: "game die dice", keywords: "dice casino gamble game luck", cat: "activities" },
+            { char: "♟️", name: "chess pawn", keywords: "chess strategy boardgame pawn", cat: "activities" },
+            { char: "🏆", name: "trophy cup award", keywords: "trophy win winner first award prize", cat: "activities" },
+            { char: "🥇", name: "1st place medal", keywords: "gold medal winner first place", cat: "activities" },
+            { char: "🥈", name: "2nd place medal", keywords: "silver medal second place", cat: "activities" },
+            { char: "🥉", name: "3rd place medal", keywords: "bronze medal third place", cat: "activities" },
+            { char: "🎨", name: "artist palette", keywords: "art paint draw palette creative", cat: "activities" },
+            { char: "🎬", name: "clapper board movie", keywords: "movie cinema film Hollywood act", cat: "activities" },
+            { char: "🎤", name: "microphone sing", keywords: "mic sing music karaoke audio", cat: "activities" },
+            { char: "🎧", name: "headphone audio", keywords: "music headphones listen audio sound", cat: "activities" },
+            { char: "🎸", name: "guitar music", keywords: "guitar instrument rock music song", cat: "activities" },
+
+            // Travel & Places
+            { char: "🚗", name: "automobile car", keywords: "car auto drive travel vehicle", cat: "travel" },
+            { char: "🚕", name: "taxi cab", keywords: "taxi cab ride transport yellow", cat: "travel" },
+            { char: "🚌", name: "bus transit", keywords: "bus transport vehicle ride", cat: "travel" },
+            { char: "🏎️", name: "racing car", keywords: "race fast car f1 speed", cat: "travel" },
+            { char: "🏍️", name: "motorcycle bike", keywords: "bike moto motorcycle ride", cat: "travel" },
+            { char: "🛵", name: "motor scooter", keywords: "scooter vespa bike delivery", cat: "travel" },
+            { char: "🚲", name: "bicycle bike", keywords: "bike cycle exercise sport ride", cat: "travel" },
+            { char: "✈️", name: "airplane flight", keywords: "plane fly flight travel airport", cat: "travel" },
+            { char: "🚀", name: "rocket ship", keywords: "rocket space moon launch speed", cat: "travel" },
+            { char: "🛸", name: "flying saucer ufo", keywords: "ufo alien space saucer", cat: "travel" },
+            { char: "🚁", name: "helicopter", keywords: "chopper helicopter fly travel", cat: "travel" },
+            { char: "⛵", name: "sailboat boat", keywords: "boat sea ocean sail water", cat: "travel" },
+            { char: "🏠", name: "house home", keywords: "home house building residential", cat: "travel" },
+            { char: "🏢", name: "office building", keywords: "office work building company", cat: "travel" },
+            { char: "🏖️", name: "beach umbrella", keywords: "beach vacation sea sand summer", cat: "travel" },
+            { char: "🏕️", name: "camping tent", keywords: "camping tent nature outdoor trip", cat: "travel" },
+            { char: "🗿", name: "moai easter island", keywords: "statue moai stone meme bruh", cat: "travel" },
+
+            // Objects
+            { char: "⌚", name: "watch clock", keywords: "watch time clock wrist", cat: "objects" },
+            { char: "📱", name: "mobile phone smartphone", keywords: "phone iphone android mobile call text", cat: "objects" },
+            { char: "💻", name: "laptop computer", keywords: "laptop pc code dev tech computer work", cat: "objects" },
+            { char: "💡", name: "light bulb idea", keywords: "idea bulb light bright smart genius", cat: "objects" },
+            { char: "🔦", name: "flashlight torch", keywords: "flashlight torch light dark", cat: "objects" },
+            { char: "📖", name: "open book", keywords: "book read study learn literature", cat: "objects" },
+            { char: "📚", name: "books stack", keywords: "books school study library college", cat: "objects" },
+            { char: "💰", name: "money bag", keywords: "money dollar cash wealth rich bag", cat: "objects" },
+            { char: "💵", name: "dollar bill cash", keywords: "cash dollar money green buck", cat: "objects" },
+            { char: "💎", name: "gem stone diamond", keywords: "diamond gem jewel luxury precious", cat: "objects" },
+            { char: "🔑", name: "key lock", keywords: "key unlock password secret access", cat: "objects" },
+            { char: "🔒", name: "locked pad lock", keywords: "lock secure safety privacy closed", cat: "objects" },
+            { char: "🎁", name: "wrapped gift present", keywords: "gift present surprise birthday unwrap", cat: "objects" },
+            { char: "🔔", name: "bell notification", keywords: "bell ring alert notice sound", cat: "objects" },
+            { char: "📌", name: "pushpin pin", keywords: "pin pushpin mark location important", cat: "objects" },
+
+            // Symbols & Flags
+            { char: "❤️", name: "red heart love", keywords: "heart love red romance favorite like", cat: "symbols" },
+            { char: "🧡", name: "orange heart", keywords: "heart love orange like", cat: "symbols" },
+            { char: "💛", name: "yellow heart", keywords: "heart love yellow friend", cat: "symbols" },
+            { char: "💚", name: "green heart", keywords: "heart love green eco nature", cat: "symbols" },
+            { char: "💙", name: "blue heart", keywords: "heart love blue chill cool", cat: "symbols" },
+            { char: "💜", name: "purple heart", keywords: "heart love purple bts", cat: "symbols" },
+            { char: "🖤", name: "black heart", keywords: "heart black dark emo goth", cat: "symbols" },
+            { char: "🤍", name: "white heart", keywords: "heart white pure clean peace", cat: "symbols" },
+            { char: "💔", name: "broken heart", keywords: "broken heart breakup sad hurt", cat: "symbols" },
+            { char: "💯", name: "hundred points 100", keywords: "100 percent perfect score KeepItReal", cat: "symbols" },
+            { char: "👍", name: "thumbs up yes", keywords: "thumbs up approve like yes good ok +1", cat: "symbols" },
+            { char: "👎", name: "thumbs down no", keywords: "thumbs down dislike no bad -1", cat: "symbols" },
+            { char: "👏", name: "clapping hands bravo", keywords: "clap applaud congratulations bravo props", cat: "symbols" },
+            { char: "🙌", name: "raising hands praise", keywords: "praise celebrate highfive hooray", cat: "symbols" },
+            { char: "🙏", name: "folded hands pray please", keywords: "pray please thank you thanks namaste", cat: "symbols" },
+            { char: "🤝", name: "handshake agree", keywords: "handshake deal agreement partner", cat: "symbols" },
+            { char: "✌️", name: "victory hand peace", keywords: "peace victory v sign two", cat: "symbols" },
+            { char: "🤘", name: "sign of horns rock", keywords: "rock metal horns heavy cool", cat: "symbols" },
+            { char: "💪", name: "flexed biceps strong", keywords: "flex muscle strong power gym workout", cat: "symbols" },
+            { char: "🎉", name: "party popper tada", keywords: "tada party celebration congratulations congrats", cat: "symbols" },
+            { char: "✨", name: "sparkles magic", keywords: "sparkles shiny clean new magic star", cat: "symbols" },
+            { char: "💥", name: "collision boom blast", keywords: "boom blast pow impact collision explosion", cat: "symbols" },
+            { char: "⚡", name: "high voltage lightning", keywords: "lightning flash thunder electric power fast", cat: "symbols" },
+            { char: "✅", name: "check mark button", keywords: "check done yes correct pass checkmark", cat: "symbols" },
+            { char: "❌", name: "cross mark x", keywords: "x wrong cancel no reject error", cat: "symbols" },
+            { char: "⚠️", name: "warning sign", keywords: "warning caution alert danger exclam", cat: "symbols" },
+            { char: "⛔", name: "no entry stop", keywords: "stop forbidden denied no entry", cat: "symbols" }
+        ];
+
+        const categoryLabels = {
+            smileys: "Smileys & Emotion",
+            animals: "Animals & Nature",
+            food: "Food & Drink",
+            activities: "Activities",
+            travel: "Travel & Places",
+            objects: "Objects",
+            symbols: "Symbols & Flags"
+        };
+
+        let currentActiveCat = "all";
+
+        const emojiBtn = document.getElementById("status-viewer-emoji-btn");
+        const emojiModal = document.getElementById("status-viewer-emoji-modal");
+        const emojiCloseBtn = document.getElementById("status-viewer-emoji-close-btn");
+        const emojiGrid = document.getElementById("status-viewer-emoji-grid");
+        const emojiCard = document.getElementById("status-viewer-emoji-card");
+        const emojiSearchInput = document.getElementById("status-viewer-emoji-search-input");
+        const emojiCatContainer = document.getElementById("status-viewer-emoji-categories");
+        const emojiNoResults = document.getElementById("status-viewer-emoji-no-results");
+
+        function createDiscordEmojiCellBtn(item) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "discord-emoji-item";
+            btn.title = item.name;
+            btn.textContent = item.char;
+
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                if (replyInput) {
+                    replyInput.value += item.char;
+                    replyInput.focus();
+                }
+                if (emojiModal) emojiModal.style.display = "none";
+                if (isPaused) togglePlayPause();
+            };
+
+            return btn;
+        }
+
+        function renderDiscordEmojiGrid(searchTerm = "", catFilter = "all") {
+            if (!emojiGrid) return;
+            emojiGrid.innerHTML = "";
+
+            const cleanSearch = searchTerm.trim().toLowerCase();
+
+            let filtered = DISCORD_EMOJI_DATASET.filter(item => {
+                const matchesCat = (catFilter === "all" || item.cat === catFilter);
+                if (!matchesCat) return false;
+                if (!cleanSearch) return true;
+
+                return item.name.toLowerCase().includes(cleanSearch) ||
+                       item.keywords.toLowerCase().includes(cleanSearch) ||
+                       item.char.includes(cleanSearch);
+            });
+
+            if (filtered.length === 0) {
+                if (emojiNoResults) emojiNoResults.style.display = "block";
+                return;
+            } else {
+                if (emojiNoResults) emojiNoResults.style.display = "none";
+            }
+
+            // Group by category if viewing 'all' and no search term is entered
+            if (catFilter === "all" && !cleanSearch) {
+                const categories = ["smileys", "animals", "food", "activities", "travel", "objects", "symbols"];
+                categories.forEach(cat => {
+                    const catItems = filtered.filter(i => i.cat === cat);
+                    if (catItems.length > 0) {
+                        const header = document.createElement("div");
+                        header.className = "discord-emoji-section-header";
+                        header.dataset.section = cat;
+                        header.textContent = categoryLabels[cat] || cat.toUpperCase();
+                        emojiGrid.appendChild(header);
+
+                        catItems.forEach(item => {
+                            emojiGrid.appendChild(createDiscordEmojiCellBtn(item));
+                        });
+                    }
+                });
+            } else {
+                filtered.forEach(item => {
+                    emojiGrid.appendChild(createDiscordEmojiCellBtn(item));
+                });
+            }
+        }
+
+        if (emojiBtn && emojiModal && emojiGrid) {
+            // Search Input Listener
+            if (emojiSearchInput) {
+                emojiSearchInput.oninput = (e) => {
+                    const query = e.target.value;
+                    renderDiscordEmojiGrid(query, currentActiveCat);
+                };
+            }
+
+            // Category Tabs Listener
+            if (emojiCatContainer) {
+                const tabs = emojiCatContainer.querySelectorAll(".discord-emoji-cat-tab");
+                tabs.forEach(tab => {
+                    tab.onclick = (e) => {
+                        e.stopPropagation();
+                        tabs.forEach(t => t.classList.remove("active"));
+                        tab.classList.add("active");
+
+                        currentActiveCat = tab.dataset.category || "all";
+                        const query = emojiSearchInput ? emojiSearchInput.value : "";
+                        renderDiscordEmojiGrid(query, currentActiveCat);
+
+                        const scrollArea = document.getElementById("status-viewer-emoji-scroll-container");
+                        if (scrollArea) scrollArea.scrollTop = 0;
+                    };
+                });
+            }
+
+            emojiBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (!isPaused) togglePlayPause();
+                emojiModal.style.display = "flex";
+
+                if (emojiSearchInput) emojiSearchInput.value = "";
+                currentActiveCat = "all";
+
+                if (emojiCatContainer) {
+                    const tabs = emojiCatContainer.querySelectorAll(".discord-emoji-cat-tab");
+                    tabs.forEach(t => {
+                        if (t.dataset.category === "all") t.classList.add("active");
+                        else t.classList.remove("active");
+                    });
+                }
+
+                renderDiscordEmojiGrid("", "all");
+            };
+
+            if (emojiCloseBtn) {
+                emojiCloseBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    emojiModal.style.display = "none";
+                    if (isPaused) togglePlayPause();
+                };
+            }
+
+            emojiModal.onclick = (e) => {
+                if (e.target === emojiModal) {
+                    e.stopPropagation();
+                    emojiModal.style.display = "none";
+                    if (isPaused) togglePlayPause();
+                }
+            };
+
+            if (emojiCard) {
+                emojiCard.onclick = (e) => {
+                    e.stopPropagation();
+                };
+            }
         }
 
         // Status video buffering & loader events
@@ -528,10 +913,10 @@
     }
 
     // ── Status Playback Viewer Overlay ──
-    async function openStatusViewer(group) {
+    async function openStatusViewer(group, startIndex = 0) {
 
         activeGroup = group;
-        activeIndex = 0;
+        activeIndex = (typeof startIndex === "number" && startIndex >= 0 && group?.moments && startIndex < group.moments.length) ? startIndex : 0;
         isPaused = false;
 
         const overlay = document.getElementById("status-viewer-overlay");
@@ -542,6 +927,21 @@
 
         overlay.style.display = "flex";
 
+        const rawUsername = group?.user?.username || group?.username || group?.moments?.[0]?.user?.username;
+        const validUsername = (rawUsername && rawUsername !== "My Status") ? rawUsername : (window.State?.currentUser?.username || "");
+        const targetPath = validUsername ? `/status/${validUsername}` : `/status`;
+
+        if (!window.__statusViewerActive) {
+            window.__statusViewerActive = true;
+            if (window.location.pathname !== targetPath) {
+                window.history.pushState({ statusViewerActive: true, username: validUsername }, "", targetPath);
+            }
+        } else {
+            if (validUsername && window.location.pathname !== targetPath) {
+                window.history.replaceState({ statusViewerActive: true, username: validUsername }, "", targetPath);
+            }
+        }
+
         // Build segments
         buildProgressSegments();
 
@@ -549,7 +949,7 @@
         await playCurrentStatusSegment();
     }
 
-    function closeStatusViewer() {
+    function closeStatusViewer(fromPopstate = false) {
         if (preloadCleanup) {
             preloadCleanup();
             preloadCleanup = null;
@@ -597,9 +997,24 @@
         if (eyeContainer) eyeContainer.style.display = "none";
 
         const songSheet = document.getElementById("status-viewer-song-sheet");
+        const emojiModal = document.getElementById("status-viewer-emoji-modal");
         if (songSheet) {
             songSheet.style.display = "none";
             songSheet.style.transform = "translateY(100%)";
+        }
+        if (emojiModal) emojiModal.style.display = "none";
+
+        if (typeof fromPopstate !== "boolean") {
+            fromPopstate = false;
+        }
+
+        if (window.__statusViewerActive || window.location.pathname !== "/status") {
+            window.__statusViewerActive = false;
+            if (!fromPopstate) {
+                if (window.location.pathname !== "/status" && window.location.pathname.startsWith("/status")) {
+                    window.history.replaceState({ path: "/status" }, "", "/status");
+                }
+            }
         }
 
         activeGroup = null;
@@ -697,21 +1112,62 @@
             captionBar.textContent = "";
         }
 
-        // Conditional Volume/Mute Icon: render only for video/audio statuses or statuses with background music
+        // Volume/Mute Icon: disable and gray out when status has no audio
         const muteBtn = document.getElementById("status-viewer-mute-btn");
         if (muteBtn) {
+            muteBtn.style.display = "flex";
             const hasAudio = (resolvedType === "video" || resolvedType === "audio" || !!(moment.songRef && (moment.songRef.audioUrl || moment.songRef.youtubeVideoId || moment.songRef.title)));
-            muteBtn.style.display = hasAudio ? "flex" : "none";
+            if (hasAudio) {
+                muteBtn.disabled = false;
+                muteBtn.style.opacity = "1";
+                muteBtn.style.color = "white";
+                muteBtn.style.cursor = "pointer";
+                muteBtn.title = "Toggle Mute";
+            } else {
+                muteBtn.disabled = true;
+                muteBtn.style.opacity = "0.35";
+                muteBtn.style.color = "rgba(255, 255, 255, 0.4)";
+                muteBtn.style.cursor = "not-allowed";
+                muteBtn.title = "No audio on this status";
+            }
         }
 
         // Set header details
-        if (avatar) avatar.src = activeGroup.user.avatar || "/images/default-avatar.png";
-        if (username) username.textContent = activeGroup.user.username;
+        const avatarFallback = document.getElementById("status-viewer-avatar-fallback");
+        const usernameStr = activeGroup?.user?.username || "";
+        const initialLetter = usernameStr ? usernameStr.charAt(0).toUpperCase() : "?";
+
+        if (username) username.textContent = usernameStr;
+
+        if (avatar) {
+            avatar.onerror = () => {
+                avatar.style.display = "none";
+                if (avatarFallback) {
+                    avatarFallback.textContent = initialLetter;
+                    avatarFallback.style.display = "flex";
+                }
+            };
+
+            const userAvatarUrl = activeGroup?.user?.avatar;
+            const isValidAvatarUrl = userAvatarUrl && userAvatarUrl !== "/images/default-avatar.png" && userAvatarUrl.trim().length > 5;
+
+            if (isValidAvatarUrl) {
+                avatar.src = userAvatarUrl;
+                avatar.style.display = "block";
+                if (avatarFallback) avatarFallback.style.display = "none";
+            } else {
+                avatar.style.display = "none";
+                if (avatarFallback) {
+                    avatarFallback.textContent = initialLetter;
+                    avatarFallback.style.display = "flex";
+                }
+            }
+        }
         if (timeEl) {
             const relativeTime = typeof formatRelativeTime === "function"
                 ? formatRelativeTime(new Date(moment.createdAt))
                 : new Date(moment.createdAt).toLocaleTimeString();
-            timeEl.textContent = `Today at ${relativeTime}`;
+            timeEl.textContent = relativeTime;
         }
 
         // Song Attribution Row configuration
@@ -1479,6 +1935,9 @@
     }
 
     function toggleMute() {
+        const muteBtn = document.getElementById("status-viewer-mute-btn");
+        if (muteBtn && muteBtn.disabled) return;
+
         const video = document.getElementById("status-viewer-video");
         const unmuteIcon = document.getElementById("status-unmute-icon");
         const muteIcon = document.getElementById("status-mute-icon");
@@ -1609,8 +2068,25 @@
         const nextIdx = activeIndex + direction;
 
         if (nextIdx < 0) {
-            activeIndex = 0; // lock at beginning
-            playCurrentStatusSegment();
+            let transitionedToPrevGroup = false;
+            if (window.allStatusGroups && window.allStatusGroups.length > 0) {
+                const currentGroupIdx = window.allStatusGroups.findIndex(g => {
+                    const currentId = activeGroup.user._id ? activeGroup.user._id.toString() : (activeGroup.user.id ? activeGroup.user.id.toString() : "");
+                    const gId = g.user._id ? g.user._id.toString() : (g.user.id ? g.user.id.toString() : "");
+                    return currentId === gId;
+                });
+                if (currentGroupIdx > 0) {
+                    const prevGroup = window.allStatusGroups[currentGroupIdx - 1];
+                    console.log(`[Tap-Back] Transitioning to previous user status group: ${prevGroup.user.username}`);
+                    openStatusViewer(prevGroup, prevGroup.moments ? prevGroup.moments.length - 1 : 0);
+                    transitionedToPrevGroup = true;
+                }
+            }
+
+            if (!transitionedToPrevGroup) {
+                activeIndex = 0; // lock at beginning
+                playCurrentStatusSegment();
+            }
         } else if (nextIdx >= activeGroup.moments.length) {
             // End of statuses for this user. Check if there is a next user's status group in allStatusGroups
             let transitionedToNextGroup = false;
@@ -1623,24 +2099,13 @@
                 if (currentGroupIdx !== -1 && currentGroupIdx + 1 < window.allStatusGroups.length) {
                     const nextGroup = window.allStatusGroups[currentGroupIdx + 1];
                     console.log(`[Auto-Advance] Transitioning to next user status group: ${nextGroup.user.username}`);
-                    
-                    // Reset viewer fields
-                    activeGroup = nextGroup;
-                    activeIndex = 0;
-                    isPaused = false;
-                    pausedAtMs = 0;
-
-                    // Rebuild segments
-                    buildProgressSegments();
-                    
-                    // Play first segment of next user
-                    playCurrentStatusSegment();
+                    openStatusViewer(nextGroup, 0);
                     transitionedToNextGroup = true;
                 }
             }
 
             if (!transitionedToNextGroup) {
-                closeStatusViewer();
+                closeStatusViewer(false);
 
                 // Reload connection sidebar status rings
                 if (typeof window.renderStatusSidebar === "function") {

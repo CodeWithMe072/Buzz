@@ -448,8 +448,6 @@
         <div id="status-viewer-blurred-bg" style="position: absolute; inset: 0; z-index: 3101; background-size: cover; background-position: center; filter: blur(50px) brightness(0.35); transform: scale(1.15); transition: background-image 0.3s ease;"></div>
 
 
-        <!-- Far Right Screen Close Button -->
-        <button type="button" id="status-viewer-screen-close" style="position: absolute; top: 24px; right: 24px; z-index: 3125; background: transparent; border: none; color: white; cursor: pointer; font-size: 26px; display: flex; align-items: center; justify-content: center; opacity: 0.85; transition: opacity 0.2s; line-height: 1;">&times;</button>
 
         <!-- Far Side Screen Arrows (Hidden on mobile via CSS) -->
         <button type="button" id="status-viewer-arrow-left" style="position: absolute; left: calc(50% - 295px); top: 50%; transform: translateY(-50%); z-index: 3115; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.08); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.2s;">
@@ -464,7 +462,7 @@
         </button>
 
         <!-- Centered Vertical Viewport Frame -->
-        <div id="status-viewer-viewport-wrapper" style="position: relative; width: 100%; max-width: 440px; height: 94vh; max-height: 920px; display: flex; flex-direction: column; z-index: 3105; background: #1c1d22; border-radius: 24px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.08); margin: 0 auto;">
+        <div id="status-viewer-viewport-wrapper" style="position: relative; width: 100%; max-width: 440px; height: 100%; max-height: 920px; display: flex; flex-direction: column; z-index: 3105; background: #1c1d22; border-radius: 0px !important; overflow: hidden; clip-path: none; isolation: isolate; box-shadow: 0 24px 60px rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.12); margin: 0 auto;">
             
             <!-- Segments progress bars at top -->
             <div id="status-viewer-progress-container" style="position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 4px; z-index: 3120;">
@@ -474,7 +472,10 @@
             <!-- Viewport Header controls -->
             <div style="position: absolute; top: 24px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; z-index: 3120; color: white;">
                 <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; overflow: hidden;">
-                    <img id="status-viewer-avatar" src="/images/default-avatar.png" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1.5px solid rgba(255,255,255,0.4);" />
+                    <div id="status-viewer-avatar-container" style="position: relative; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: linear-gradient(45deg, #f58529, #dd2a7b, #8134af); color: white; font-weight: 700; font-size: 16px; border: 1.5px solid rgba(255,255,255,0.4);">
+                        <img id="status-viewer-avatar" src="" style="width: 100%; height: 100%; object-fit: cover; display: none;" />
+                        <span id="status-viewer-avatar-fallback" style="display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; text-transform: uppercase;"></span>
+                    </div>
                     <div style="display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; overflow: hidden;">
                         <span id="status-viewer-username" style="font-weight: 600; font-size: 14px; text-shadow: 0 1px 4px rgba(0,0,0,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></span>
                         <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: rgba(255,255,255,0.7); text-shadow: 0 1px 4px rgba(0,0,0,0.6); overflow: hidden; min-width: 0;">
@@ -500,8 +501,6 @@
                 </div>
                 <!-- Action Controls (Play/Pause, Mute, options/delete) -->
                 <div style="display: flex; align-items: center; gap: 12px; text-shadow: 0 1px 4px rgba(0,0,0,0.6);">
-                    <!-- Remaining Seconds Countdown -->
-                    <span id="status-viewer-remaining-time" style="font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.9); font-family: 'Outfit', 'Inter', sans-serif; min-width: 22px; text-align: right; user-select: none;"></span>
                     <button type="button" id="status-viewer-mute-btn" style="background: transparent; border: none; color: white; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center;">
                         <!-- SVG Speaker High (Unmuted) -->
                         <svg id="status-unmute-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -552,6 +551,12 @@
                             </button>
                         </div>
                     </div>
+                    <button type="button" id="status-viewer-screen-close" style="background: transparent; border: none; color: white; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; opacity: 0.85; transition: opacity 0.2s;" title="Close Status">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
                 </div>
             </div>
 
@@ -602,13 +607,13 @@
             </div>
 
             <!-- Center Media/Text Viewport (fully fitted inside frame) -->
-            <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 3104; padding-top: 70px; box-sizing: border-box; position: relative;">
+            <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; z-index: 3104; box-sizing: border-box; position: relative; border-radius: 0 !important;">
                 <!-- Image Viewport -->
                 <img id="status-viewer-img" style="display: none; width: 100%; height: 100%; object-fit: contain;" />
                 <!-- Video Viewport -->
                 <video id="status-viewer-video" style="display: none; width: 100%; height: 100%; object-fit: contain;" playsinline></video>
                 <!-- Text Viewport -->
-                <div id="status-viewer-text-canvas" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; padding: 36px 24px; box-sizing: border-box; text-align: center; color: white; font-size: 26px; font-weight: 700; word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap; line-height: 1.4; overflow-y: auto;"></div>
+                <div id="status-viewer-text-canvas" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; padding: 36px 24px; box-sizing: border-box; text-align: center; color: white; font-size: 26px; font-weight: 700; word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap; line-height: 1.4; overflow-y: auto; border-radius: 0 !important;"></div>
 
                 <!-- Status Loader overlay -->
                 <div id="status-viewer-loader" style="display: none; position: absolute; inset: 0; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); z-index: 3106; border-radius: 12px;">
@@ -632,9 +637,14 @@
             <div id="status-viewer-reply-container" style="position: absolute; bottom: 16px; left: 16px; right: 16px; display: flex; align-items: center; gap: 10px; z-index: 3125; box-sizing: border-box;">
                 <!-- Integrated Input Container -->
                 <div style="position: relative; flex: 1; display: flex; align-items: center;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 16px; color: rgba(255,255,255,0.6); pointer-events: none; z-index: 2;">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                    </svg>
+                    <button type="button" id="status-viewer-emoji-btn" style="position: absolute; left: 10px; background: none; border: none; padding: 4px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.7); cursor: pointer; z-index: 5; outline: none; transition: color 0.15s ease, transform 0.15s ease;" title="React with an emoji">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                            <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                            <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                        </svg>
+                    </button>
                     <input type="text" id="status-viewer-reply-input" placeholder="Reply to status..." style="width: 100%; padding: 12px 18px 12px 44px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.08); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); color: white; outline: none; font-size: 14px; box-sizing: border-box; font-family: 'Outfit', sans-serif;" />
                 </div>
                 <!-- Discord Blurple Action/Send Button -->
@@ -645,36 +655,121 @@
                     </svg>
                 </button>
             </div>
+
+            <!-- Status Viewer Emoji Reaction Modal (Discord-Style Redesign) -->
+            <div id="status-viewer-emoji-modal" style="display: none; position: absolute; inset: 0; z-index: 3140; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;">
+                <div id="status-viewer-emoji-card" style="width: 100%; max-width: 360px; background: transparent; border-radius: 16px; border: 1px solid rgba(255,255,255,0.08); padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; font-family: 'Outfit', 'gg sans', sans-serif;">
+                    <!-- Header -->
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 15px; font-weight: 700; color: #ffffff; letter-spacing: 0.2px;">React with an emoji</span>
+                        <button type="button" id="status-viewer-emoji-close-btn" class="discord-emoji-close-btn" title="Close">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Search Bar -->
+                    <div style="position: relative; width: 100%; display: flex; align-items: center;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#949ba4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 12px; pointer-events: none;">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="status-viewer-emoji-search-input" class="discord-emoji-search-input" placeholder="Search emoji" autocomplete="off" />
+                    </div>
+
+                    <!-- Category Tabs Row -->
+                    <div id="status-viewer-emoji-categories" class="discord-emoji-categories-row">
+                        <button type="button" class="discord-emoji-cat-tab active" data-category="all" title="All Emojis">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+                        </button>
+                        <button type="button" class="discord-emoji-cat-tab" data-category="smileys" title="Smileys & Emotion">
+                            <span>😀</span>
+                        </button>
+                        <button type="button" class="discord-emoji-cat-tab" data-category="animals" title="Animals & Nature">
+                            <span>🐶</span>
+                        </button>
+                        <button type="button" class="discord-emoji-cat-tab" data-category="food" title="Food & Drink">
+                            <span>🍕</span>
+                        </button>
+                        <button type="button" class="discord-emoji-cat-tab" data-category="activities" title="Activities">
+                            <span>⚽</span>
+                        </button>
+                        <button type="button" class="discord-emoji-cat-tab" data-category="travel" title="Travel & Places">
+                            <span>🚗</span>
+                        </button>
+                        <button type="button" class="discord-emoji-cat-tab" data-category="objects" title="Objects">
+                            <span>💡</span>
+                        </button>
+                        <button type="button" class="discord-emoji-cat-tab" data-category="symbols" title="Symbols & Flags">
+                            <span>❤️</span>
+                        </button>
+                    </div>
+
+                    <!-- Scrollable Emoji Grid Area -->
+                    <div id="status-viewer-emoji-scroll-container" class="discord-emoji-scroll-area">
+                        <div id="status-viewer-emoji-grid" class="discord-emoji-grid">
+                        </div>
+                        <div id="status-viewer-emoji-no-results" style="display: none; padding: 30px 10px; text-align: center; color: #949ba4; font-size: 13.5px; font-weight: 500;">
+                            No emojis match your search.
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <!-- Status Composer Modal -->
     <div id="status-composer-modal" style="display: none; position: fixed; inset: 0; z-index: 20000; background: rgba(0, 0, 0, 0.85); align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; font-family: 'Outfit', 'Inter', sans-serif;">
-        <div id="status-composer-content-box" style="width: 100%; max-width: 420px; background: #0c0c0e; border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; box-shadow: var(--shadow-lg);">
+        <div id="status-composer-content-box" style="width: 100%; max-width: 400px; background: #2b2d31; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0,0,0,0.75);">
             <!-- Modal Header -->
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-color);">
-                <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: white;">Create Status</h3>
-                <button type="button" id="status-composer-close-btn" style="background: transparent; border: none; color: #888; font-size: 24px; cursor: pointer; padding: 0 5px; line-height: 1;">&times;</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+                <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: white;">Create Status</h3>
+                <button type="button" id="status-composer-close-btn" class="discord-emoji-close-btn" title="Close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
             </div>
             
-            <!-- Standard Options Selector -->
-            <div id="status-composer-selector-view" style="padding: 20px; display: flex; flex-direction: column; gap: 12px;">
-                <button type="button" id="status-composer-opt-gallery" class="status-composer-option-btn" style="display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.03); color: white; font-weight: 600; cursor: pointer; text-align: left; transition: all 0.2s;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dd2a7b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                        <polyline points="21 15 16 10 5 21"></polyline>
-                    </svg>
-                    <span>Upload Photo or Video</span>
-                </button>
-                <button type="button" id="status-composer-opt-text" class="status-composer-option-btn" style="display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border-radius: 12px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.03); color: white; font-weight: 600; cursor: pointer; text-align: left; transition: all 0.2s;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dd2a7b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="4 7 4 4 20 4 20 7"></polyline>
-                        <line x1="9" y1="20" x2="15" y2="20"></line>
-                        <line x1="12" y1="4" x2="12" y2="20"></line>
-                    </svg>
-                    <span>Write Text Status</span>
-                </button>
+            <!-- Standard Options Selector (3-Icon Row Layout) -->
+            <div id="status-composer-selector-view" style="padding: 32px 20px; display: flex; align-items: center; justify-content: center; gap: 28px;">
+                <!-- Camera Button -->
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                    <button type="button" id="status-composer-opt-camera" class="discord-status-opt-btn" title="Camera">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5865F2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                            <circle cx="12" cy="13" r="4"></circle>
+                        </svg>
+                    </button>
+                    <span style="font-size: 11px; font-weight: 600; color: #949ba4; letter-spacing: 0.2px;">Camera</span>
+                </div>
+
+                <!-- Gallery Button -->
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                    <button type="button" id="status-composer-opt-gallery" class="discord-status-opt-btn" title="Gallery">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5865F2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="3" ry="3"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <polyline points="21 15 16 10 5 21"></polyline>
+                        </svg>
+                    </button>
+                    <span style="font-size: 11px; font-weight: 600; color: #949ba4; letter-spacing: 0.2px;">Gallery</span>
+                </div>
+
+                <!-- Text Button -->
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                    <button type="button" id="status-composer-opt-text" class="discord-status-opt-btn" title="Text">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#5865F2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                            <line x1="9" y1="20" x2="15" y2="20"></line>
+                            <line x1="12" y1="4" x2="12" y2="20"></line>
+                        </svg>
+                    </button>
+                    <span style="font-size: 11px; font-weight: 600; color: #949ba4; letter-spacing: 0.2px;">Text</span>
+                </div>
             </div>
 
             <!-- Text Status Editor Canvas View -->

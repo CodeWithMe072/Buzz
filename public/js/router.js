@@ -425,6 +425,10 @@
                 }
             }
 
+            if (window.__statusViewerActive && typeof window.closeStatusViewer === "function") {
+                window.closeStatusViewer(true);
+            }
+
             // Programmatically click the status nav button
             const statusBtn = document.getElementById("nav-status-btn");
             if (statusBtn && typeof statusBtn.onclick === "function") {
@@ -439,14 +443,34 @@
             // First ensure we're on the status screen
             await this.routeToStatus();
 
-            // Try to find and open the user's status
-            if (window.State && window.State.statusFeed) {
-                const userStatus = window.State.statusFeed.find(s =>
+            // Wait if initial status fetch is still pending
+            if (window.State && !window.State.statusInitialFetchDone && typeof window.fetchAndCacheStatusData === "function") {
+                await window.fetchAndCacheStatusData();
+            }
+
+            let userStatus = null;
+
+            if (window.allStatusGroups && window.allStatusGroups.length > 0) {
+                userStatus = window.allStatusGroups.find(s =>
                     s.username === username || s.user?.username === username
                 );
-                if (userStatus && typeof window.openStatusViewer === "function") {
-                    window.openStatusViewer(userStatus);
-                }
+            }
+
+            if (!userStatus && window.State && window.State.statusFeed) {
+                userStatus = window.State.statusFeed.find(s =>
+                    s.username === username || s.user?.username === username
+                );
+            }
+
+            if (!userStatus && window.State && window.State.currentUser && (window.State.currentUser.username === username || username === "me") && window.State.myActiveStatuses && window.State.myActiveStatuses.length > 0) {
+                userStatus = {
+                    user: window.State.currentUser,
+                    moments: window.State.myActiveStatuses.map(s => ({ ...s, user: window.State.currentUser }))
+                };
+            }
+
+            if (userStatus && typeof window.openStatusViewer === "function") {
+                window.openStatusViewer(userStatus);
             }
         },
 

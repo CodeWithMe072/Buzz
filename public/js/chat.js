@@ -3738,7 +3738,7 @@ function renderStatusSidebar() {
             window.openStatusViewer({
               user: {
                 id: State.currentUser._id || State.currentUser.id,
-                username: "My Status",
+                username: State.currentUser.username || "My Status",
                 avatar: State.currentUser.avatar,
               },
               moments: myActiveStatuses.map((s) => ({

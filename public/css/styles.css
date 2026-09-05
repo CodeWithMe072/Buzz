@@ -4,10 +4,22 @@
    ============================================================================= */
 
 /* Reset & Base Styles */
-* {
+*, *::before, *::after {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-touch-callout: none;
+}
+
+html, body, button, a, input, textarea, select, div {
+    -webkit-tap-highlight-color: transparent !important;
+    outline: none;
+}
+
+:focus, :focus-visible, :active {
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent !important;
 }
 
 :root {
@@ -8753,6 +8765,19 @@ input:checked+.slider:before {
     padding: 0;
     margin: 0;
     outline: none;
+    overflow: hidden;
+}
+
+#nav-profile-btn {
+    border-radius: 12px !important;
+    overflow: hidden;
+}
+
+#nav-profile-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px;
 }
 
 .app-navbar .nav-item:hover {
@@ -8848,7 +8873,7 @@ input:checked+.slider:before {
     height: 100%;
     display: none;
     flex-direction: column;
-    background: #18191c !important;
+    background: #1e1f22 !important;
     border-right: 1px solid rgba(255, 255, 255, 0.06);
     flex-shrink: 0;
     box-sizing: border-box;
@@ -8905,7 +8930,7 @@ input:checked+.slider:before {
     justify-content: center;
     font-size: 13px;
     font-weight: 700;
-    border: 2px solid #18191c;
+    border: 2px solid #1e1f22;
     color: #ffffff;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
     z-index: 5;
@@ -9445,8 +9470,9 @@ input:checked+.slider:before {
 /* ── WhatsApp-style Status Screen Elements ── */
 .status-progress-track {
     flex: 1;
+    min-width: 0;
     height: 3px;
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.35);
     border-radius: 2px;
     overflow: hidden;
 }
@@ -9455,7 +9481,8 @@ input:checked+.slider:before {
     width: 0%;
     height: 100%;
     background: #ffffff;
-    transition: width 0.1s linear;
+    border-radius: 2px;
+    transition: width 0.05s linear;
 }
 
 .status-progress-fill.completed {
@@ -11423,5 +11450,181 @@ input:checked+.slider:before {
     height: 1px;
     background: rgba(255, 255, 255, 0.06);
     margin: 0 18px;
+}
+
+/* Status Viewer Emoji Reaction Grid Scrollbar */
+.discord-emoji-close-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+    color: #dbdee1;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+    outline: none;
+}
+.discord-emoji-close-btn:hover {
+    background: #5865F2 !important;
+    color: #ffffff !important;
+    transform: scale(1.05);
+}
+
+.discord-emoji-search-input {
+    width: 100%;
+    padding: 9px 12px 9px 36px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #1e1f22;
+    color: #f2f3f5;
+    outline: none;
+    font-size: 13.5px;
+    box-sizing: border-box;
+    font-family: inherit;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.discord-emoji-search-input::placeholder {
+    color: #949ba4;
+}
+.discord-emoji-search-input:focus {
+    border-color: #5865F2;
+    box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.35);
+}
+
+.discord-emoji-categories-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 4px 0 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.discord-emoji-categories-row::-webkit-scrollbar {
+    height: 0px;
+}
+
+.discord-emoji-cat-tab {
+    background: none;
+    border: none;
+    color: #949ba4;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.15s ease;
+    outline: none;
+    position: relative;
+    flex-shrink: 0;
+}
+.discord-emoji-cat-tab:hover {
+    color: #f2f3f5;
+    background: rgba(255, 255, 255, 0.04);
+}
+.discord-emoji-cat-tab.active {
+    color: #5865F2;
+    background: rgba(88, 101, 242, 0.12);
+}
+.discord-emoji-cat-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -7px;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    background: #5865F2;
+    border-radius: 2px 2px 0 0;
+}
+
+.discord-emoji-scroll-area {
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+    margin-top: 4px;
+}
+.discord-emoji-scroll-area::-webkit-scrollbar {
+    width: 5px;
+}
+.discord-emoji-scroll-area::-webkit-scrollbar-track {
+    background: transparent;
+}
+.discord-emoji-scroll-area::-webkit-scrollbar-thumb {
+    background: rgba(88, 101, 242, 0.3);
+    border-radius: 4px;
+}
+.discord-emoji-scroll-area::-webkit-scrollbar-thumb:hover {
+    background: rgba(88, 101, 242, 0.6);
+}
+
+.discord-emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px 6px;
+    justify-items: center;
+    align-items: center;
+}
+
+.discord-emoji-section-header {
+    grid-column: 1 / -1;
+    font-size: 11px;
+    font-weight: 700;
+    color: #949ba4;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin: 10px 0 4px 0;
+    padding-left: 2px;
+    width: 100%;
+}
+
+.discord-emoji-item {
+    background: none;
+    border: none;
+    font-size: 26px;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 8px;
+    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    user-select: none;
+    color: white;
+    width: 100%;
+    box-sizing: border-box;
+    outline: none;
+}
+.discord-emoji-item:hover, .discord-emoji-item:focus {
+    transform: scale(1.2);
+    background: rgba(88, 101, 242, 0.2);
+}
+
+/* Discord Status Option Circular Buttons */
+.discord-status-opt-btn {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: rgba(88, 101, 242, 0.16);
+    border: 1px solid rgba(88, 101, 242, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+}
+.discord-status-opt-btn:hover, .discord-status-opt-btn:focus {
+    background: rgba(88, 101, 242, 0.35);
+    border-color: #5865F2;
+    transform: scale(1.08);
+    box-shadow: 0 4px 16px rgba(88, 101, 242, 0.3);
+}
+.discord-status-opt-btn:active {
+    transform: scale(0.96);
 }
 
