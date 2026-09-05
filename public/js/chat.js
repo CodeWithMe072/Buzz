@@ -234,8 +234,10 @@ function renderChatList(filter = "") {
     currentUserAvatar.style.cursor = "pointer";
     currentUserAvatar.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (typeof openProfileModal === "function") {
-        openProfileModal("account", true);
+      if (typeof safeOpenProfileModal === "function") {
+        safeOpenProfileModal(null, true);
+      } else if (typeof openProfileModal === "function") {
+        openProfileModal(null, true);
       }
     });
   }
@@ -3569,6 +3571,10 @@ function initAppNavigation() {
   };
 
   const handleProfileClick = () => {
+    const currentPath = window.location.pathname;
+    if (currentPath && !currentPath.startsWith("/@")) {
+      window.previousRouteBeforeProfile = currentPath;
+    }
     const username = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
     if (window.Router) window.Router.navigate("/@" + username, { silent: true });
     if (profileBtn) {

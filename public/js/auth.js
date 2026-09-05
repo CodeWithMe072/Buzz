@@ -72,10 +72,13 @@ function updateGlobalUserAvatarUI() {
   // 3. Profile modal sidebar avatar
   const avatarWrap = document.querySelector(".profile-modal-avatar-wrap");
   if (avatarWrap) {
+    const hasActiveStatus = (window.State && window.State.myActiveStatuses && window.State.myActiveStatuses.length > 0);
+    const ringClass = hasActiveStatus ? "profile-modal-avatar-ring has-status" : "profile-modal-avatar-ring";
+    
     if (user.avatar) {
-      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><img src="${user.avatar}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;" /><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${personIcon}</div>`;
+      avatarWrap.innerHTML = `<div class="${ringClass}"></div><img src="${user.avatar}" onerror="this.style.display='none'; this.nextSibling.style.display='flex';" style="width:100%; height:100%; object-fit:cover; border-radius:50%; display:block;" /><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="display:none; width:100%; height:100%; align-items:center; justify-content:center;">${personIcon}</div><div class="profile-modal-status-dot" title="Online"></div>`;
     } else {
-      avatarWrap.innerHTML = `<div class="profile-modal-avatar-ring"></div><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;">${personIcon}</div>`;
+      avatarWrap.innerHTML = `<div class="${ringClass}"></div><div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter" style="width:100%; height:100%; display:flex; align-items:center; justify-content:center;">${personIcon}</div><div class="profile-modal-status-dot" title="Online"></div>`;
     }
   }
 
@@ -85,11 +88,11 @@ function updateGlobalUserAvatarUI() {
     currentUsername.textContent = user.username || "User";
   }
 
-  // 5. Profile modal name and email
+  // 5. Profile modal name and email/handle
   const nameEl = document.getElementById("profile-modal-username");
   const emailEl = document.getElementById("profile-modal-email");
   if (nameEl) nameEl.textContent = user.username || "User";
-  if (emailEl) emailEl.textContent = user.email || "";
+  if (emailEl) emailEl.textContent = user.username ? `@${user.username}` : (user.email || "");
 
   // 6. Mobile sidebar footer user profile info
   const footerUserAvatar = document.getElementById("footer-user-avatar");
@@ -367,18 +370,21 @@ function updateRequestsBadge() {
 // =============================================================================
 let searchTimeout = null;
 
+function safeOpenProfileModal(section = null, isUserClick = false) {
+  const currentPath = window.location.pathname;
+  if (currentPath && !currentPath.startsWith("/@")) {
+    window.previousRouteBeforeProfile = currentPath;
+  }
+  openProfileModal(section, isUserClick);
+}
+
 function initPeoplePanel() {
-  // Current user profile opens the Account & People Hub modal
+  // Current user profile opens the Profile page directly
   const userProfileHeader = document.querySelector(".user-profile");
   if (userProfileHeader) {
     userProfileHeader.style.cursor = "pointer";
     userProfileHeader.onclick = () => {
-      const username = (window.State && window.State.currentUser) ? window.State.currentUser.username : "me";
-      if (window.Router) {
-        window.Router.navigate("/@" + username);
-      } else {
-        openProfileModal(null);
-      }
+      safeOpenProfileModal(null, true);
     };
   }
 
@@ -386,7 +392,7 @@ function initPeoplePanel() {
   const addPeopleBtn = document.getElementById("add-people-btn");
   if (addPeopleBtn) {
     addPeopleBtn.onclick = () => {
-      openProfileModal("search");
+      safeOpenProfileModal("search");
     };
   }
 
@@ -408,21 +414,21 @@ function initPeoplePanel() {
   const mobileRequestsBtn = document.getElementById("mobile-requests-btn");
   if (mobileRequestsBtn) {
     mobileRequestsBtn.onclick = () => {
-      openProfileModal("requests");
+      safeOpenProfileModal("requests");
     };
   }
 
   const mobileAddPeopleBtn = document.getElementById("mobile-add-people-btn");
   if (mobileAddPeopleBtn) {
     mobileAddPeopleBtn.onclick = () => {
-      openProfileModal("search");
+      safeOpenProfileModal("search");
     };
   }
 
   const mobileNewChatBtn = document.getElementById("mobile-new-chat-btn");
   if (mobileNewChatBtn) {
     mobileNewChatBtn.onclick = () => {
-      openProfileModal("contacts");
+      safeOpenProfileModal("contacts");
     };
   }
 
@@ -430,14 +436,14 @@ function initPeoplePanel() {
   const footerSettingsBtn = document.getElementById("footer-settings-btn");
   if (footerSettingsBtn) {
     footerSettingsBtn.onclick = () => {
-      openProfileModal("account");
+      safeOpenProfileModal("account");
     };
   }
 
   const footerUserInfo = document.getElementById("footer-user-info");
   if (footerUserInfo) {
     footerUserInfo.onclick = () => {
-      openProfileModal("account");
+      safeOpenProfileModal(null, true);
     };
   }
 
@@ -1761,6 +1767,20 @@ function initProfileModal() {
     };
   });
 
+  const closeBtn = document.getElementById("profile-close-btn");
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      closeProfileModal();
+    };
+  }
+
+  const editBtn = document.getElementById("profile-edit-btn");
+  if (editBtn) {
+    editBtn.onclick = () => {
+      switchProfileModalSection("account");
+    };
+  }
+
   const logoutBtn = document.getElementById("profile-modal-logout-btn");
   if (logoutBtn) {
     logoutBtn.onclick = () => {
@@ -1771,6 +1791,9 @@ function initProfileModal() {
 }
 
 async function openProfileModal(defaultSection = null, isUserClick = false) {
+  if (!window.previousRouteBeforeProfile && window.location.pathname && !window.location.pathname.startsWith("/@")) {
+    window.previousRouteBeforeProfile = window.location.pathname;
+  }
   document.body.classList.add("profile-page-active");
 
   // Update URL to reflect profile page
@@ -1787,6 +1810,9 @@ async function openProfileModal(defaultSection = null, isUserClick = false) {
   const avatarBtn = document.getElementById("nav-avatar-btn");
   const chatBtn = document.getElementById("nav-chat-btn");
   const statusBtn = document.getElementById("nav-status-btn");
+
+  const appNavbar = document.querySelector(".app-navbar");
+  if (appNavbar) appNavbar.style.display = "none";
 
   const chatSidebar = document.getElementById("chat-list-sidebar");
   const statusSidebar = document.getElementById("status-sidebar");
@@ -1875,12 +1901,22 @@ async function openProfileModal(defaultSection = null, isUserClick = false) {
 function closeProfileModal() {
   document.body.classList.remove("profile-page-active");
   document.body.classList.remove("mobile-profile-value-active");
-  if (window.Router) {
-    window.Router.navigate("/inbox", { silent: true });
+  const appNavbar = document.querySelector(".app-navbar");
+  if (appNavbar) appNavbar.style.display = "flex";
+
+  const profileSidebar = document.getElementById("profile-page-sidebar");
+  if (profileSidebar) {
+    profileSidebar.style.display = "none";
+    profileSidebar.classList.add("hidden");
   }
-  const chatBtn = document.getElementById("nav-chat-btn");
-  if (chatBtn && typeof chatBtn.click === "function") {
-    chatBtn.click();
+
+  const targetRoute = window.previousRouteBeforeProfile || "/inbox";
+  window.previousRouteBeforeProfile = null;
+
+  if (window.Router && typeof window.Router.navigate === "function") {
+    window.Router.navigate(targetRoute);
+  } else {
+    window.location.pathname = targetRoute;
   }
 }
 

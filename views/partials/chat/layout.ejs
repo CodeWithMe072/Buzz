@@ -174,92 +174,164 @@
             </div>
         </aside>
 
-        <!-- Profile Page Options Sidebar -->
+        <!-- Profile Page Options Sidebar (Discord-Style Redesign) -->
         <aside class="profile-page-sidebar hidden" id="profile-page-sidebar" style="display: none;">
-            <div class="profile-modal-sidebar" style="width: 100%; height: 100%; border: none;">
+            <div class="profile-modal-sidebar">
+                <!-- Close Button (Top-Left) -->
+                <button type="button" class="discord-profile-close-btn" id="profile-close-btn" title="Close Profile">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+
+                <!-- Identity Header -->
                 <div class="profile-modal-avatar-wrap">
                     <div class="profile-modal-avatar-ring"></div>
                     <div class="profile-modal-avatar-letter" id="profile-modal-avatar-letter">U</div>
+                    <div class="profile-modal-status-dot" title="Online"></div>
                 </div>
                 <h3 class="profile-modal-username" id="profile-modal-username">Username</h3>
-                <p class="profile-modal-email" id="profile-modal-email">email@example.com</p>
+                <p class="profile-modal-email" id="profile-modal-email">@username</p>
 
-                <div class="profile-modal-nav">
-                    <button class="profile-nav-btn" data-section="account">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                            <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        Account Settings
-                    </button>
-                    <button class="profile-nav-btn" data-section="search">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <circle cx="11" cy="11" r="8" />
-                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                        </svg>
-                        Discover
-                    </button>
-                    <button class="profile-nav-btn" data-section="pending">
-                        <div style="position: relative; display: flex; align-items: center;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                <circle cx="12" cy="7" r="4" />
-                            </svg>
-                            <span class="tab-badge" id="requests-badge-profile" style="display:none">0</span>
-                        </div>
-                        Requests
-                    </button>
-                    <button class="profile-nav-btn" data-section="contacts">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                            <circle cx="9" cy="7" r="4" />
-                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                        </svg>
-                        Contacts
-                    </button>
-                    <button class="profile-nav-btn" data-section="moments">
-                        <div style="position: relative; display: flex; align-items: center;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <circle cx="12" cy="12" r="10" />
-                                <line x1="2" y1="12" x2="22" y2="12" />
-                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                            </svg>
-                            <span class="tab-badge" id="modal-moments-badge" style="display:none"></span>
-                        </div>
-                        Moments
-                    </button>
-                    <button class="profile-nav-btn" data-section="whitelist">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                            <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        Moments Whitelist
-                    </button>
-                    <button class="profile-nav-btn" data-section="logs">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                            <circle cx="12" cy="13" r="4" />
-                        </svg>
-                        Security Logs
-                    </button>
-                </div>
-                <button class="profile-modal-logout-btn" id="profile-modal-logout-btn">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                        <polyline points="16 17 21 12 16 7" />
-                        <line x1="21" y1="12" x2="9" y2="12" />
+                <!-- Edit Profile Button -->
+                <button type="button" class="profile-edit-btn" id="profile-edit-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
                     </svg>
-                    Log Out
+                    <span>Edit Profile</span>
                 </button>
+
+                <!-- Settings List (Grouped Sections) -->
+                <div class="profile-modal-nav" style="width: 100%;">
+                    <!-- ACCOUNT -->
+                    <div class="profile-section-group">
+                        <div class="profile-section-label">Account</div>
+                        <div class="profile-section-card">
+                            <button class="profile-nav-btn" data-section="account">
+                                <div class="profile-nav-btn-left">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                        <circle cx="12" cy="7" r="4" />
+                                    </svg>
+                                    <span>Account Settings</span>
+                                </div>
+                                <svg class="profile-nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                            <button class="profile-nav-btn" data-section="logs">
+                                <div class="profile-nav-btn-left">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                                        <circle cx="12" cy="13" r="4" />
+                                    </svg>
+                                    <span>Security Logs</span>
+                                </div>
+                                <svg class="profile-nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SOCIAL -->
+                    <div class="profile-section-group">
+                        <div class="profile-section-label">Social</div>
+                        <div class="profile-section-card">
+                            <button class="profile-nav-btn" data-section="search">
+                                <div class="profile-nav-btn-left">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8" />
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                    </svg>
+                                    <span>Discover</span>
+                                </div>
+                                <svg class="profile-nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                            <button class="profile-nav-btn" data-section="pending">
+                                <div class="profile-nav-btn-left">
+                                    <div style="position: relative; display: flex; align-items: center;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                            <circle cx="8.5" cy="7" r="4" />
+                                            <line x1="20" y1="8" x2="20" y2="14" />
+                                            <line x1="17" y1="11" x2="23" y2="11" />
+                                        </svg>
+                                        <span class="tab-badge" id="requests-badge-profile" style="display:none">0</span>
+                                    </div>
+                                    <span>Requests</span>
+                                </div>
+                                <svg class="profile-nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                            <button class="profile-nav-btn" data-section="contacts">
+                                <div class="profile-nav-btn-left">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                        <circle cx="9" cy="7" r="4" />
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                    </svg>
+                                    <span>Contacts</span>
+                                </div>
+                                <svg class="profile-nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- MOMENTS -->
+                    <div class="profile-section-group">
+                        <div class="profile-section-label">Moments</div>
+                        <div class="profile-section-card">
+                            <button class="profile-nav-btn" data-section="moments">
+                                <div class="profile-nav-btn-left">
+                                    <div style="position: relative; display: flex; align-items: center;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="10" />
+                                            <line x1="2" y1="12" x2="22" y2="12" />
+                                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                        </svg>
+                                        <span class="tab-badge" id="modal-moments-badge" style="display:none"></span>
+                                    </div>
+                                    <span>Moments</span>
+                                </div>
+                                <svg class="profile-nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                            <button class="profile-nav-btn" data-section="whitelist">
+                                <div class="profile-nav-btn-left">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                    </svg>
+                                    <span>Moments Whitelist</span>
+                                </div>
+                                <svg class="profile-nav-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- LOG OUT -->
+                    <div class="profile-logout-wrap">
+                        <button class="profile-modal-logout-btn" id="profile-modal-logout-btn">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                                <polyline points="16 17 21 12 16 7" />
+                                <line x1="21" y1="12" x2="9" y2="12" />
+                            </svg>
+                            <span>Log Out</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </aside>
 
