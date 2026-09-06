@@ -7388,7 +7388,7 @@ body.profile-page-active .app-navbar {
 
     .profile-page-sidebar .profile-modal-sidebar {
         width: 100% !important;
-        padding: 24px 16px 110px 16px !important;
+        padding: 24px 16px 24px 16px !important;
         height: auto !important;
         min-height: min-content !important;
     }
