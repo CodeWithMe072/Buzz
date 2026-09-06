@@ -979,20 +979,21 @@
             isPasswordLockEnabled: <%= typeof isPasswordLockEnabled !== 'undefined' ? isPasswordLockEnabled : true %>
         };
         window.IS_SERVER_LOGIN = <%= isServerLogin %>;
+        window.APP_VERSION = "<%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %>";
     </script>
 
     <!-- Core/Library Scripts (Statically Loaded) -->
     <script src="/socket.io/socket.io.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.2/dist/browser-image-compression.js"></script>
-    <script src="/js/auth.controller.js?v=<%= Date.now() %>"></script>
-    <script src="/js/indexeddb.queue.js?v=<%= Date.now() %>"></script>
-    <script src="/js/state.js?v=<%= Date.now() %>"></script>
-    <script src="/js/utils.js?v=<%= Date.now() %>"></script>
-    <script src="/js/core/component.loader.js?v=<%= Date.now() %>"></script>
-    <script src="/js/router.js?v=<%= Date.now() %>"></script>
-    <script src="/js/status.js?v=<%= Date.now() %>"></script>
-    <script src="/js/main.js?v=<%= Date.now() %>"></script>
+    <script src="/js/auth.controller.js?v=<%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %>"></script>
+    <script src="/js/indexeddb.queue.js?v=<%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %>"></script>
+    <script src="/js/state.js?v=<%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %>"></script>
+    <script src="/js/utils.js?v=<%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %>"></script>
+    <script src="/js/core/component.loader.js?v=<%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %>"></script>
+    <script src="/js/router.js?v=<%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %>"></script>
+    <script src="/js/status.js?v=<%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %>"></script>
+    <script src="/js/main.js?v=<%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %>"></script>
 </body>
 
 </html>

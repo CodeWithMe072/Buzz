@@ -12,10 +12,10 @@ class ComponentLoaderClass {
     /**
      * Loads a component's rendered HTML from the server.
      * @param {string} name - Name of the component (e.g., 'dashboard', 'chat/layout')
-     * @param {boolean} [force=true] - If true, bypasses cache and triggers a reload
+     * @param {boolean} [force=false] - If true, bypasses cache and triggers a reload
      * @returns {Promise<string>} The rendered HTML string
      */
-    async load(name, force = true) {
+    async load(name, force = false) {
         if (!force && this.componentCache[name]) {
             return this.componentCache[name];
         }
@@ -26,7 +26,8 @@ class ComponentLoaderClass {
 
         const promise = (async () => {
             try {
-                const response = await apiRequest("GET", `/api/components/${name}?v=${Date.now()}`, null, "text");
+                const versionTag = window.APP_VERSION || "1.0.0";
+                const response = await apiRequest("GET", `/api/components/${name}?v=${versionTag}`, null, "text");
                 if (!response.ok) {
                     throw new Error(`Component fetch failed with status ${response.status}`);
                 }
@@ -54,7 +55,8 @@ class ComponentLoaderClass {
      */
     loadScript(src) {
         return new Promise((resolve, reject) => {
-            const cacheBusterSrc = src + "?v=" + Date.now();
+            const versionTag = window.APP_VERSION || "1.0.0";
+            const cacheBusterSrc = src.includes("?") ? src : `${src}?v=${versionTag}`;
             // Check if already loaded
             if (this.loadedScripts.has(src) || document.querySelector(`script[src^="${src}"]`)) {
                 this.loadedScripts.add(src);
@@ -88,9 +90,10 @@ class ComponentLoaderClass {
         if (document.querySelector(`link[href^="${href}"]`)) {
             return;
         }
+        const versionTag = window.APP_VERSION || "1.0.0";
         const link = document.createElement("link");
         link.rel = "stylesheet";
-        link.href = href + "?v=" + Date.now();
+        link.href = href.includes("?") ? href : `${href}?v=${versionTag}`;
         document.head.appendChild(link);
     }
 }

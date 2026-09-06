@@ -282,7 +282,7 @@ async function bootstrapAfterLogin() {
     reconnectionDelay: 2000,
     reconnectionDelayMax: 15000,
     timeout: 30000,
-    transports: ["polling", "websocket"],
+    transports: ["websocket", "polling"],
     rememberUpgrade: true
   });
 

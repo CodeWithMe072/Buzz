@@ -127,6 +127,8 @@ app.use(express.static(path.join(__dirname, "public"), {
   }
 }));
 
+const APP_VERSION = process.env.APP_VERSION || "1.0.0";
+
 /* ---------- Page routes ---------- */
 // All pages are served from index.ejs — client-side JS handles screens and SPA routes
 const renderApp = (req, res) => {
@@ -148,7 +150,8 @@ const renderApp = (req, res) => {
   res.render("index", {
     isShowDashboard: user?.showDashboard ?? true,
     isPasswordLockEnabled: user?.passwordLockEnabled ?? true,
-    isServerLogin
+    isServerLogin,
+    appVersion: APP_VERSION
   });
 };
 
@@ -178,7 +181,6 @@ app.use(statusRoutes);
 app.use(songRoutes);
 
 /* ---------- Version endpoint (for auto-reload) ---------- */
-const APP_VERSION = process.env.APP_VERSION;
 app.get("/api/version", (req, res) => res.json({ data: APP_VERSION }));
 
 /* ---------- 404 handler ---------- */
@@ -186,9 +188,14 @@ app.use((req, res) => {
   if (
     req.path.startsWith("/api") ||
     req.path.startsWith("/auth") ||
-    req.path.startsWith("/connections")
+    req.path.startsWith("/connections") ||
+    req.path.startsWith("/images") ||
+    req.path.startsWith("/css") ||
+    req.path.startsWith("/js") ||
+    req.path.startsWith("/downloads") ||
+    /\.(png|jpg|jpeg|gif|svg|ico|css|js|woff|woff2|mp3|mp4|json)$/i.test(req.path)
   ) {
-    return res.status(404).json({ status: false, message: "Route not found" });
+    return res.status(404).json({ status: false, message: "Asset or route not found" });
   }
   renderApp(req, res);
 });

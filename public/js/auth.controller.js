@@ -395,10 +395,13 @@ async function apiRequest(method, url, body = null, resType = "json", retry = tr
       window.isMaintenanceModeActive = false;
     }
 
-    // Access token expired
-    if (retry && res.status === 401 && typeof data === "object" && data?.code === "TOKEN_EXPIRED") {
+    // Access token expired or invalid
+    if (retry && res.status === 401) {
       try {
         await refreshAccessToken();
+        if (isGet && requestKey) {
+          inflightGetRequests.delete(requestKey);
+        }
         return apiRequest(method, url, body, resType, false, isRetryCall);
       } catch (err) {
         console.error("Token refresh failed:", err);
