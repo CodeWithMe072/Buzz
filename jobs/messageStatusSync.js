@@ -33,20 +33,22 @@ export function startMessageStatusSyncJob(io) {
     // ─── Run every 1 minute ───
     cron.schedule("* * * * *", async () => {
         try {
+            if (mongoose.connection.readyState !== 1) return;
             // Disabled: background delivery updates cause race conditions with sync:delivered
             // await fixDeliveredStatus(io);
             await fixSeenStatus(io);
         } catch (err) {
-            console.error("[STATUS SYNC JOB ERROR]", err);
+            console.error("[STATUS SYNC JOB ERROR]", err.message || err);
         }
     });
 
     // ─── Auto-delete seen messages older than 30 min ───
     cron.schedule("* * * * *", async () => {
         try {
+            if (mongoose.connection.readyState !== 1) return;
             await autoDeleteOldSeenMessages(io);
         } catch (err) {
-            console.error("[AUTO DELETE JOB ERROR]", err);
+            console.error("[AUTO DELETE JOB ERROR]", err.message || err);
         }
     });
 

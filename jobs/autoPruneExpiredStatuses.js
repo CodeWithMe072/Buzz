@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import mongoose from "mongoose";
 import Status from "../models/status.model.js";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
@@ -24,6 +25,7 @@ export function startAutoPruneExpiredStatusesJob() {
     // Run every minute to prune expired statuses and clean up R2 storage
     cron.schedule("* * * * *", async () => {
         try {
+            if (mongoose.connection.readyState !== 1) return;
             const now = new Date();
             const expiredStatuses = await Status.find({ expiresAt: { $lte: now } });
 
