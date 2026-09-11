@@ -870,15 +870,25 @@ function openChat(chatId, options = {}) {
 
   };
 
-  // Delete chat
+  // Clear chat option handler
   document.getElementById("chatOption-button").onclick = async () => {
-    State.messages[State.activeChat] = [];
-    renderMessages(State.activeChat);
-    const c = State.conversations.find(cv => cv.id === State.activeChat);
-    if (c) { c.lastMessage = ""; c.unread = 0; c.timestamp = 0; }
+    if (!State.activeChat) return;
+    const chatId = State.activeChat;
+    State.messages[chatId] = [];
+    const c = (State.conversations || []).find(cv => cv.id === chatId);
+    if (c) {
+      c.lastMessage = "";
+      c.unread = 0;
+      c.timestamp = 0;
+      c.chatState = "nochat";
+    }
+    renderMessages(chatId);
     renderChatList();
     document.getElementById("chatOption").classList.remove("active");
-    await deleteChat(State.activeChat);
+    if (typeof window.clearChatAPI === "function") {
+      await window.clearChatAPI(chatId).catch(console.error);
+    }
+    showToast("Chat messages cleared", "info");
   };
 
   // Mute toggle
