@@ -732,6 +732,14 @@ async function renderPeopleTab(tab) {
             checked: !!user.showDashboard,
             tier:    "preference"
           })}
+          ${toggleRow({
+            id:      "profile-modal-mobile-debug-toggle",
+            icon:    "ti-bug",
+            title:   "Mobile Inspector (Debug)",
+            desc:    "Show floating debug console & inspect tool on this device.",
+            checked: localStorage.getItem("eruda-debug") === "true",
+            tier:    "preference"
+          })}
         </div><!-- /security card -->
 
 
@@ -910,6 +918,34 @@ async function renderPeopleTab(tab) {
         showToast("Failed to update setting", "error");
       }
     });
+
+    // ── Toggle: Mobile Inspector (Debug) ───────────────────────────────────
+    const debugToggle = container.querySelector("#profile-modal-mobile-debug-toggle");
+    if (debugToggle) {
+      debugToggle.addEventListener("change", (e) => {
+        const enabled = e.target.checked;
+        if (enabled) {
+          localStorage.setItem("eruda-debug", "true");
+          if (typeof eruda !== "undefined") {
+            eruda.init();
+          } else {
+            const script = document.createElement("script");
+            script.src = "https://cdn.jsdelivr.net/npm/eruda";
+            script.onload = () => { if (typeof eruda !== "undefined") eruda.init(); };
+            document.head.appendChild(script);
+          }
+          showToast("Mobile Inspector enabled", "success");
+        } else {
+          localStorage.removeItem("eruda-debug");
+          if (typeof eruda !== "undefined" && typeof eruda.destroy === "function") {
+            eruda.destroy();
+          } else {
+            location.reload();
+          }
+          showToast("Mobile Inspector disabled", "info");
+        }
+      });
+    }
 
     // ── Avatar upload & remove ─────────────────────────────────────────────
     const avatarInput         = container.querySelector("#profile-avatar-file-input");

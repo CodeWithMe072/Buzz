@@ -326,7 +326,10 @@
 
         if (!loadedStream) {
             console.error("Camera access failed:", lastError);
-            const errorMsg = lastError?.name === "NotAllowedError" ? "Camera permission denied" : (lastError?.message || "Failed to access camera");
+            let errorMsg = lastError?.name === "NotAllowedError" ? "Camera permission denied" : (lastError?.message || "Failed to access camera");
+            if (!window.isSecureContext && (lastError?.name === "NotSupportedError" || !navigator.mediaDevices)) {
+                errorMsg = "Camera requires HTTPS. Please open the site using HTTPS URL.";
+            }
             showToast(errorMsg, "error");
             closeCameraCaptureOverlay();
             return;

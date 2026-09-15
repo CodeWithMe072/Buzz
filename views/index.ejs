@@ -29,6 +29,27 @@
             }
         })();
     </script>
+
+    <!-- Eruda Mobile Browser Inspector (DevTools for Android / Mobile Browsers) -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>
+        (function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('debug') === 'true' || urlParams.get('eruda') === 'true') {
+                localStorage.setItem('eruda-debug', 'true');
+            } else if (urlParams.get('debug') === 'false' || urlParams.get('eruda') === 'false') {
+                localStorage.removeItem('eruda-debug');
+            }
+
+            const isDebugActive = localStorage.getItem('eruda-debug') === 'true';
+            
+            if (isDebugActive) {
+                if (typeof eruda !== 'undefined') {
+                    eruda.init();
+                }
+            }
+        })();
+    </script>
 </head>
 
 <body data-status-server-system="<%=isServerLogin%>" data-status-dashboard="<%=isShowDashboard%>">

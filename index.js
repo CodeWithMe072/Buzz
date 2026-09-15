@@ -219,7 +219,7 @@ if (isProd) {
     console.log(`[Server] Running on port ${process.env.PORT || 8080}`);
   });
 } else {
-  server.listen(PORT, "127.0.0.1", () => {
-    console.log(`[Server] Running on http://127.0.0.1:${PORT}`);
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`[Server] Running on http://0.0.0.0:${PORT} (Access locally at http://localhost:${PORT} or via Network IP)`);
   });
 }
