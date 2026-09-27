@@ -849,18 +849,81 @@ async function handelMedia(file, caption = null, groupId = null) {
         renderChatList(document.getElementById("chat-search")?.value.trim().toLowerCase() || "");
     }
 
-    if (mime.startsWith("image/") && typeof imageCompression === "function") {
+    if (mime.startsWith("image/")) {
         try {
-            const compressed = await imageCompression(file, {
-                maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: false
-            });
-            if (compressed) file = compressed;
+            file = await compressImageFast(file);
         } catch (compErr) {
             console.warn("[handelMedia] Image compression fallback to original file:", compErr);
         }
     }
 
     UploadManager.add(() => uploadMedia(message.tempId, to, file));
+}
+
+// =============================================================================
+// FAST IMAGE COMPRESSION & ADAPTIVE CHUNKING HELPERS
+// =============================================================================
+async function compressImageFast(file) {
+    if (!file || !file.type || !file.type.startsWith("image/") || file.type === "image/gif" || file.type === "image/svg+xml") {
+        return file;
+    }
+    if (file.size < 500 * 1024) {
+        return file;
+    }
+    return new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            let { width, height } = img;
+            const maxDim = 1920;
+            if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return resolve(file);
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const mimeType = "image/webp";
+            canvas.toBlob(
+                (blob) => {
+                    if (blob && blob.size < file.size) {
+                        const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".webp"), {
+                            type: mimeType,
+                            lastModified: Date.now()
+                        });
+                        resolve(compressedFile);
+                    } else {
+                        resolve(file);
+                    }
+                },
+                mimeType,
+                0.82
+            );
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(file);
+        };
+        img.src = url;
+    });
+}
+
+function getUploadChunkConfig() {
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (window.innerWidth && window.innerWidth <= 768);
+    if (isMobile) {
+        return { chunkSize: 768 * 1024, parallel: 2 };
+    }
+    return { chunkSize: 1.5 * 1024 * 1024, parallel: 2 };
 }
 
 function handlePastedImage(blob) {
@@ -948,16 +1011,39 @@ async function uploadMedia(msgId, receiver, file) {
 // CHUNKED FILE UPLOAD
 // =============================================================================
 async function uploadFileInChunks(file, msgId) {
-    const CHUNK_SIZE = 2 * 1024 * 1024;
-    const PARALLEL = 3;
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    
     // Retrieve record from IndexedDB
     let record = null;
     if (window.IndexedDBQueueService) {
         record = await IndexedDBQueueService.getMessage(msgId);
         console.log("[uploadFileInChunks] Retrieved record for msgId:", msgId, "isMuted:", record?.isMuted);
     }
+
+    // Fast Path for files under 1.5MB
+    if (file.size < 1.5 * 1024 * 1024) {
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            if (record?.isMuted) {
+                formData.append("muted", "true");
+            }
+            const token = typeof TokenStore !== "undefined" ? TokenStore.getToken() : null;
+            const res = await fetch("/api/upload", {
+                method: "POST",
+                headers: token ? { "Authorization": "Bearer " + token } : {},
+                credentials: "include",
+                body: formData
+            });
+            if (res.ok) {
+                return await res.json();
+            }
+            console.warn("[uploadFileInChunks] Fast path upload failed, falling back to chunking:", res.status);
+        } catch (fastErr) {
+            console.warn("[uploadFileInChunks] Fast path upload error, falling back to chunking:", fastErr);
+        }
+    }
+
+    const { chunkSize: CHUNK_SIZE, parallel: PARALLEL } = getUploadChunkConfig();
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     
     // Determine fileId
     let fileId = record?.fileId || record?.mediaMeta?.fileId;
@@ -981,7 +1067,6 @@ async function uploadFileInChunks(file, msgId) {
         if (res.ok) {
             const statusData = await res.json();
             if (statusData.completed && statusData.data) {
-                
                 return statusData.data;
             }
             serverChunks = statusData.chunksReceived || [];
@@ -1038,8 +1123,6 @@ async function uploadFileInChunks(file, msgId) {
                     await IndexedDBQueueService.saveMessage(record);
                 }
             }
-
-            
         }));
     }
 
