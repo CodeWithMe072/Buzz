@@ -918,10 +918,24 @@ async function compressImageFast(file) {
     });
 }
 
-function getUploadChunkConfig() {
+function getUploadChunkConfig(fileSize = 0) {
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (window.innerWidth && window.innerWidth <= 768);
+    
     if (isMobile) {
-        return { chunkSize: 768 * 1024, parallel: 2 };
+        // Mobile cellular uplink (1.5 - 3 Mbps): Use 1MB - 1.5MB chunks with 1-2 parallel requests
+        // to prevent TCP upload channel saturation (bufferbloat) and keep chunk times under 2-3s
+        if (fileSize > 20 * 1024 * 1024) {
+            return { chunkSize: 1.5 * 1024 * 1024, parallel: 2 };
+        }
+        return { chunkSize: 1 * 1024 * 1024, parallel: 1 };
+    }
+
+    // Desktop broadband: Use 2.5MB - 4MB chunks with 3 parallel streams
+    if (fileSize > 20 * 1024 * 1024) {
+        return { chunkSize: 4 * 1024 * 1024, parallel: 3 };
+    }
+    if (fileSize > 5 * 1024 * 1024) {
+        return { chunkSize: 2.5 * 1024 * 1024, parallel: 3 };
     }
     return { chunkSize: 1.5 * 1024 * 1024, parallel: 2 };
 }
@@ -1042,7 +1056,7 @@ async function uploadFileInChunks(file, msgId) {
         }
     }
 
-    const { chunkSize: CHUNK_SIZE, parallel: PARALLEL } = getUploadChunkConfig();
+    const { chunkSize: CHUNK_SIZE, parallel: PARALLEL } = getUploadChunkConfig(file.size);
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     
     // Determine fileId
@@ -1099,6 +1113,7 @@ async function uploadFileInChunks(file, msgId) {
                     formData.append("chunkIndex", chunkIndex);
                     formData.append("totalChunks", totalChunks);
                     formData.append("fileName", file.name);
+                    formData.append("mimeType", file.type || "application/octet-stream");
                     const token = typeof TokenStore !== "undefined" ? TokenStore.getToken() : null;
                     const res = await fetch("/api/upload-chunk", {
                         method: "POST",

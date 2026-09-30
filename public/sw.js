@@ -64,27 +64,40 @@ async function handleMediaRequest(request) {
 
     if (!cachedResponse) {
         // Fetch the full file from network (no range headers)
-        // credentials: 'include' is required to preserve the session cookie
-        const fetchRequest = new Request(request.url, {
-            headers: {},
-            credentials: 'include'
-        });
+        const reqHeaders = new Headers(request.headers);
+        reqHeaders.delete('range');
         
-        try {
-            const response = await fetch(fetchRequest);
-            if (response.status === 200) {
+        let response = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                response = await fetch(request.url, {
+                    headers: reqHeaders,
+                    credentials: 'include'
+                });
+                if (response && response.ok) break;
+            } catch (err) {
+                if (attempt === 0) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+        }
+
+        if (response && (response.status === 200 || response.ok)) {
+            try {
                 // Cache the full response
                 await cache.put(cacheKey, response.clone());
                 // Cache the timestamp metadata
                 await cache.put(cacheKey + '_meta', new Response(JSON.stringify({ timestamp: Date.now() }), {
                     headers: { 'Content-Type': 'application/json' }
                 }));
-                cachedResponse = response;
-            } else {
-                return response;
+            } catch (cacheErr) {
+                console.warn('[ServiceWorker] Cache write warning:', cacheErr);
             }
-        } catch (err) {
-            console.error('[ServiceWorker] network fetch failed:', err);
+            cachedResponse = response;
+        } else if (response) {
+            return response;
+        } else {
+            console.warn('[ServiceWorker] Network fetch failed after retries for:', cacheKey);
             return new Response('Network error', { status: 480 });
         }
     }

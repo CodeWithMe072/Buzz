@@ -38,6 +38,19 @@ export function encryptBuffer(buffer, keyVersion) {
     return Buffer.concat([iv, encrypted]);
 }
 
+// Encrypt a buffer at a specific byte offset for S3 multipart streaming
+export function encryptBufferAtOffset(buffer, keyVersion, iv, byteOffset = 0) {
+    const key = getKey(keyVersion);
+    const blockNumber = Math.floor(byteOffset / 16);
+    const adjustedIV = incrementIV(iv, blockNumber);
+    const cipher = crypto.createCipheriv("aes-256-ctr", key, adjustedIV);
+    const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+    if (byteOffset === 0) {
+        return Buffer.concat([iv, encrypted]);
+    }
+    return encrypted;
+}
+
 // Decrypt a buffer (strips 16-byte IV)
 export function decryptBuffer(buffer, keyVersion) {
     if (buffer.length < 16) {

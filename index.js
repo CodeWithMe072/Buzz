@@ -47,6 +47,16 @@ const io = new Server(server, {
   },
   pingTimeout: 30000,
   pingInterval: 20000,
+  // WebSocket Payload Deflate Compression for real-time chat messages and events
+  perMessageDeflate: {
+    zlibDeflateOptions: { chunkLength: 1024, memLevel: 7, level: 3 },
+    zlibInflateOptions: { chunkSize: 10 * 1024 },
+    clientNoContextTakeover: true,
+    serverNoContextTakeover: true,
+    serverMaxWindowBits: 10,
+    concurrencyLimit: 10,
+    threshold: 256
+  }
 });
 
 // Socket.io Maintenance Guard
@@ -76,8 +86,15 @@ if (process.env.MAINTENANCE_MODE !== "true") {
   });
 }
 
-/* ---------- Compression ---------- */
-app.use(compression());
+/* ---------- Global HTTP Payload Compression (Gzip / Brotli for All API Responses & EJS Pages) ---------- */
+app.use(compression({
+  level: 6,
+  threshold: 256, // Compress any API payload, JSON response, or static asset > 256 bytes
+  filter: (req, res) => {
+    if (req.headers["x-no-compression"]) return false;
+    return compression.filter(req, res);
+  }
+}));
 
 /* ---------- Cookies & Authentication Parsing ---------- */
 app.use(cookieParser());
@@ -111,13 +128,17 @@ app.set("views", path.join(__dirname, "views"));
 app.use(maintenanceRoutes);
 app.use(checkMaintenanceMode);
 
-/* ---------- Static files with Cache-Control ---------- */
+/* ---------- Static files with Cache-Control & Compression ---------- */
 app.use(express.static(path.join(__dirname, "public"), {
-  maxAge: isProd ? "1d" : 0,
+  maxAge: isProd ? "7d" : 0,
+  etag: true,
+  lastModified: true,
   setHeaders: (res, filepath) => {
     if (isProd) {
       if (filepath.endsWith(".html") || filepath.endsWith(".ejs")) {
         res.setHeader("Cache-Control", "no-cache");
+      } else if (filepath.endsWith(".css") || filepath.endsWith(".js") || filepath.endsWith(".woff2") || filepath.endsWith(".png") || filepath.endsWith(".webp") || filepath.endsWith(".svg")) {
+        res.setHeader("Cache-Control", "public, max-age=604800, immutable");
       } else {
         res.setHeader("Cache-Control", "public, max-age=86400, must-revalidate");
       }
