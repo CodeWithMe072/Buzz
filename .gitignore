@@ -16,6 +16,7 @@ tests/
 
 # Backups
 backup/
+aws-key/
 
 # Notes
 task.md
