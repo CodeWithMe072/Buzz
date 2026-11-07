@@ -538,7 +538,7 @@ export const uploadLogPhoto = async (req, res) => {
     await User.findByIdAndUpdate(
       req.user._id,
       { $push: { capturedPhotos: { $each: [newPhoto], $position: 0 } } },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     await invalidateUserCache(req.user._id);
