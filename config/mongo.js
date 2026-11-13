@@ -27,10 +27,13 @@ export const connectMongo = async () => {
     const maxPoolSize = parseInt(process.env.MONGO_MAX_POOL_SIZE) || 20;
     await mongoose.connect(process.env.MONGO_URI, {
       maxPoolSize,
-      minPoolSize: 5,
-      serverSelectionTimeoutMS: 15000,
+      minPoolSize: 1,
+      maxIdleTimeMS: 30000,
+      serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 45000,
       heartbeatFrequencyMS: 10000,
+      retryWrites: true,
+      retryReads: true,
     });
     console.log(`[MongoDB] Connected successfully (maxPoolSize: ${maxPoolSize})`);
   } catch (err) {

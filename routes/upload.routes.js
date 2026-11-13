@@ -903,6 +903,7 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
         const { fileId, fileName, mimeType, muted } = req.body;
         console.log("[Complete Upload Payload]", { fileId, fileName, mimeType, muted });
         const chunkDir = path.join(os.tmpdir(), "chunks", fileId);
+        let finalUploadPath = null;
         try {
             // Check if already completed in Redis
             const cachedCompleted = await redis.get(`cache:upload_completed:${fileId}`);
@@ -944,13 +945,11 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
 
             let key;
             let session = activeUploadSessions.get(fileId);
+            const isMutedVideo = isVideo && (muted === true || muted === "true" || muted === "1");
 
             if (session) {
                 await session.lock;
                 key = session.key;
-
-                let finalUploadPath = null;
-                const isMutedVideo = isVideo && (muted === true || muted === "true" || muted === "1");
 
                 if (isMutedVideo) {
                     const ext = path.extname(fileName) || (mimeType.includes("webm") ? ".webm" : ".mp4");
@@ -988,7 +987,6 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                         ContentType: mimeType,
                         CacheControl: "public, max-age=31536000",
                     }));
-                    await fse.remove(finalUploadPath).catch(() => {});
                 } else {
                     if (session.bufferedSize > 0) {
                         const finalBuffer = Buffer.concat(session.bufferChunks);
@@ -1012,8 +1010,6 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
             } else {
                 // Fallback if session was not found in RAM
                 key = generateFileKey(fileName, mimeType);
-                let finalUploadPath = null;
-                const isMutedVideo = isVideo && (muted === true || muted === "true" || muted === "1");
 
                 if (isMutedVideo) {
                     const ext = path.extname(fileName) || (mimeType.includes("webm") ? ".webm" : ".mp4");
@@ -1086,10 +1082,6 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                     }
                     throw uploadErr;
                 }
-
-                if (finalUploadPath) {
-                    await fse.remove(finalUploadPath).catch(() => {});
-                }
             }
 
             const url = getPublicFileUrl(key);
@@ -1156,7 +1148,7 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
                     muted: isMutedVideo
                 };
             } else if (isDocument) {
-                responseData = makeDocumentUrls(url, fileName, finalUploadSize);
+                responseData = makeDocumentUrls(url, fileName, totalSize);
             } else if (isAudio) {
                 responseData = {
                     type: "audio",
@@ -1179,6 +1171,9 @@ router.post("/api/complete-upload", protect, express.json({ limit: "1024mb" }),
 
         } catch (err) {
             console.error("[complete-upload] error:", err?.name, err?.message);
+            if (finalUploadPath) {
+                await fse.remove(finalUploadPath).catch(() => {});
+            }
             await fse.remove(chunkDir).catch(() => { });
             return res.status(500).json({ error: "Complete upload failed" });
         }
